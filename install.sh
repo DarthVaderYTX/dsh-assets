@@ -20,6 +20,8 @@ SKILL_ROOT="$DSH_HOME/skills"
 PROFILE="web"
 MODE="link"          # link | copy
 FORCE=0
+DRY_RUN=0
+ALL=0
 DSH_BIN="${DSH_BIN:-}"
 
 # ---------------------------------------------------------------- 输出
@@ -35,6 +37,13 @@ warn() { printf '%s!%s %s\n' "$C_WARN" "$C_OFF" "$*" >&2; }
 die()  { printf '%s✗%s %s\n' "$C_ERR" "$C_OFF" "$*" >&2; exit 1; }
 dim()  { printf '%s%s%s\n' "$C_DIM" "$*" "$C_OFF"; }
 
+# dry-run 时打印计划并返回 0（调用方用 `dry "..." && return 0` 的写法）
+dry() {
+  [ "$DRY_RUN" -eq 1 ] || return 1
+  printf '%s· 将执行:%s %s\n' "$C_DIM" "$C_OFF" "$*"
+  return 0
+}
+
 usage() {
   cat <<'EOF'
 用法: ./install.sh <命令> [参数] [选项]
@@ -46,12 +55,17 @@ usage() {
   all                         安装全部 skill 与插件
   uninstall skill <name...>   移除本仓库创建的 skill 链接/副本
   uninstall plugin <name...>  从 profile 卸载插件
+  uninstall skill --all       移除全部由本仓库安装的 skill
+  uninstall plugin --all      卸载全部已安装的本仓库插件
+  uninstall all               上面两项都做
   doctor                      检查 dsh CLI、profile、日志目录等前提
 
 选项:
   --profile <name>   插件目标 profile（默认 web）
   --copy             skill 用复制而非软链，适合仓库会被移动/删除的场景
   --force            目标已存在时备份并覆盖
+  --all              配合 uninstall 使用：处理全部已安装项
+  --dry-run          只打印将要做什么，不做任何改动
   --dsh <path>       指定 dsh 可执行文件
   --dsh-home <path>  指定 DSH_HOME（默认 ~/.dsh）
   -h, --help         显示本帮助
@@ -109,12 +123,43 @@ skill_state() {
   local name="$1" dst
   dst="$(skill_installed_at "$name")"
   if [ -L "$dst" ]; then
-    if [ "$(readlink "$dst")" = "$REPO_ROOT/skills/$name" ]; then echo linked; else echo foreign-link; fi
+    if [ "$(readlink "$dst")" = "$REPO_ROOT/skills/$name" ]; then
+      # 链接指向本仓库，但仓库里已经没有这个目录（改名或删除过）
+      if [ -d "$REPO_ROOT/skills/$name" ]; then echo linked; else echo dangling; fi
+    else
+      echo foreign-link
+    fi
   elif [ -d "$dst" ]; then
     echo present
   else
     echo absent
   fi
+}
+
+# 由本仓库"托管"的 skill 名字：指向本仓库的链接（含悬空），以及内容与仓库一致的副本。
+managed_skill_names() {
+  local path name
+  [ -d "$SKILL_ROOT" ] || return 0
+  for path in "$SKILL_ROOT"/*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name="$(basename "$path")"
+    if [ -L "$path" ]; then
+      case "$(readlink "$path")" in
+        "$REPO_ROOT"/skills/*) printf '%s\n' "$name" ;;
+      esac
+    elif [ -d "$path" ] && [ -d "$REPO_ROOT/skills/$name" ] \
+      && diff -r --exclude='.DS_Store' "$REPO_ROOT/skills/$name" "$path" >/dev/null 2>&1; then
+      printf '%s\n' "$name"
+    fi
+  done
+}
+
+# 当前 profile 里已安装的本仓库插件
+installed_plugin_names() {
+  local name
+  for name in $(repo_plugins); do
+    [ "$(plugin_state "$name")" = installed ] && printf '%s\n' "$name"
+  done
 }
 
 # profile manifest 的 dsh.profile.bundles 里是否含某个包名。
@@ -190,14 +235,20 @@ uninstall_skill() {
   dst="$(skill_installed_at "$name")"
   state="$(skill_state "$name")"
   case "$state" in
-    linked)  rm -f "$dst"; ok "skill $name 链接已移除" ;;
+    linked|dangling)
+      if dry "rm $dst"; then return 0; fi
+      rm -f "$dst"
+      ok "skill $name 链接已移除"
+      ;;
     present)
       # 只删"和仓库完全一致"的副本；被改过就交给人工判断。
       case "$dst" in
         "$SKILL_ROOT"/*) ;;
         *) warn "$dst 不在 $SKILL_ROOT 下，拒绝删除"; return 0 ;;
       esac
-      if diff -r --exclude='.DS_Store' "$REPO_ROOT/skills/$name" "$dst" >/dev/null 2>&1; then
+      if [ -d "$REPO_ROOT/skills/$name" ] \
+        && diff -r --exclude='.DS_Store' "$REPO_ROOT/skills/$name" "$dst" >/dev/null 2>&1; then
+        if dry "rm -rf $dst"; then return 0; fi
         rm -rf "$dst"
         ok "skill $name 副本已移除"
       else
@@ -234,10 +285,16 @@ install_plugin() {
 }
 
 uninstall_plugin() {
-  local name="$1" dsh
+  local name="$1" dsh manifest
   dsh="$(require_dsh)"
+  if dry "$dsh plugin --profile $PROFILE remove $name"; then return 0; fi
   "$dsh" plugin --profile "$PROFILE" remove "$name"
-  ok "插件 $name 已从 profile $PROFILE 卸载"
+  manifest="$DSH_HOME/profiles/$PROFILE/package.json"
+  if [ -f "$manifest" ] && grep -q "\"$name\"" "$manifest"; then
+    warn "插件 $name 仍在 $manifest 里，卸载可能未完成"
+  else
+    ok "插件 $name 已从 profile $PROFILE 卸载"
+  fi
 }
 
 # ---------------------------------------------------------------- list
@@ -250,6 +307,7 @@ cmd_list() {
     state="$(skill_state "$name")"
     case "$state" in
       linked) mark="${C_OK}已链接${C_OFF}" ;;
+      dangling) mark="${C_WARN}悬空链接（仓库已无此 skill）${C_OFF}" ;;
       present) mark="${C_WARN}存在同名目录${C_OFF}" ;;
       foreign-link) mark="${C_WARN}链接指向别处${C_OFF}" ;;
       *) mark="${C_DIM}未安装${C_OFF}" ;;
@@ -257,6 +315,14 @@ cmd_list() {
     printf '  %-28s %s\n' "$name" "$mark"
   done
   [ "$any" -eq 1 ] || dim "  （无）"
+
+  # 本仓库装过、但仓库里已经没有的项（改名或删除后的残留）
+  for name in $(managed_skill_names); do
+    case " $(repo_skills) " in
+      *" $name "*) ;;
+      *) printf '  %-28s %s\n' "$name" "${C_WARN}仓库已无此 skill（残留，可卸载）${C_OFF}" ;;
+    esac
+  done
 
   printf '\n%s\n' "plugins  (profile: $PROFILE)"
   any=0
@@ -319,6 +385,8 @@ while [ "$#" -gt 0 ]; do
     --profile) PROFILE="${2:?--profile 需要一个值}"; shift 2 ;;
     --copy) MODE="copy"; shift ;;
     --force) FORCE=1; shift ;;
+    --all) ALL=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
     --dsh) DSH_BIN="${2:?--dsh 需要一个路径}"; shift 2 ;;
     --dsh-home) DSH_HOME="$2"; SKILL_ROOT="$DSH_HOME/skills"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -360,11 +428,28 @@ case "$COMMAND" in
     esac
     ;;
   uninstall|remove)
+    if [ "$ALL" -eq 1 ] && [ -n "$TARGETS" ]; then
+      die "--all 不能再跟具体名字"
+    fi
     case "$SUBCOMMAND" in
-      skill) for name in $TARGETS; do uninstall_skill "$name"; done ;;
-      plugin) for name in $TARGETS; do uninstall_plugin "$name"; done ;;
-      *) die "用法: ./install.sh uninstall skill|plugin <name...>" ;;
+      skill|plugin|all) ;;
+      *) die "用法: ./install.sh uninstall skill|plugin|all [<name...>] [--all] [--dry-run]" ;;
     esac
+    if [ "$SUBCOMMAND" = "skill" ] || [ "$SUBCOMMAND" = "all" ]; then
+      if [ "$ALL" -eq 1 ] || [ "$SUBCOMMAND" = "all" ]; then
+        TARGETS=" $(managed_skill_names | tr '\n' ' ') "
+        [ -n "$(printf '%s' "$TARGETS" | tr -d ' ')" ] || dim "没有由本仓库安装的 skill"
+      fi
+      for name in $TARGETS; do uninstall_skill "$name"; done
+    fi
+    TARGETS=""
+    if [ "$SUBCOMMAND" = "plugin" ] || [ "$SUBCOMMAND" = "all" ]; then
+      if [ "$ALL" -eq 1 ] || [ "$SUBCOMMAND" = "all" ]; then
+        TARGETS=" $(installed_plugin_names | tr '\n' ' ') "
+        [ -n "$(printf '%s' "$TARGETS" | tr -d ' ')" ] || dim "profile $PROFILE 里没有本仓库的插件"
+      fi
+      for name in $TARGETS; do uninstall_plugin "$name"; done
+    fi
     ;;
   -h|--help|help) usage ;;
   *) usage; die "未知命令: $COMMAND" ;;

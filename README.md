@@ -39,26 +39,31 @@ description: 一句话说明能力与适用场景，写清"什么时候该用"�
 
 skill 附带的脚本、模板、参考资料放在同一目录下按用途分（`scripts/`、`templates/`、`types/`、`references/`），并在 `SKILL.md` 里写明调用方式。
 
-## 安装到本机
+## 安装与卸载
 
-`install.sh` 把仓库里的资产装进本机 dsh。macOS / Linux + bash 即可，不依赖 jq、node；装插件时会调用 dsh 自带的 pnpm。
+`install.sh` 把仓库里的资产装进本机 dsh，也能干净地删掉。macOS / Linux + bash 即可，不依赖 jq、node；装插件时会调用 dsh 自带的 pnpm。
 
 ```bash
 ./install.sh list                              # 仓库里有什么、本机装没装
 ./install.sh skill how-to-write-document       # 装 skill
 ./install.sh plugin dsh-perf-profiler          # 装插件（默认 profile: web）
 ./install.sh all                               # 全装
+./install.sh uninstall all                     # 全删（只动本仓库装的东西）
+./install.sh uninstall skill --all --dry-run   # 先看看会删什么
 ./install.sh doctor                            # 检查 dsh 路径、DSH_HOME、profile 状态
 ```
 
 | 命令 | 行为 |
 | --- | --- |
-| `list` | 列出 skill / 插件及安装状态（已链接 / 存在同名目录 / 链接指向别处 / 未安装） |
+| `list` | 列出 skill / 插件及安装状态（已链接 / 存在同名目录 / 链接指向别处 / 悬空链接 / 未安装），并标出仓库里已删除但本机仍有残留的项 |
 | `skill <name...>` | 软链到 `$DSH_HOME/skills/<name>`，已存在则幂等跳过 |
 | `plugin <name...>` | 调 `dsh plugin --profile <p> add <仓库内绝对路径>`，并回读 profile 核对是否进了 `dsh.profile.bundles` |
 | `all` | 上面两个全跑一遍 |
 | `uninstall skill <name...>` | 只删本仓库创建的链接；实体目录仅在与仓库内容完全一致时删除 |
-| `uninstall plugin <name...>` | 走 `dsh plugin --profile <p> remove` |
+| `uninstall skill --all` | 清理全部托管项：指向本仓库的链接（含仓库已改名的悬空链接）+ 内容一致的副本 |
+| `uninstall plugin <name...>` | 走 `dsh plugin --profile <p> remove`，之后回读 manifest 确认确实移除 |
+| `uninstall plugin --all` | 卸载 profile 里所有来自本仓库的插件 |
+| `uninstall all` | 上面两项都做 |
 | `doctor` | 打印仓库路径、DSH_HOME、dsh 版本、profile 与 skills 目录状态 |
 
 | 选项 | 说明 |
@@ -66,6 +71,8 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `--profile <name>` | 插件目标 profile，默认 `web` |
 | `--copy` | skill 用复制而非软链（仓库可能被移动或删除时用）；卸载时按内容比对删除 |
 | `--force` | 目标已存在时接管：链接直接替换，实体目录备份为 `<name>.bak.<时间戳>` |
+| `--all` | 配合 `uninstall` 使用：处理全部已安装项 |
+| `--dry-run` | 只打印将执行的动作，不做任何改动；删除前建议先跑一次 |
 | `--dsh <path>` | 指定 dsh 可执行文件（默认从 PATH → `/Applications/DeepSeek Harness.app/...` 找） |
 | `--dsh-home <path>` | 指定 `DSH_HOME`，默认 `~/.dsh` |
 
@@ -73,6 +80,8 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 
 - **不读 `$DSH_PROFILE`。** dsh 会把该变量注入子进程（本机实测值是保留的 `desktop`），照抄会往保留 profile 里装东西，所以默认固定 `web`，要改就用 `--profile`。
 - **skill 只扫一层。** dsh 找的是 `$DSH_HOME/skills/<name>/SKILL.md`，所以软链必须指向目录本身；装完不用重启，新会话即可用（插件需要重启 dsh）。
+
+删除侧的安全边界：不碰用户自己的目录——只有"指向本仓库的链接"和"与仓库内容逐字节一致的副本"会被删；被改过的副本、指向别处的链接、你自己的同名目录，一律只提示不动手。`list` 会把"仓库里已经删掉但本机还装着"的残留标出来。
 
 ## 当前内容
 
