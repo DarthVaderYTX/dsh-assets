@@ -24,7 +24,14 @@ plugins/<plugin-name>/
   README.md
 ```
 
-安装见下节「安装到本机」，底层命令是 `dsh plugin --profile <p> add ./plugins/<plugin-name>`（本地目录装成 link）。
+安装见下节「安装与卸载」，底层命令是 `dsh plugin --profile <p> add ./plugins/<plugin-name>`（本地目录装成 link）。
+
+**写插件必须以本地源码的 `master` 分支为准。** 具体约束：
+
+- 唯一 API 依据是本机的 `deepseek-harness` 检出（默认 `~/Projects/Repositories/Github/deepseek-harness`）的 **`master`** 分支，不是记忆里的旧版本，也不是 `demo` 等分支。
+- 动手前先对齐：`git -C <repo> fetch origin && git checkout master && git pull --ff-only`，确认工作区干净。
+- 事件名、服务方法签名、`Hook` 结构、bundle / patch 约定，一律按该分支源码核对；源码里已经变成 private 的接口就不要再用。
+- 记录核对基线：最近一次是 `0.2.2-alpha.2`（`ce7073d5`）。基线前进后，受影响的插件要重新核对一遍。
 
 `skills/<skill-name>/SKILL.md` 必须有 frontmatter。**skill 的身份只取 frontmatter 的 `name`，目录名不参与校验**（但建议保持一致，便于人读）；`name` 必须是 kebab-case（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）：
 
@@ -118,7 +125,8 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | skill 增删模板、脚本、`types/` 子目录 | 该 skill 的 `types/INDEX.md` 及对应 `types/<type>/README.md` |
 | 改 skill 的适用范围、选型或执行流程 | `SKILL.md` 正文，以及本 README「当前内容」中该资产的说明列 |
 | 改插件对外行为、依赖或挂载方式 | 该插件目录下的 README，以及本 README 的说明列 |
-| 新增 / 改动安装或维护脚本 | 本 README 的「安装到本机」小节 |
+| 新增 / 改动安装或维护脚本 | 本 README 的「安装与卸载」小节 |
+| 源码基线（基线版本/提交）变化 | 本 README 的基线记录，以及受影响插件的兼容性核对 |
 | 改仓库约定（存放 / 提交 / 推送） | 本 README 对应小节 |
 
 提交前自查：
