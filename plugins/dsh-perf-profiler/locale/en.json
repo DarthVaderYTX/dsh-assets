@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Performance profiler",
+    "description": "Attributes hook-listener and tool-body execution time to the owning plugin, with live reports and a JSONL log for offline analysis."
+  }
+}

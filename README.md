@@ -8,18 +8,33 @@ DeepSeek Harness（dsh）自建资产的**分发仓库**：插件与 skill 的 g
 
 ```
 dsh-assets/
-  skills/<skill-name>/        # 一个 skill 一个目录，目录名 = SKILL.md 里的 name
-  plugins/<plugin-name>/      # 一个插件一个目录，目录名 = 插件名
+  skills/<skill-name>/        # 一个 skill 一个目录，name 以 SKILL.md 的 frontmatter 为准
+  plugins/<plugin-name>/      # 一个插件一个目录，目录名 = package.json 的 name
 ```
 
-`skills/<skill-name>/SKILL.md` 必须有 frontmatter，`name` 与目录名一致：
+插件是 dsh 的 **bundle**：`package.json` 里声明 `dsh.bundle.patch`，`cordis.patch.yml` 用包名插入自己。已安装的 dsh 只能加载**纯 JS**（loader 是裸 `import()`），所以插件不要以 `.ts` 源码分发：
+
+```
+plugins/<plugin-name>/
+  package.json         # dsh.bundle.patch + engines.dsh
+  cordis.patch.yml     # - insert: [{ id, name: '<包名>', config: {} }]
+  index.js             # export function apply(ctx, config)
+  locale/en.json       # meta.title / meta.description（可选）
+  README.md
+```
+
+安装：`dsh plugin --profile <p> add ./plugins/<plugin-name>`（本地目录是 link）。
+
+`skills/<skill-name>/SKILL.md` 必须有 frontmatter。**skill 的身份只取 frontmatter 的 `name`，目录名不参与校验**（但建议保持一致，便于人读）；`name` 必须是 kebab-case（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）：
 
 ```markdown
 ---
 name: <skill-name>
-description: 一句话说明能力与适用场景，写清"什么时候该用"。
+description: 一句话说明能力与适用场景，写清"什么时候该用"。单段，≤480 字符。
 ---
 ```
+
+可选字段：`whenToUse`（驼峰，只给 UI 菜单）、`disable-model-invocation`、`user-invocable`、`metadata`。这几个键只认原文写法：写成旧版的 `disableModelInvocation`、`modelInvocable`、`userInvocable` 会**直接报错并丢弃整个 skill**。
 
 skill 附带的脚本、模板、参考资料放在同一目录下按用途分（`scripts/`、`templates/`、`types/`、`references/`），并在 `SKILL.md` 里写明调用方式。
 
@@ -28,7 +43,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | 资产 | 类型 | 路径 | 说明 |
 | --- | --- | --- | --- |
 | `how-to-write-document` | skill | [skills/how-to-write-document](skills/how-to-write-document) | 六类文档写作规范与模板：paper / prd / one-pager / experiment-report / research-report / technical-design |
-| — | plugin | `plugins/` | 暂无 |
+| `dsh-perf-profiler` | plugin | [plugins/dsh-perf-profiler](plugins/dsh-perf-profiler) | 把 hook 监听器与工具执行体的耗时可归因到插件/hook 点/工具/单次调用；支持实时报告与离线 JSONL 分析 |
 
 ## 同步约定
 

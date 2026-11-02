@@ -1,0 +1,29 @@
+{
+  "name": "dsh-perf-profiler",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Attribute hook-listener and tool-body execution time to the plugin that owns it, without patching the harness.",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "scripts",
+    "locale/*.json",
+    "README.md"
+  ],
+  "scripts": {
+    "analyze": "node scripts/analyze.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.0 <0.3.0"
+  }
+}

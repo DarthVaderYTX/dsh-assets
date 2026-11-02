@@ -1,0 +1,7 @@
+- insert:
+    - id: dsh-perf-profiler
+      name: dsh-perf-profiler
+      config:
+        enabled: true
+        log: true
+        slowMs: 50
