@@ -97,12 +97,57 @@ node scripts/analyze.mjs --json > report.json
 
 | 限制 | 原因 | 缓解 |
 | --- | --- | --- |
-| 挂载**之前**注册的工具归属为 `(unknown)` | 注册事件发生在插件加载前，无法回溯 | 用 `toolOwners` 手工映射 |
 | `ctx.tools.guard()` 看不到 | 它不走事件总线 | — |
 | `internal/*` 上的监听器不包装 | 避免递归与噪声 | — |
 | 高频事件的耗时不可见（默认） | 见"开销" | `includeAllEvents: true` 或 `events` 追加，自行承担成本 |
 | turn/step 可能为 `-` | `ToolExecution` 不带 turn/step，靠 `agent/pre-step` 等事件补 | 正常会话中会在首个 step 之后填上 |
 | 只测墙钟时间 | 不做 CPU/内存剖析 | — |
+
+### 工具归属的覆盖率问题（未解决，见后续小节）
+
+hook 的归属是可靠的：`hook.ctx.fiber.name` 直接给出注册方，且能回溯**已存在**的监听器。
+
+工具的归属机制同样可靠、同样不需要改源码，但**覆盖率取决于加载顺序**：只有在本次插件补丁安装之后发生的 `register()` 调用才拿得到 owner，启动期已经注册完的工具只能记为 `(unknown)`。
+
+## 工具归属：机理与覆盖率
+
+### 为什么能拿到
+
+`ToolRuntime.register` 是 Cordis 服务方法，调用时 `this` 被绑定为**调用方上下文**，因此在补丁里可以直接读到注册者：
+
+```js
+const owner = this.ctx.fiber.name   // 注册这个工具的插件名
+```
+
+工具定义本身没有 owner 字段，这是唯一的来源。
+
+### 覆盖率矩阵
+
+| 工具来源 | 归属 | 说明 |
+| --- | --- | --- |
+| 启动期、且对应插件在本插件**之后**启动 | ✅ 自动 | 顺序不保证，不能依赖 |
+| 本插件加载之后新增的 bundle | ✅ 自动 | 排在 `dsh.profile.bundles` 后面即可 |
+| 会话期才注册：per-agent 作用域工具、子 agent 工具、按需连接的 MCP 工具、GUI 里现装的插件 | ✅ 自动 | 这类是主要受益者 |
+| 启动期、对应插件在本插件**之前**启动 | ❌ `(unknown)` | 常见情况，见下节 |
+
+### 为什么启动期的工具拿不到
+
+配置层按顺序应用：各 bundle 的 `cordis.patch.yml` → profile 自己的 patch → `--patch` overlay。`dsh plugin add` 默认把我们追加到 `dsh.profile.bundles` **末尾**，于是我们的插件最后启动，harness 自带插件早已把工具注册完毕。
+
+这是层序问题，不是"事件已经过去"无法补救——补丁只要更早装上就能覆盖。
+
+### 三条可选路径（均**未实现**）
+
+| 方案 | 做法 | 覆盖 | 代价 |
+| --- | --- | --- | --- |
+| ① bundle 前置 | 手工把本 bundle 挪到 `dsh.profile.bundles` 里 `@deepseek-ai/dsh-base` 之前，让本插件最先启动 | 大部分，取决于各插件启动顺序 | 改动 profile 顺序，需实测；顺序本身会影响启动行为 |
+| ② 手工映射 | 配置 `toolOwners: { "工具名": "插件名" }` | 精确，但需人工维护 | 工具增减时要跟着改 |
+| ③ 改 dsh 源码 | `register()` 里把 `this.ctx.fiber.name` 写进注册记录（`packages/core/tools/src/index.ts`，约 3–5 行） | 100% | 需维护 fork，且要跟着上游走 |
+
+**当前实现只支持 ②**（`toolOwners` 配置项）。① 与 ② 的自动化均未做：插件不会提示哪些工具是 `(unknown)`，也不会自动调整 bundle 顺序。
+
+后续若要做，优先级建议：先加"列出 `(unknown)` 归属的工具名"的诊断（照单填 `toolOwners` 即可，成本最低），再评估 ① 的实际收益，最后才考虑 ③。
+
 
 ## 验证记录
 
