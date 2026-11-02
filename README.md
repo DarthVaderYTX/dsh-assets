@@ -8,6 +8,7 @@ DeepSeek Harness（dsh）自建资产的**唯一存放地**：插件与 skill �
 
 ```
 dsh-assets/
+  install.sh                  # 安装脚本：把 skill / 插件装到本机 dsh
   skills/<skill-name>/        # 一个 skill 一个目录，name 以 SKILL.md 的 frontmatter 为准
   plugins/<plugin-name>/      # 一个插件一个目录，目录名 = package.json 的 name
 ```
@@ -23,7 +24,7 @@ plugins/<plugin-name>/
   README.md
 ```
 
-安装：`dsh plugin --profile <p> add ./plugins/<plugin-name>`（本地目录是 link）。
+安装见下节「安装到本机」，底层命令是 `dsh plugin --profile <p> add ./plugins/<plugin-name>`（本地目录装成 link）。
 
 `skills/<skill-name>/SKILL.md` 必须有 frontmatter。**skill 的身份只取 frontmatter 的 `name`，目录名不参与校验**（但建议保持一致，便于人读）；`name` 必须是 kebab-case（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）：
 
@@ -37,6 +38,41 @@ description: 一句话说明能力与适用场景，写清"什么时候该用"�
 可选字段：`whenToUse`（驼峰，只给 UI 菜单）、`disable-model-invocation`、`user-invocable`、`metadata`。这几个键只认原文写法：写成旧版的 `disableModelInvocation`、`modelInvocable`、`userInvocable` 会**直接报错并丢弃整个 skill**。
 
 skill 附带的脚本、模板、参考资料放在同一目录下按用途分（`scripts/`、`templates/`、`types/`、`references/`），并在 `SKILL.md` 里写明调用方式。
+
+## 安装到本机
+
+`install.sh` 把仓库里的资产装进本机 dsh。macOS / Linux + bash 即可，不依赖 jq、node；装插件时会调用 dsh 自带的 pnpm。
+
+```bash
+./install.sh list                              # 仓库里有什么、本机装没装
+./install.sh skill how-to-write-document       # 装 skill
+./install.sh plugin dsh-perf-profiler          # 装插件（默认 profile: web）
+./install.sh all                               # 全装
+./install.sh doctor                            # 检查 dsh 路径、DSH_HOME、profile 状态
+```
+
+| 命令 | 行为 |
+| --- | --- |
+| `list` | 列出 skill / 插件及安装状态（已链接 / 存在同名目录 / 链接指向别处 / 未安装） |
+| `skill <name...>` | 软链到 `$DSH_HOME/skills/<name>`，已存在则幂等跳过 |
+| `plugin <name...>` | 调 `dsh plugin --profile <p> add <仓库内绝对路径>`，并回读 profile 核对是否进了 `dsh.profile.bundles` |
+| `all` | 上面两个全跑一遍 |
+| `uninstall skill <name...>` | 只删本仓库创建的链接；实体目录仅在与仓库内容完全一致时删除 |
+| `uninstall plugin <name...>` | 走 `dsh plugin --profile <p> remove` |
+| `doctor` | 打印仓库路径、DSH_HOME、dsh 版本、profile 与 skills 目录状态 |
+
+| 选项 | 说明 |
+| --- | --- |
+| `--profile <name>` | 插件目标 profile，默认 `web` |
+| `--copy` | skill 用复制而非软链（仓库可能被移动或删除时用）；卸载时按内容比对删除 |
+| `--force` | 目标已存在时接管：链接直接替换，实体目录备份为 `<name>.bak.<时间戳>` |
+| `--dsh <path>` | 指定 dsh 可执行文件（默认从 PATH → `/Applications/DeepSeek Harness.app/...` 找） |
+| `--dsh-home <path>` | 指定 `DSH_HOME`，默认 `~/.dsh` |
+
+两个容易踩的点，脚本已经替你处理：
+
+- **不读 `$DSH_PROFILE`。** dsh 会把该变量注入子进程（本机实测值是保留的 `desktop`），照抄会往保留 profile 里装东西，所以默认固定 `web`，要改就用 `--profile`。
+- **skill 只扫一层。** dsh 找的是 `$DSH_HOME/skills/<name>/SKILL.md`，所以软链必须指向目录本身；装完不用重启，新会话即可用（插件需要重启 dsh）。
 
 ## 当前内容
 
@@ -73,6 +109,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | skill 增删模板、脚本、`types/` 子目录 | 该 skill 的 `types/INDEX.md` 及对应 `types/<type>/README.md` |
 | 改 skill 的适用范围、选型或执行流程 | `SKILL.md` 正文，以及本 README「当前内容」中该资产的说明列 |
 | 改插件对外行为、依赖或挂载方式 | 该插件目录下的 README，以及本 README 的说明列 |
+| 新增 / 改动安装或维护脚本 | 本 README 的「安装到本机」小节 |
 | 改仓库约定（存放 / 提交 / 推送） | 本 README 对应小节 |
 
 提交前自查：
