@@ -1,8 +1,8 @@
 # dsh-assets
 
-DeepSeek Harness（dsh）自建资产的**分发仓库**：插件与 skill 的 git 版本化副本，用于跨机器同步、分享和回滚。
+DeepSeek Harness（dsh）自建资产的**唯一存放地**：插件与 skill 在这里编写、维护和版本化，用于跨机器同步、分享和回滚。
 
-本机的开发/加载源头仍是工作区的 `../internal-dsh-assets/`（见 `../AGENTS.md`）。本仓库是它的发布镜像，两者的关系见下方「同步约定」。
+**本仓库即为自建资产的唯一存放地**：skill 与插件都在这里编写、维护、提交，不再与工作区的 `internal-dsh-assets/` 互相复制。约定见下方「存放约定」。
 
 ## 目录结构
 
@@ -45,24 +45,23 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `how-to-write-document` | skill | [skills/how-to-write-document](skills/how-to-write-document) | 六类文档写作规范与模板：paper / prd / one-pager / experiment-report / research-report / technical-design |
 | `dsh-perf-profiler` | plugin | [plugins/dsh-perf-profiler](plugins/dsh-perf-profiler) | 把 hook 监听器与工具执行体的耗时可归因到插件/hook 点/工具/单次调用；支持实时报告与离线 JSONL 分析 |
 
-## 同步约定
+## 存放约定
 
-- **源头**：`internal-dsh-assets/`（工作区约定的存放位置）。
-- **本仓库**：对外分发副本。向本仓库添加或更新资产时，从源头复制，不反向覆盖源头。
+- **本仓库是自建资产的唯一存放地。** 新增或修改 skill、插件一律直接写在这里，不再向 `internal-dsh-assets/` 回写或从那里复制——那个目录不归本仓库维护，改动会失去同步。
 - **启用方式**：dsh 的实际加载根是 `~/.dsh/skills/`（本地 provider 的 `user-dsh`，rank 400；项目内则是 `<projectRoot>/.dsh/skills`）。本仓库**不会**被自动扫描，要用某个 skill 需软链过去：
 
   ```bash
   ln -s "$PWD/skills/<name>" ~/.dsh/skills/<name>
   ```
-- 复制时排除 `.DS_Store`（已在 `.gitignore` 中屏蔽，但仍应避免带入）。
-- 复制后校验一致性：
+
+  插件不比 skill，需要装进 profile 才生效：
 
   ```bash
-  diff -r --exclude='.DS_Store' \
-    ../internal-dsh-assets/skills/<name> skills/<name>
+  dsh plugin --profile <profile> add ./plugins/<plugin-name>
   ```
 
-- 若某项资产只在仓库侧存在（如外部贡献），应先落回 `internal-dsh-assets/` 再同步，保持单一源头。
+- `.DS_Store` 不入库（已在 `.gitignore` 屏蔽），复制或移动文件时不要带入。
+- 提交前用 `git status --short` 确认没有意外带入的文件；`git diff --stat HEAD` 用来核对文档是否与内容同批。
 
 ## 文档同步（硬要求）
 
@@ -74,7 +73,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | skill 增删模板、脚本、`types/` 子目录 | 该 skill 的 `types/INDEX.md` 及对应 `types/<type>/README.md` |
 | 改 skill 的适用范围、选型或执行流程 | `SKILL.md` 正文，以及本 README「当前内容」中该资产的说明列 |
 | 改插件对外行为、依赖或挂载方式 | 该插件目录下的 README，以及本 README 的说明列 |
-| 改仓库约定（同步 / 提交 / 推送） | 本 README 对应小节 |
+| 改仓库约定（存放 / 提交 / 推送） | 本 README 对应小节 |
 
 提交前自查：
 
