@@ -10,60 +10,94 @@ window.__ModuleLoader__.load({
     const TICK_MS = 110;
     const HAPPY_MS = 950;
     const BUBBLE_MS = 1700;
-    const BREED_ORDER = ['tabby', 'white', 'black', 'chinchilla', 'golden', 'samoyed', 'husky'];
+    const BREED_ORDER = [
+      'tabby', 'white', 'black', 'chinchilla', 'tiger', 'lion',
+      'golden', 'samoyed', 'husky', 'parrot', 'sheep', 'goat',
+    ];
 
     // ------------------------------------------------------------ 精灵开始
     // #region sprite
 
-// 像素宠物精灵：48×54 网格，几何铺色 + 自动描边 + 体积明暗 + 品种花纹。
-// 纯函数、不依赖 React；按帧参数生成（呼吸 / 眨眼 / 尾巴 / 表情 / 耳朵）。
-// 坐标就是格子坐标（1 格 = 1 像素），换分辨率只改 W/H 和几何常量。
+// 像素宠物精灵：48×54 网格。几何铺色 + 自动描边 + 体积明暗 + 品种花纹 + 转向。
+// 纯函数、不依赖 React。
+//
+// frame = { breath, tail, eyes, happy, tongue, ear, turn, dir }
+//   turn: 0 = 正面，0.5 = 侧转一半，1 = 侧面
+//   dir : 1 = 朝右，-1 = 朝左（整体水平翻转）
 
 const W = 48;
 const H = 54;
+const MAX_TURN = 1;
 
 const BREEDS = {
   tabby: { species: 'cat', ear: 'pointy', pattern: 'tabby' },
   white: { species: 'cat', ear: 'pointy', pattern: 'none' },
   black: { species: 'cat', ear: 'pointy', pattern: 'sheen' },
   chinchilla: { species: 'cat', ear: 'pointy', pattern: 'gold' },
+  tiger: { species: 'cat', ear: 'round', pattern: 'tiger' },
+  lion: { species: 'cat', ear: 'round', pattern: 'none', mane: true },
   golden: { species: 'dog', ear: 'floppy', pattern: 'none' },
   samoyed: { species: 'dog', ear: 'prick', pattern: 'fluff' },
   husky: { species: 'dog', ear: 'prick', pattern: 'mask' },
+  parrot: { species: 'bird', ear: 'none', pattern: 'none', asymmetric: true },
+  sheep: { species: 'sheep', ear: 'droop', pattern: 'none' },
+  goat: { species: 'goat', ear: 'pointy', pattern: 'none', beard: true },
 };
 
 const PALETTES = {
   tabby: {
     o: '#3a2c22', f: '#b09a7c', F: '#6f5c47', L: '#d3c2a6', w: '#f4ead6',
-    p: '#f0a0b4', i: '#8fbf5e', s: '#ffffff', e: '#2a1d17', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a',
+    p: '#f0a0b4', i: '#8fbf5e', s: '#ffffff', e: '#2a1d17', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a', n: '#8a7358',
   },
   white: {
     o: '#8c7f74', f: '#fdfaf4', F: '#e6dcd0', L: '#ffffff', w: '#ffffff',
-    p: '#ffb3c6', i: '#79b9e6', s: '#ffffff', e: '#3a3230', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a',
+    p: '#ffb3c6', i: '#79b9e6', s: '#ffffff', e: '#3a3230', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a', n: '#e8ded2',
   },
   black: {
     o: '#141115', f: '#443b49', F: '#302a35', L: '#6f6679', w: '#574f5e',
-    p: '#c98a9c', i: '#f2c14e', s: '#fff6c9', e: '#0f0d0c', t: '#e08aa0', r: '#e0563f', g: '#e8c05a',
+    p: '#c98a9c', i: '#f2c14e', s: '#fff6c9', e: '#0f0d0c', t: '#e08aa0', r: '#e0563f', g: '#e8c05a', n: '#3b333f',
   },
   chinchilla: {
     o: '#584636', f: '#f0e0c0', F: '#d8c49c', L: '#fff8e6', w: '#fffaf0',
-    p: '#ffb3c6', i: '#86b96b', s: '#ffffff', e: '#3a2f26', t: '#ff8fa8', r: '#e0563f', g: '#d9a94e',
+    p: '#ffb3c6', i: '#86b96b', s: '#ffffff', e: '#3a2f26', t: '#ff8fa8', r: '#e0563f', g: '#d9a94e', n: '#d9c8a6',
+  },
+  tiger: {
+    o: '#3a2415', f: '#e8a13c', F: '#c47c22', L: '#f7cf86', w: '#fff6e6',
+    p: '#e08a9a', i: '#f2d24e', s: '#ffffff', e: '#241610', t: '#ff8fa8', r: '#d94f3d', g: '#e8c05a', n: '#a8672a',
+  },
+  lion: {
+    o: '#5a3618', f: '#dda85c', F: '#b8813a', L: '#f2cd90', w: '#f6e3c4',
+    p: '#e0a0a8', i: '#e8c24a', s: '#ffffff', e: '#2b1d14', t: '#ff9db0', r: '#d94f3d', g: '#e8c05a', n: '#a9762f',
   },
   golden: {
     o: '#4a2f18', f: '#e6a955', F: '#c1843a', L: '#f8d191', w: '#fff1d9',
-    p: '#f0a0b4', i: '#5a3a1e', s: '#ffffff', e: '#2b1d14', t: '#ff7f9c', r: '#d94f3d', g: '#e8c05a',
+    p: '#f0a0b4', i: '#5a3a1e', s: '#ffffff', e: '#2b1d14', t: '#ff7f9c', r: '#d94f3d', g: '#e8c05a', n: '#c1843a',
   },
   samoyed: {
     o: '#6f6862', f: '#fdfbf6', F: '#e4ded4', L: '#ffffff', w: '#ffffff',
-    p: '#ffb3c6', i: '#3c3029', s: '#ffffff', e: '#2b211d', t: '#ff8fa8', r: '#5aa0e0', g: '#e8c05a',
+    p: '#ffb3c6', i: '#3c3029', s: '#ffffff', e: '#2b211d', t: '#ff8fa8', r: '#5aa0e0', g: '#e8c05a', n: '#e4ded4',
   },
   husky: {
     o: '#33383d', f: '#98a0a7', F: '#4c5259', L: '#cdd4da', w: '#fdfbf7',
-    p: '#ffb3c6', i: '#7ec8e3', s: '#ffffff', e: '#201c1a', t: '#ff8fa8', r: '#d94f3d', g: '#e8c05a',
+    p: '#ffb3c6', i: '#7ec8e3', s: '#ffffff', e: '#201c1a', t: '#ff8fa8', r: '#d94f3d', g: '#e8c05a', n: '#6f767c',
+  },
+  parrot: {
+    o: '#1b3a2a', f: '#4fa84a', F: '#2f7a33', L: '#8ed47f', w: '#f2e7c9',
+    p: '#ff9dbb', i: '#f2c14e', s: '#ffffff', e: '#16240f', t: '#ff8fa8', r: '#e0563f', g: '#f0b429', n: '#c8d8b0',
+  },
+  sheep: {
+    o: '#6b6259', f: '#f6f0e4', F: '#ded4c2', L: '#ffffff', w: '#ffffff',
+    p: '#f0b0bc', i: '#3a3029', s: '#ffffff', e: '#2b211d', t: '#ff9db0', r: '#e0563f', g: '#e8c05a', n: '#59524a',
+  },
+  goat: {
+    o: '#5f5648', f: '#f2ece0', F: '#dcd3c2', L: '#ffffff', w: '#fffdf7',
+    p: '#e8b0b8', i: '#4a3f2e', s: '#ffffff', e: '#2b211d', t: '#ff9db0', r: '#e0563f', g: '#e8c05a', n: '#b8ae9c',
   },
 };
 
-const blank = () => Array.from({ length: H }, () => new Array(W).fill('.'));
+function blank() {
+  return Array.from({ length: H }, () => new Array(W).fill('.'));
+}
 
 function put(g, x, y, ch) {
   const ix = Math.round(x);
@@ -84,8 +118,8 @@ function rect(g, x, y, w, h, ch) {
 function ellipse(g, cx, cy, rx, ry, ch) {
   for (let iy = 0; iy < H; iy += 1) {
     for (let ix = 0; ix < W; ix += 1) {
-      const dx = (ix + 0.5 - cx) / rx;
-      const dy = (iy + 0.5 - cy) / ry;
+      const dx = (ix + 0.5 - cx) / Math.max(0.1, rx);
+      const dy = (iy + 0.5 - cy) / Math.max(0.1, ry);
       if (dx * dx + dy * dy <= 1) g[iy][ix] = ch;
     }
   }
@@ -106,7 +140,6 @@ function triangle(g, a, b, c, ch) {
   }
 }
 
-/** 圆角矩形：坐姿身体用。 */
 function round(g, x, y, w, h, r, ch) {
   for (let iy = 0; iy < H; iy += 1) {
     for (let ix = 0; ix < W; ix += 1) {
@@ -123,7 +156,6 @@ function round(g, x, y, w, h, r, ch) {
   }
 }
 
-/** 1 像素宽的线。 */
 function line(g, x0, y0, x1, y1, ch) {
   let ax = Math.round(x0);
   let ay = Math.round(y0);
@@ -149,24 +181,6 @@ function line(g, x0, y0, x1, y1, ch) {
   }
 }
 
-function mirror(g) {
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W / 2; x += 1) g[y][W - 1 - x] = g[y][x];
-  }
-}
-
-/** 把左半边的一块翻到右半边（眼睛、眉毛用，保证严格对称）。 */
-function mirrorRegion(g, x0, y0, w, h) {
-  for (let y = y0; y < y0 + h; y += 1) {
-    for (let x = x0; x < x0 + w; x += 1) {
-      const tx = W - 1 - x;
-      if (y < 0 || y >= H || tx < 0 || tx >= W || x < 0 || x >= W) continue;
-      g[y][tx] = g[y][x];
-    }
-  }
-}
-
-/** 耳朵和脑袋的接缝会留下一格宽的裂缝，补掉再描边。 */
 function closeGaps(g) {
   let changed = true;
   while (changed) {
@@ -212,229 +226,448 @@ function rimShadow(rows) {
   return rows;
 }
 
-function dither(rows, ch, from, step = 2) {
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W; x += 1) {
-      if ((x + y) % step !== 0) continue;
-      if (from.includes(rows[y][x])) rows[y][x] = ch;
-    }
-  }
-  return rows;
+function flip(rows) {
+  return rows.map((row) => row.slice().reverse());
 }
+
+/** 转向的几何偏移：所有五官、耳朵、爪子按这个量往朝向一侧挪。 */
+function turnShift(turn) {
+  const t = Math.max(0, Math.min(1, turn));
+  return {
+    t,
+    face: t * 4.2, // 口鼻中心
+    eyeFar: t * 6.2, // 远侧那只眼睛往中间挪
+    eyeNear: t * 2.0, // 近侧那只眼睛往边上挪
+    farScale: 1 - 0.5 * t, // 远眼缩小
+    nearEar: -t * 5.0,
+    farEar: t * 6.0,
+    body: t * 1.2,
+  };
+}
+
+// ---------------------------------------------------------------- 版式
+// 每个物种五官的位置；转向时按 turnShift 往朝向一侧挪。
+const LAYOUT = {
+  cat: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
+  dog: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
+  bird: { eyeY: 17.2, near: 27.0, far: 21.0, scale: 0.9 },
+  sheep: { eyeY: 21.2, near: 28.6, far: 19.4, scale: 0.82 },
+  goat: { eyeY: 20.2, near: 29.0, far: 19.0, scale: 0.88 },
+};
+
+const layoutOf = (breed) => LAYOUT[BREEDS[breed].species] || LAYOUT.cat;
 
 // ---------------------------------------------------------------- 耳朵
 
-function ears(g, breed, frame) {
-  const art = BREEDS[breed];
-  const t = frame.ear ? 1 : 0;
+/** 一只耳朵：cx/cy 是耳根，dir=-1 时往另一侧翻。 */
+function ear(g, style, cx, cyIn, dir, scale, t) {
+  const s = scale;
+  const cy = cyIn - (t ? 1.1 : 0);
+  const px = (x) => cx + dir * x * s;
+  const py = (y) => cy + y * s;
 
-  if (art.ear === 'pointy') {
-    // 猫：大三角 + 圆底
-    triangle(g, [10 - t * 1.2, 2 + t * 0.8], [6.5, 16], [21, 10.5], 'f');
-    ellipse(g, 12.8, 14.6 - t * 0.4, 4.8, 4.6, 'f');
-    // 耳窝
-    triangle(g, [11.4 - t * 1.0, 7.4 + t * 0.7], [10.2, 13.2], [15.6, 11.4], 'p');
+  if (style === 'pointy') {
+    ellipse(g, cx, py(0.4), 4.8 * s, 4.6 * s, 'f');
+    triangle(g, [px(-2.8), py(-12.6)], [px(-6.3), py(1.4)], [px(8.2), py(-4.1)], 'f');
+    triangle(g, [px(-2.2 + t * 0.6), py(-7.4)], [px(-4.2), py(-1.2)], [px(3.6), py(-3.6)], 'p');
+    return;
+  }
+  if (style === 'prick') {
+    ellipse(g, cx, py(0.6), 4.2 * s, 4.0 * s, 'f');
+    triangle(g, [px(-1.0), py(-12.4)], [px(-4.6), py(1.2)], [px(6.8), py(-3.6)], 'f');
+    triangle(g, [px(-0.6), py(-7.2)], [px(-3.0), py(-1.0)], [px(3.0), py(-3.2)], 'p');
+    return;
+  }
+  if (style === 'round') {
+    // 老虎 / 狮子：圆耳，压在头顶两侧
+    ellipse(g, cx, py(-3.2), 4.4 * s, 4.2 * s, 'f');
+    ellipse(g, cx, py(-3.0), 2.6 * s, 2.4 * s, 'p');
+    return;
+  }
+  if (style === 'droop') {
+    // 绵羊：软趴趴的小耳朵
+    ellipse(g, cx + dir * 0.6, py(1.4), 2.4 * s, 3.8 * s, 'n');
+    return;
+  }
+  if (style === 'floppy') {
+    ellipse(g, cx, py(6.0), 3.2 * s, 7.0 * s, 'F');
+    ellipse(g, cx - dir * 0.6, py(12.2), 2.9 * s, 2.8 * s, 'F');
+  }
+}
+
+function drawEars(g, breed, frame) {
+  const art = BREEDS[breed];
+  if (art.ear === 'none') return;
+  const T = turnShift(frame.turn);
+  const small = art.species === 'sheep' || art.species === 'goat';
+  const cy = small ? 17.4 : 14.6;
+  const base = small ? 32.6 : 35.2;
+  const nearCx = base + T.nearEar;
+  const farCx = 48 - base + T.farEar;
+  const flick = frame.ear ? 1 : 0;
+  if (T.t < 0.95) ear(g, art.ear, farCx, cy, -1, T.farScale, flick);
+  ear(g, art.ear, nearCx, cy, 1, 1, flick);
+}
+
+// ---------------------------------------------------------------- 身体
+
+function drawTorso(g, breed, frame) {
+  const art = BREEDS[breed];
+  const T = turnShift(frame.turn);
+  const cx = 24 + T.body;
+  const slim = T.t * 1.4;
+  const bob = frame.breath ? -1 : 0;
+
+  if (art.species === 'bird') {
+    // 鹦鹉：蛋形身体 + 浅色肚子 + 两只脚
+    ellipse(g, cx - 1, 36, 10.5, 12.5, 'f');
+    ellipse(g, cx - 3, 39, 6.5, 8.5, 'w');
+    // 翅膀
+    ellipse(g, cx + 6.5, 36, 4.6, 8.6, 'F');
+    ellipse(g, cx + 5.6, 35, 2.6, 6.6, 'f');
+    // 脚
+    for (const dx of [-4.5, 3.5]) {
+      rect(g, cx + dx - 1.4, 48.5, 2.8, 2.2, 'g');
+      rect(g, cx + dx - 2.2, 50.4, 4.4, 1.6, 'g');
+    }
     return;
   }
 
-  if (art.ear === 'prick') {
-    // 萨摩耶 / 哈士奇：立耳，窄而高
-    triangle(g, [11.5 - t * 1.0, 2.5 + t * 0.6], [8, 16], [20, 11], 'f');
-    ellipse(g, 13.0, 14.6 - t * 0.4, 4.2, 4.0, 'f');
-    triangle(g, [12.4 - t * 0.8, 7.6 + t * 0.5], [10.8, 13.0], [15.8, 11.4], 'p');
+  if (art.species === 'sheep') {
+    // 绵羊：一大团羊毛，四条短腿
+    for (const [dx, dy, r] of [[-8, -3, 6], [8, -3, 6], [-9, 4, 5.5], [9, 4, 5.5], [0, -9, 6],
+      [0, 6, 5.5], [-6, 9, 4.5], [6, 9, 4.5], [0, 0, 8]]) {
+      ellipse(g, cx + dx * (1 - slim * 0.05), 37 + dy, r, r, 'f');
+    }
+    const legW = 4;
+    const legX = Math.round(24 - 7.3 - legW / 2);
+    rect(g, legX, 45, legW, 6.4, 'n');
+    rect(g, 48 - legX - legW, 45, legW, 6.4, 'n');
+    return;
   }
+
+  if (art.species === 'goat') {
+    // 山羊：瘦长身体 + 四条细腿 + 深色蹄子
+    round(g, cx - 7, 33, 14 - slim, 15.5, 5.5, 'f');
+    ellipse(g, cx, 38.5, 7.4 - slim * 0.5, 7.6, 'f');
+    ellipse(g, cx - 1, 40, 4.4, 5.4, 'w');
+    const legW = 3;
+    const legX = Math.round(24 - 6.5 - legW / 2);
+    rect(g, legX, 45.5, legW, 5.4, 'f');
+    rect(g, 48 - legX - legW, 45.5, legW, 5.4, 'f');
+    rect(g, legX - 1, 50.2, legW + 2, 2.0, 'n');
+    rect(g, 48 - legX - legW - 1, 50.2, legW + 2, 2.0, 'n');
+    return;
+  }
+
+  round(g, cx - 7.5 + slim * 0.5, 33, 15 - slim, 18.5, 6, 'f');
+  ellipse(g, cx, 40, 8 - slim * 0.5, 7.2, 'f');
 }
 
-function floppyEars(g, frame) {
-  const drop = frame.ear ? 1.2 : 0;
-  ellipse(g, 12.4, 21.0 + drop, 3.2, 7.0, 'F');
-  ellipse(g, 11.8, 27.2 + drop, 2.9, 2.8, 'F');
-}
-
-// ---------------------------------------------------------------- 形体
-
-function bodyShape(breed, frame) {
+function drawHead(g, breed, frame) {
   const art = BREEDS[breed];
-  const cat = art.species === 'cat';
-  const g = blank();
+  const T = turnShift(frame.turn);
   const bob = frame.breath ? -1 : 0;
+  const cx = 24 + T.t * 1.2;
 
-  // 身体
-  round(g, 16.5, 33, 15, 18.5, 6, 'f');
-  ellipse(g, 24, 40, 8, 7.2, 'f');
-
-  // 耳朵先画，再被脑袋压住下半截，耳窝就不会溢到脸上
-  ears(g, breed, frame);
-  mirror(g);
-
-  // 头
-  ellipse(g, 24, 22 + bob, 13.5, 12.4, 'f');
-
-  if (art.ear === 'floppy') {
-    floppyEars(g, frame);
-    mirror(g);
+  if (art.species === 'bird') {
+    ellipse(g, cx + T.t * 1.2, 19 + bob, 8.6, 8.4, 'f');
+    return;
   }
-
-  // 口鼻 / 胸腹 / 前爪
-  if (cat) ellipse(g, 24, 30.4 + bob, 6.8, 4.2, 'w');
-  else ellipse(g, 24, 30.2 + bob, 6.6, 4.6, 'w');
-
-  ellipse(g, 24, 43.6, 4.8, 5.0, 'w');
-  ellipse(g, 20.0, 51.0, 3.0, 2.0, 'w');
-  mirror(g);
-
-  return g;
+  if (art.species === 'sheep') {
+    ellipse(g, cx, 21.0 + bob, 6.6, 6.2, 'n');
+    // 头顶一撮羊毛
+    for (const [dx, dy, r] of [[-3, -4, 3.2], [3, -4, 3.2], [0, -6, 3.4]]) {
+      ellipse(g, cx + dx, 21.0 + dy + bob, r, r, 'f');
+    }
+    return;
+  }
+  if (art.species === 'goat') {
+    ellipse(g, cx, 20.0 + bob, 7.8, 7.2, 'f');
+    return;
+  }
+  ellipse(g, cx, 22 + bob, 13.5 - T.t * 2.6, 12.4, 'f');
 }
 
-// ---------------------------------------------------------------- 花纹
-
-function pattern(rows, breed, frame) {
+/** 口鼻、胸腹、爪子这些浅色块。 */
+function drawMuzzle(g, breed, frame) {
   const art = BREEDS[breed];
+  const T = turnShift(frame.turn);
   const bob = frame.breath ? -1 : 0;
-  const on = (x, y, ch, allowed) => {
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    if (allowed.includes(rows[y][x])) rows[y][x] = ch;
-  };
-  const fur = ['f', 'F', 'L'];
+  const cx = 24 + T.face;
 
-  if (art.pattern === 'tabby') {
-    // 额头三竖 + 一道横，凑成虎斑的「王」
-    for (const x of [20, 24, 28]) {
-      for (let y = 12 + bob; y < 18 + bob; y += 1) on(x, y, 'F', fur);
-    }
-    for (let x = 19; x < 30; x += 1) on(x, 12 + bob, 'F', fur);
-    // 两颊各两道
-    for (const [x, y] of [[12, 24], [13, 25], [12, 27], [13, 28], [35, 24], [34, 25], [35, 27], [34, 28]]) {
-      on(x, y + bob, 'F', fur);
-    }
-    // 身上三道
-    for (const [x, y] of [[17, 40], [18, 41], [30, 40], [29, 41], [17, 44], [30, 44], [18, 47], [29, 47]]) {
-      on(x, y, 'F', fur);
-    }
+  if (art.species === 'bird') {
+    // 钩状喙：上喙大、下喙小，往右伸出脑袋
+    const bx = 32.6 + T.t * 2 + T.face * 0.4;
+    // 上喙：从额头下方斜伸出去，末端带钩
+    triangle(g, [bx - 3.0, 15.4 + bob], [bx - 2.0, 21.0 + bob], [bx + 7.4, 19.2 + bob], 'g');
+    ellipse(g, bx + 6.6, 19.6 + bob, 1.9, 1.7, 'g');
+    // 下喙
+    triangle(g, [bx - 2.4, 20.2 + bob], [bx - 1.2, 23.2 + bob], [bx + 4.2, 21.2 + bob], 'n');
+    // 腮红
+    ellipse(g, bx - 6.4, 21.6 + bob, 2.6, 1.8, 'p');
+    return;
   }
 
-  if (art.pattern === 'gold') {
-    for (const [x, y] of [[19, 11], [20, 11], [28, 11], [27, 11], [22, 10], [23, 10], [25, 10], [26, 10],
-      [17, 12], [30, 12], [15, 14], [32, 14]]) {
-      on(x, y + bob, 'g', fur);
+  if (art.species === 'sheep') {
+    ellipse(g, cx, 25.2 + bob, 4.2, 3.2, 'w');
+    ellipse(g, 24 + T.body, 38, 5.0, 6.0, 'w');
+    return;
+  }
+
+  if (art.species === 'goat') {
+    ellipse(g, cx, 23.6 + bob, 4.6, 3.4, 'w');
+    ellipse(g, 24 + T.body, 38, 4.0, 4.6, 'w');
+    // 山羊胡：用一串椭圆，左右严格对称
+    for (const [dy, rx, ry] of [[0, 2.0, 1.1], [1.4, 1.7, 1.1], [2.6, 1.3, 1.1], [3.6, 0.9, 1.0]]) {
+      ellipse(g, cx, 27.0 + dy + bob, rx, ry, 'n');
     }
-    for (const [x, y] of [[17, 37], [18, 38], [29, 37], [16, 40], [31, 40]]) on(x, y, 'g', fur);
+    return;
   }
 
-  if (art.pattern === 'sheen') {
-    line(rows, 16, 11, 13, 16, 'L');
-    line(rows, 17, 12, 14, 16, 'L');
+  if (art.species === 'cat') ellipse(g, cx, 30.4 + bob, 6.8, 4.2, 'w');
+  else ellipse(g, cx, 30.2 + bob, 6.6, 4.6, 'w');
+
+  if (T.t >= 0.4) {
+    ellipse(g, cx + 5.4, 29.8 + bob, 4.2 * Math.min(1, T.t), 3.2 * Math.min(1, T.t) + 0.6, 'w');
   }
 
-  if (art.pattern === 'mask') {
-    // 额头白色火焰纹
-    for (let y = 11 + bob; y < 25 + bob; y += 1) {
-      on(23, y, 'w', fur);
-      on(24, y, 'w', fur);
-      on(25, y, 'w', fur);
+  ellipse(g, 24 + T.body, 43.6, 4.8, 5.0, 'w');
+  const nearPaw = 28.0 + T.t * 0.6;
+  const farPaw = 20.0 + T.t * 2.6;
+  ellipse(g, farPaw, 51.0, 3.0 - T.t * 0.6, 2.0, 'w');
+  ellipse(g, nearPaw, 51.0, 3.0, 2.0, 'w');
+}
+
+// ---------------------------------------------------------------- 鬃毛 / 角
+
+function drawMane(g, breed, frame) {
+  if (!BREEDS[breed].mane) return;
+  const T = turnShift(frame.turn);
+  const cx = 24 + T.t * 1.2;
+  const bob = frame.breath ? -1 : 0;
+  for (let a = 0; a < 20; a += 1) {
+    const ang = (a / 20) * Math.PI * 2;
+    // 顶部留空，耳朵和头顶才露得出来
+    if (Math.sin(ang) < -0.62) continue;
+    const r = 13.4;
+    ellipse(g, cx + Math.cos(ang) * r * 0.96, 22 + bob + Math.sin(ang) * r * 1.02, 4.4, 4.4, 'F');
+  }
+}
+
+function drawHorns(g, breed, frame) {
+  if (BREEDS[breed].species !== 'goat') return;
+  const T = turnShift(frame.turn);
+  const cx = 24 + T.t * 1.2;
+  const bob = frame.breath ? -1 : 0;
+  // 两只向后上方弯的角
+  for (const dir of [-1, 1]) {
+    for (let i = 0; i <= 8; i += 1) {
+      const k = i / 8;
+      const x = cx + dir * (5.2 + k * 2.2);
+      const y = 14.4 + bob - k * 8.2 + k * k * 2.4;
+      ellipse(g, x, y, 1.9 - k * 1.0, 1.9 - k * 1.0, 'n');
     }
-    // 眼周深色帽子
-    ellipse(rows, 15.6, 15.5 + bob, 4.8, 3.4, 'F');
-    ellipse(rows, 32.4, 15.5 + bob, 4.8, 3.4, 'F');
-    // 耳尖压深
-    for (const [x, y] of [[10, 4], [11, 6], [12, 8], [37, 4], [36, 6], [35, 8]]) on(x, y + bob, 'F', fur);
   }
-
-  if (art.pattern === 'fluff') {
-    for (const [x, y] of [[9.6, 8], [10, 10], [10.6, 12], [38, 8], [37.6, 10], [37, 12]]) {
-      on(Math.round(x), y + bob, 'F', fur);
-    }
-  }
-
-  return rows;
 }
 
 // ---------------------------------------------------------------- 五官
 
-function drawEye(g, kind) {
-  const cx = 17.5;
-  const cy = 23;
-
+function drawEyeShape(g, cx, cy, kind, s) {
+  const k = (v) => v * s;
   if (kind === 'happy') {
-    line(g, cx - 3.2, cy + 1.2, cx - 1.4, cy - 1.8, 'o');
-    line(g, cx - 1.4, cy - 1.8, cx + 1.4, cy + 1.2, 'o');
-    line(g, cx + 1.4, cy + 1.2, cx + 3.2, cy - 1.2, 'o');
+    line(g, cx - k(3.2), cy + k(1.2), cx - k(1.4), cy - k(1.8), 'o');
+    line(g, cx - k(1.4), cy - k(1.8), cx + k(1.4), cy + k(1.2), 'o');
+    line(g, cx + k(1.4), cy + k(1.2), cx + k(3.2), cy - k(1.2), 'o');
     return;
   }
-
   if (kind === 'closed') {
-    line(g, cx - 3.2, cy + 0.4, cx - 1.4, cy + 1.8, 'o');
-    line(g, cx - 1.4, cy + 1.8, cx + 1.4, cy + 1.8, 'o');
-    line(g, cx + 1.4, cy + 1.8, cx + 3.2, cy + 0.4, 'o');
+    line(g, cx - k(3.2), cy + k(0.4), cx - k(1.4), cy + k(1.8), 'o');
+    line(g, cx - k(1.4), cy + k(1.8), cx + k(1.4), cy + k(1.8), 'o');
+    line(g, cx + k(1.4), cy + k(1.8), cx + k(3.2), cy + k(0.4), 'o');
     return;
   }
-
   if (kind === 'half') {
-    ellipse(g, cx, cy + 1, 3.0, 1.5, 'e');
-    ellipse(g, cx, cy + 1.2, 3.0, 0.9, 'i');
-    for (const x of [-3.2, 3.2]) ellipse(g, cx + x, cy + 0.4, 0.9, 1.1, 'o');
+    ellipse(g, cx, cy + k(1), k(3.0), k(1.5), 'e');
+    ellipse(g, cx, cy + k(1.2), k(3.0), k(0.9), 'i');
+    for (const x of [-3.2, 3.2]) ellipse(g, cx + k(x), cy + k(0.4), k(0.9), k(1.1), 'o');
     return;
   }
-
-  // 睁眼：外框 → 虹膜 → 瞳孔 → 高光
-  ellipse(g, cx, cy, 4.0, 4.7, 'o');
-  ellipse(g, cx, cy + 0.3, 3.2, 3.9, 'i');
-  ellipse(g, cx, cy + 0.5, 1.3, 2.6, 'e');
-  rect(g, cx - 2.6, cy - 2.9, 2.0, 1.8, 's');
-  rect(g, cx + 1.2, cy + 2.2, 1.2, 1.2, 's');
+  ellipse(g, cx, cy, k(4.0), k(4.7), 'o');
+  ellipse(g, cx, cy + k(0.3), k(3.2), k(3.9), 'i');
+  ellipse(g, cx, cy + k(0.5), k(1.3), k(2.6), 'e');
+  rect(g, cx - k(2.6), cy - k(2.9), k(2.0), k(1.8), 's');
+  rect(g, cx + k(1.2), cy + k(2.2), k(1.2), k(1.2), 's');
 }
 
 function eyeGrid(breed, frame) {
   const g = blank();
+  const T = turnShift(frame.turn);
+  const L = layoutOf(breed);
   const bob = frame.breath ? -1 : 0;
-  const shifted = blank();
-  drawEye(shifted, frame.eyes || 'open');
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W / 2; x += 1) {
-      if (shifted[y][x] === '.') continue;
-      const ty = y + bob;
-      if (ty < 0 || ty >= H) continue;
-      g[ty][x] = shifted[y][x];
-      g[ty][W - 1 - x] = shifted[y][x];
+  const kind = frame.eyes || 'open';
+  const y = L.eyeY + bob;
+  drawEyeShape(g, L.near + T.eyeNear, y, kind, L.scale);
+  if (T.t < 0.95) {
+    if (T.t === 0) {
+      // 正面：把近侧那只眼睛整体镜像过去，左右严格对称
+      const snapshot = [];
+      for (let iy = 0; iy < H; iy += 1) for (let ix = 0; ix < W; ix += 1) {
+        if (g[iy][ix] !== '.') snapshot.push([ix, iy, g[iy][ix]]);
+      }
+      for (const [ix, iy, ch] of snapshot) {
+        const mx = W - 1 - ix;
+        if (g[iy][mx] === '.') g[iy][mx] = ch;
+      }
+    } else {
+      drawEyeShape(g, L.far + T.eyeFar, y, kind, L.scale * T.farScale);
     }
   }
   return g;
 }
 
-function drawFace(rows, breed, frame) {
-  const cat = BREEDS[breed].species === 'cat';
+function drawFaceOn(rows, breed, frame) {
+  const art = BREEDS[breed];
+  const T = turnShift(frame.turn);
   const bob = frame.breath ? -1 : 0;
+  const cx = 24 + T.face;
   const tongue = frame.happy || frame.tongue;
   const smile = frame.happy;
 
-  // 鼻子
-  if (cat) {
-    triangle(rows, [21.5, 26.6 + bob], [26.5, 26.6 + bob], [24, 29.4 + bob], 'p');
-    line(rows, 24, 28.6 + bob, 24, 30.2 + bob, 'o');
-  } else {
-    ellipse(rows, 24, 27.0 + bob, 2.8, 2.2, 'e');
-    rect(rows, 22.2, 25.8 + bob, 1.4, 1.0, 's');
-    line(rows, 24, 28.8 + bob, 24, 30.4 + bob, 'o');
-    // 眉毛点
-    for (const [x, y] of [[14, 17], [16, 16], [32, 17], [34, 16]]) put(rows, x, y + bob, 'F');
+  if (art.species === 'bird') {
+    // 开心时张嘴吐小舌头
+    if (tongue) {
+      triangle(rows, [cx + 1.6, 20.4 + bob], [cx + 4.6, 21.0 + bob], [cx + 2.4, 23.6 + bob], 't');
+      line(rows, cx + 1.8, 21.0 + bob, cx + 4.4, 21.6 + bob, 'e');
+    }
+    return;
   }
 
-  // 嘴
+  if (art.species === 'sheep' || art.species === 'goat') {
+    triangle(rows, [cx - 2.0, 24.6 + bob], [cx + 2.0, 24.6 + bob], [cx, 27.0 + bob], 'e');
+    line(rows, cx, 26.6 + bob, cx, 28.0 + bob, 'o');
+    line(rows, cx, 28.0 + bob, cx - 2.0, 28.6 + bob, 'o');
+    line(rows, cx, 28.0 + bob, cx + 2.0, 28.6 + bob, 'o');
+    if (smile) {
+      line(rows, cx - 2.0, 28.6 + bob, cx - 3.6, 29.2 + bob, 'o');
+      line(rows, cx + 2.0, 28.6 + bob, cx + 3.6, 29.2 + bob, 'o');
+    }
+    if (tongue) {
+      rect(rows, cx - 1.2, 29.4 + bob, 2.4, 2.0, 't');
+      line(rows, cx, 30.2 + bob, cx, 31.4 + bob, 'e');
+    }
+    return;
+  }
+
+  if (art.species === 'cat') {
+    triangle(rows, [cx - 2.5, 26.6 + bob], [cx + 2.5, 26.6 + bob], [cx, 29.4 + bob], 'p');
+    line(rows, cx, 28.6 + bob, cx, 30.2 + bob, 'o');
+  } else {
+    ellipse(rows, cx, 27.0 + bob, 2.8, 2.2, 'e');
+    rect(rows, cx - 1.8, 25.8 + bob, 1.4, 1.0, 's');
+    line(rows, cx, 28.8 + bob, cx, 30.4 + bob, 'o');
+    for (const [dx, dy] of [[-9.5, 17], [-7.5, 16], [9.5, 17], [7.5, 16]]) {
+      const bx = Math.round(cx + dx);
+      const by = Math.round(dy + bob);
+      if (rows[by] && (rows[by][bx] === 'f' || rows[by][bx] === 'F')) rows[by][bx] = 'F';
+    }
+  }
+
   const my = 31 + bob;
-  line(rows, 24, 30.2 + bob, 24, my, 'o');
-  line(rows, 24, my, 21.5, my + (smile ? 1.4 : 0.8), 'o');
-  line(rows, 24, my, 26.5, my + (smile ? 1.4 : 0.8), 'o');
+  line(rows, cx, 30.2 + bob, cx, my, 'o');
+  line(rows, cx, my, cx - 2.5, my + (smile ? 1.4 : 0.8), 'o');
+  line(rows, cx, my, cx + 2.5, my + (smile ? 1.4 : 0.8), 'o');
 
   if (tongue) {
-    rect(rows, 22.6, my + 1.2, 2.8, cat ? 1.8 : 2.6, 't');
-    line(rows, 24, my + 2.0, 24, my + (cat ? 3.0 : 3.8), 'e');
+    rect(rows, cx - 1.4, my + 1.2, 2.8, art.species === 'cat' ? 1.8 : 2.6, 't');
+    line(rows, cx, my + 2.0, cx, my + (art.species === 'cat' ? 3.0 : 3.8), 'e');
   }
+}
+
+/** 五官只画在已有的身体像素上，不能把轮廓顶出去。 */
+function drawFace(rows, breed, frame) {
+  const g = blank();
+  drawFaceOn(g, breed, frame);
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if (g[y][x] !== '.' && rows[y][x] !== '.') rows[y][x] = g[y][x];
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 花纹
+
+function applyPattern(rows, breed, frame) {
+  const art = BREEDS[breed];
+  const T = turnShift(frame.turn);
+  const bob = frame.breath ? -1 : 0;
+  const on = (x, y, ch, allowed) => {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    if (ix < 0 || iy < 0 || ix >= W || iy >= H) return;
+    if (allowed.includes(rows[iy][ix])) rows[iy][ix] = ch;
+  };
+  const fur = ['f', 'F', 'L'];
+  const face = 24 + T.face;
+
+  if (art.pattern === 'tabby') {
+    for (const dx of [-4, 0, 4]) {
+      for (let y = 12 + bob; y < 18 + bob; y += 1) on(face + dx, y, 'F', fur);
+    }
+    for (let x = face - 6; x < face + 7; x += 1) on(x, 12 + bob, 'F', fur);
+    for (const [dx, dy] of [[-12, 24], [-11, 25], [-12, 27], [-11, 28], [12, 24], [11, 25], [12, 27], [11, 28]]) {
+      on(24 + dx, dy + bob, 'F', fur);
+    }
+    for (const [dx, dy] of [[-7, 40], [-6, 41], [7, 40], [6, 41], [-7, 44], [7, 44]]) on(24 + dx, dy, 'F', fur);
+  }
+
+  if (art.pattern === 'tiger') {
+    for (const dx of [-6, -2, 2, 6]) {
+      for (let y = 11 + bob; y < 19 + bob; y += 1) on(face + dx, y, 'e', fur);
+    }
+    for (const [dx, dy] of [[-13, 23], [-12, 24], [-13, 26], [-12, 27], [13, 23], [12, 24], [13, 26], [12, 27]]) {
+      on(24 + dx, dy + bob, 'e', fur);
+    }
+    for (const [dx, dy] of [[-8, 38], [-8, 41], [8, 38], [8, 41], [-9, 44], [9, 44]]) {
+      on(24 + dx, dy, 'e', fur);
+    }
+  }
+
+  if (art.pattern === 'gold') {
+    for (const [dx, dy] of [[-5, 11], [-4, 11], [4, 11], [5, 11], [-2, 10], [2, 10], [-7, 12], [7, 12], [-9, 14], [9, 14]]) {
+      on(face - 1 + dx, dy + bob, 'g', fur);
+    }
+    for (const [dx, dy] of [[-7, 37], [-6, 38], [7, 37], [-8, 40], [8, 40]]) on(24 + dx, dy, 'g', fur);
+  }
+
+  if (art.pattern === 'sheen') {
+    line(rows, face - 8, 11, face - 11, 16, 'L');
+    line(rows, face - 7, 12, face - 10, 16, 'L');
+  }
+
+  if (art.pattern === 'mask') {
+    for (let y = 11 + bob; y < 25 + bob; y += 1) {
+      on(face - 1, y, 'w', fur);
+      on(face, y, 'w', fur);
+      on(face + 1, y, 'w', fur);
+    }
+    ellipse(rows, face - 9, 15.5 + bob, 4.8, 3.4, 'F');
+    ellipse(rows, face + 9, 15.5 + bob, 4.8, 3.4, 'F');
+    for (const [dx, dy] of [[-14, 4], [-13, 6], [14, 4], [13, 6]]) on(24 + dx, dy + bob, 'F', fur);
+  }
+
+  if (art.pattern === 'fluff') {
+    for (const [dx, dy] of [[-14, 8], [-13, 10], [-13, 12], [14, 8], [13, 10], [13, 12]]) on(24 + dx, dy + bob, 'F', fur);
+  }
+
+  return rows;
 }
 
 // ---------------------------------------------------------------- 尾巴
 
 function tailShape(breed, frame) {
   const art = BREEDS[breed];
+  const T = turnShift(frame.turn);
   const g = blank();
   const sway = [-3.0, 0, 3.0, 0][((frame.tail % 4) + 4) % 4];
   const bez = (p0, p1, p2, t) => [
@@ -442,30 +675,64 @@ function tailShape(breed, frame) {
     (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1],
   ];
 
+  if (art.species === 'bird') {
+    // 三根长尾羽
+    for (const [dx, len, col] of [[1.6, 1.0, 'f'], [4.4, 1.18, 'F'], [7.0, 0.92, 'f']]) {
+      const p0 = [24 + T.body + dx, 43];
+      const p1 = [31 + T.body + dx, 50];
+      const p2 = [34 + dx + sway * 0.5, 40 + 12 * len];
+      for (let i = 0; i <= 20; i += 1) {
+        const t = i / 20;
+        const [x, y] = bez(p0, p1, p2, t);
+        ellipse(g, x, y, 2.2 - t * 0.9, 2.2 - t * 0.9, col);
+      }
+    }
+    return outlined(g);
+  }
+
+  if (art.species === 'sheep') {
+    for (let i = 0; i <= 10; i += 1) {
+      const t = i / 10;
+      const [x, y] = bez([29, 32], [35, 33], [34 + sway * 0.4, 29], t);
+      ellipse(g, x, y, 2.3, 2.3, 'f');
+    }
+    return outlined(g);
+  }
+
+  if (art.species === 'goat') {
+    for (let i = 0; i <= 9; i += 1) {
+      const t = i / 9;
+      const [x, y] = bez([29, 33], [34, 31], [33 + sway * 0.4, 28], t);
+      ellipse(g, x, y, 1.9, 1.9, 'f');
+    }
+    return outlined(g);
+  }
+
   if (art.species === 'cat') {
-    const p0 = [30, 47];
+    const p0 = [30 + T.body, 47];
     const p1 = [44, 47];
-    const p2 = [37, 29];
+    const p2 = [37 + T.t * 2, 29];
     const ring = art.pattern === 'tabby';
+    const stripe = art.pattern === 'tiger';
     for (let i = 0; i <= 30; i += 1) {
       const t = i / 30;
       const [x, y] = bez(p0, p1, p2, t);
-      const band = ring && Math.floor(t * 7) % 2 === 1;
-      ellipse(g, x + sway * t * 1.1, y, 2.1, 2.1, band ? 'F' : 'f');
+      const band = (ring && Math.floor(t * 7) % 2 === 1) || (stripe && Math.floor(t * 8) % 2 === 1);
+      ellipse(g, x + sway * t * 1.1, y, 2.1, 2.1, band ? (stripe ? 'e' : 'F') : 'f');
     }
     const [tx, ty] = bez(p0, p1, p2, 1);
-    ellipse(g, tx + sway * 1.1, ty, 2.4, 2.4, ring ? 'F' : art.pattern === 'gold' ? 'g' : 'w');
-  } else {
-    const p0 = [30, 48];
-    const p1 = [44, 49];
-    const p2 = [41, 34];
-    for (let i = 0; i <= 22; i += 1) {
-      const t = i / 22;
-      const [x, y] = bez(p0, p1, p2, t);
-      ellipse(g, x + sway * t, y, 2.3, 2.3, t > 0.86 ? 'F' : 'f');
-    }
+    ellipse(g, tx + sway * 1.1, ty, 2.4, 2.4, ring ? 'F' : art.pattern === 'gold' ? 'g' : 'f');
+    return outlined(g);
   }
 
+  const p0 = [30 + T.body, 48];
+  const p1 = [44, 49];
+  const p2 = [41, 34];
+  for (let i = 0; i <= 22; i += 1) {
+    const t = i / 22;
+    const [x, y] = bez(p0, p1, p2, t);
+    ellipse(g, x + sway * t, y, 2.3, 2.3, t > 0.86 ? 'F' : 'f');
+  }
   return outlined(g);
 }
 
@@ -473,6 +740,7 @@ function tailShape(breed, frame) {
 
 function buildSprite(breed, frame = {}) {
   const key = BREEDS[breed] ? breed : 'tabby';
+  const art = BREEDS[key];
   const f = {
     breath: frame.breath ? 1 : 0,
     tail: Number.isFinite(frame.tail) ? frame.tail : 0,
@@ -480,32 +748,50 @@ function buildSprite(breed, frame = {}) {
     happy: Boolean(frame.happy),
     tongue: Boolean(frame.tongue),
     ear: frame.ear ? 1 : 0,
+    turn: Number.isFinite(frame.turn) ? Math.max(0, Math.min(1, frame.turn)) : 0,
+    dir: frame.dir === -1 ? -1 : 1,
   };
+  const T = turnShift(f.turn);
 
-  const body = closeGaps(bodyShape(key, f));
-  let rows = outlined(body);
+  const g = blank();
+  drawTorso(g, key, f);
+  drawMane(g, key, f);
+  drawEars(g, key, f);
+  drawHorns(g, key, f);
+  drawHead(g, key, f);
+  drawMuzzle(g, key, f);
+
+  let rows = outlined(closeGaps(g));
   rows = rimShadow(rows);
-  rows = pattern(rows, key, f);
+  rows = applyPattern(rows, key, f);
 
   // 头顶高光
   const hb = f.breath ? -1 : 0;
-  for (const [x, y] of [[16, 13], [17, 12], [18, 12], [16, 14], [17, 13], [19, 13]]) {
-    if (rows[y + hb] && (rows[y + hb][x] === 'f' || rows[y + hb][x] === 'F')) rows[y + hb][x] = 'L';
+  const hx = 24 + T.t * 1.2;
+  for (const [dx, dy] of [[-8, 13], [-7, 12], [-6, 12], [-8, 14], [-7, 13], [-5, 13]]) {
+    const x = hx + dx;
+    const y = dy + hb;
+    if (rows[y] && (rows[y][x] === 'f' || rows[y][x] === 'F')) rows[y][x] = 'L';
   }
 
   drawFace(rows, key, f);
 
-  // 狗戴项圈
-  if (BREEDS[key].species === 'dog') {
+  if (art.species === 'dog') {
     for (let y = 33; y < 37; y += 1) {
-      for (let x = 16; x < 32; x += 1) {
+      for (let x = 15; x < 33; x += 1) {
         if (rows[y][x] !== '.' && rows[y][x] !== 'o') rows[y][x] = 'r';
       }
     }
     rect(rows, 22.6, 35.6, 2.8, 2.6, 'g');
   }
 
-  return { body: rows, tail: tailShape(key, f), eyes: f.eyes };
+  const tail = tailShape(key, f);
+  const eyes = eyeGrid(key, f);
+
+  if (f.dir === -1) {
+    return { body: flip(rows), tail: flip(tail), eyes: flip(eyes) };
+  }
+  return { body: rows, tail, eyes };
 }
 
 function spritePaths(rows) {
@@ -624,6 +910,71 @@ function spriteSpans(rows) {
         hearts: 4,
         bounce: 1.55,
       },
+      // 老虎：动作沉稳、有分量，尾巴甩得慢但幅度大
+      tiger: {
+        breathTicks: 8,
+        tailTicks: 2,
+        blink: [3200, 5200],
+        blinkHold: 120,
+        twitch: [4200, 7200],
+        glance: [3000, 5200],
+        glanceHold: 1100,
+        hopMs: 560,
+        hearts: 3,
+        bounce: 1.1,
+      },
+      // 狮子：威严、慢性子，动一下是一下
+      lion: {
+        breathTicks: 9,
+        tailTicks: 3,
+        blink: [3800, 6400],
+        blinkHold: 180,
+        twitch: [8000, 13000],
+        glance: [4200, 7000],
+        glanceHold: 1500,
+        hopMs: 620,
+        hearts: 3,
+        bounce: 0.85,
+      },
+      // 鹦鹉：又快又爱动，眨眼、张望、抖头都频繁
+      parrot: {
+        breathTicks: 4,
+        tailTicks: 1,
+        blink: [1500, 2600],
+        blinkHold: 50,
+        twitch: [1600, 2800],
+        glance: [1300, 2400],
+        glanceHold: 700,
+        hopMs: 380,
+        hearts: 3,
+        bounce: 1.3,
+      },
+      // 绵羊：胆小、软，动作慢半拍
+      sheep: {
+        breathTicks: 11,
+        tailTicks: 3,
+        blink: [3400, 5800],
+        blinkHold: 160,
+        twitch: [7000, 12000],
+        glance: [4000, 7000],
+        glanceHold: 1300,
+        hopMs: 700,
+        hearts: 3,
+        bounce: 0.6,
+      },
+      // 山羊：好奇又犟，动作利落
+      goat: {
+        breathTicks: 7,
+        tailTicks: 2,
+        blink: [2800, 4400],
+        blinkHold: 80,
+        twitch: [3000, 5200],
+        glance: [2200, 3600],
+        glanceHold: 1000,
+        hopMs: 520,
+        hearts: 3,
+        bounce: 1.15,
+      },
       // 哈士奇：戏多、突然发疯、爱嗷呜
       husky: {
         breathTicks: 6,
@@ -653,18 +1004,28 @@ function spriteSpans(rows) {
         white: '白猫',
         black: '黑猫',
         chinchilla: '金渐层',
+        tiger: '老虎',
+        lion: '狮子',
         golden: '金毛',
         samoyed: '萨摩耶',
         husky: '哈士奇',
+        parrot: '鹦鹉',
+        sheep: '绵羊',
+        goat: '山羊',
       },
       lines: {
         tabby: ['喵？', '有事说事', '别碰尾巴', '这地盘我的'],
         white: ['……', '嗯。', '轻一点', '知道了'],
         black: ['……', '我看见你了', '别开灯', '嗯'],
         chinchilla: ['困…', '再睡五分钟', '呼…', '摸摸～'],
+        tiger: ['吼——', '别碰尾巴', '本大王在此', '嗯？'],
+        lion: ['吼。', '让开点', '本狮在晒太阳', '摸头可以'],
         golden: ['一起玩！', '你回来啦！', '再扔一次球！', '好开心！'],
         samoyed: ['嘿嘿嘿', '开心！', '抱抱！', '今天也超棒'],
         husky: ['嗷呜——', '你听我解释', '拆家预备', '我要出去！'],
+        parrot: ['你好！', '学你说话', '啾啾！', '要瓜子吗'],
+        sheep: ['咩…', '我有点怕', '毛软吧？', '别吓我'],
+        goat: ['咩！', '顶你一下？', '这个能吃吗', '我偏不走'],
       },
     };
     const EN = {
@@ -677,18 +1038,28 @@ function spriteSpans(rows) {
         white: 'White cat',
         black: 'Black cat',
         chinchilla: 'Chinchilla',
+        tiger: 'Tiger',
+        lion: 'Lion',
         golden: 'Golden',
         samoyed: 'Samoyed',
         husky: 'Husky',
+        parrot: 'Parrot',
+        sheep: 'Sheep',
+        goat: 'Goat',
       },
       lines: {
         tabby: ['Mrrp?', 'What do you want', 'Not the tail', 'This is my turf'],
         white: ['…', 'Mm.', 'Gently', 'Noted.'],
         black: ['…', 'I see you', 'Leave the light off', 'Mm.'],
         chinchilla: ['Sleepy…', 'Five more minutes', 'Mrr…', 'Mm, pets'],
+        tiger: ['Rawr—', 'Not the tail', 'The king is here', 'Hm?'],
+        lion: ['Roar.', 'Move a bit', 'Sunbathing here', 'Head pats ok'],
         golden: ['Let us play!', 'You are back!', 'Throw it again!', 'So happy!'],
         samoyed: ['Hehehe', 'Yay!', 'Hug me!', 'Best day!'],
         husky: ['Awooo—', 'Let me explain', 'Chaos incoming', 'Let me out!'],
+        parrot: ['Hello!', 'I copy you', 'Tweet tweet!', 'Got seeds?'],
+        sheep: ['Baa…', 'I get scared', 'Soft, right?', 'Do not scare me'],
+        goat: ['Meh!', 'Headbutt?', 'Is this edible', 'I will not move'],
       },
     };
 
@@ -916,7 +1287,7 @@ function spriteSpans(rows) {
       const palette = PALETTES[breed] || PALETTES.tabby;
       const sprite = React.useMemo(
         () => buildSprite(breed, frame),
-        [breed, frame.breath, frame.tail, frame.eyes, frame.happy, frame.tongue, frame.ear],
+        [breed, frame.breath, frame.tail, frame.eyes, frame.happy, frame.tongue, frame.ear, frame.turn, frame.dir],
       );
       const body = React.useMemo(() => spritePaths(sprite.body), [sprite]);
       const tail = React.useMemo(() => spritePaths(sprite.tail), [sprite]);
@@ -983,6 +1354,10 @@ function spriteSpans(rows) {
           const [dragging, setDragging] = React.useState(false);
           const [pointerLook, setPointerLook] = React.useState({ x: 0, y: 0 });
           const [glance, setGlance] = React.useState(null);
+          // 转身：0 正面 → 0.5 侧四十五度 → 1 侧面，中间每一档都真的画出来
+          const [pose, setPose] = React.useState({ turn: 0, dir: 1 });
+          const poseRef = React.useRef({ turn: 0, dir: 1 });
+          const targetRef = React.useRef({ turn: 0, dir: 1 });
           const [pos, setPos] = React.useState(() => {
             const saved = initial.pos;
             if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
@@ -1098,12 +1473,12 @@ function spriteSpans(rows) {
               }, ms);
               timers.push(id);
             };
-            const dirs = [{ x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: 1, y: 1 }, { x: 0, y: 0 }];
             const loop = () => {
               at(() => {
-                setGlance(dirs[Math.floor(Math.random() * dirs.length)]);
+                // 侧过身去看一眼，再转回来
+                targetRef.current = { turn: 0.5, dir: Math.random() < 0.5 ? -1 : 1 };
                 at(() => {
-                  setGlance(null);
+                  targetRef.current = { turn: 0, dir: poseRef.current.dir };
                   loop();
                 }, traits.glanceHold || 1000);
               }, rand(traits.glance));
@@ -1177,6 +1552,30 @@ function spriteSpans(rows) {
             };
           }, [breed]);
 
+          // 转身：每 90ms 逼近目标一档，保持一档一档地转，不会瞬间跳过去
+          React.useEffect(() => {
+            const id = window.setInterval(() => {
+              setPose((prev) => {
+                const target = targetRef.current;
+                // 朝向要变时，先转回正面再翻面，避免「啪」地镜像
+                if (prev.dir !== target.dir && prev.turn > 0) {
+                  const next = { turn: Math.max(0, prev.turn - 0.5), dir: prev.dir };
+                  poseRef.current = next;
+                  return next;
+                }
+                const dir = prev.dir !== target.dir ? target.dir : prev.dir;
+                let turn = prev.turn;
+                if (turn < target.turn) turn = Math.min(target.turn, turn + 0.5);
+                else if (turn > target.turn) turn = Math.max(target.turn, turn - 0.5);
+                if (turn === prev.turn && dir === prev.dir) return prev;
+                const next = { turn, dir };
+                poseRef.current = next;
+                return next;
+              });
+            }, 90);
+            return () => window.clearInterval(id);
+          }, []);
+
           // 眼睛跟着鼠标转（附近才生效，免得整页乱瞟）
           React.useEffect(() => {
             const onMove = (event) => {
@@ -1194,6 +1593,12 @@ function spriteSpans(rows) {
                 y: Math.max(-1, Math.min(1, Math.round(dy / 42))),
               };
               setPointerLook((prev) => (prev.x === next.x && prev.y === next.y ? prev : next));
+              // 离得够远就侧过身看着指针；近了就转回正面
+              const far = Math.abs(dx);
+              targetRef.current = {
+                turn: far > 150 ? 1 : far > 56 ? 0.5 : 0,
+                dir: dx < 0 ? -1 : 1,
+              };
             };
             window.addEventListener('pointermove', onMove, { passive: true });
             return () => window.removeEventListener('pointermove', onMove);
@@ -1231,6 +1636,7 @@ function spriteSpans(rows) {
           };
 
           const cheer = () => {
+            targetRef.current = { turn: 0, dir: poseRef.current.dir };
             const lines = t('lines.' + breed);
             const pool = Array.isArray(lines) && lines.length ? lines : [''];
             patsRef.current += 1;
@@ -1290,6 +1696,10 @@ function spriteSpans(rows) {
               setPicking(false);
             }
             event.preventDefault();
+            const vx = event.clientX - (drag.lastX === undefined ? event.clientX : drag.lastX);
+            drag.lastX = event.clientX;
+            if (vx > 3) targetRef.current = { turn: 1, dir: 1 };
+            else if (vx < -3) targetRef.current = { turn: 1, dir: -1 };
             const next = clamp(event.clientX - drag.offsetX, event.clientY - drag.offsetY);
             posRef.current = next;
             setPos(next);
@@ -1356,8 +1766,11 @@ function spriteSpans(rows) {
             happy: happy || zooming,
             tongue: Boolean(traits.tongue) && !dozing,
             ear: twitch && !dragging,
+            turn: pose.turn,
+            dir: pose.dir,
           };
-          const look = dozing ? { x: 0, y: 0 } : glance || pointerLook;
+          // 侧过身以后眼睛已经画在朝向上，就不用再额外偏移了
+          const look = dozing || pose.turn > 0 ? { x: 0, y: 0 } : glance || pointerLook;
           const place = pos || initialPos;
           const below = place.top < 240;
           const toRight = place.left + size.w / 2 > (window.innerWidth || 1024) / 2;

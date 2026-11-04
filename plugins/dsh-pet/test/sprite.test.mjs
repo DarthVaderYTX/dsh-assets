@@ -39,22 +39,45 @@ const cells = (rows) => {
   return out;
 };
 
-const frameOf = (patch = {}) => ({ breath: 0, tail: 0, eyes: 'open', happy: false, tongue: false, ear: 0, ...patch });
+const frameOf = (patch = {}) => ({
+  breath: 0, tail: 0, eyes: 'open', happy: false, tongue: false, ear: 0, turn: 0, dir: 1, ...patch,
+});
 
-test('七个品种都有形体和配色', () => {
-  assert.deepEqual(BREED_IDS.sort(), ['black', 'chinchilla', 'golden', 'husky', 'samoyed', 'tabby', 'white']);
+const components = (rows) => {
+  const filled = new Set(cells(rows).map(({ x, y }) => x + ',' + y));
+  const seen = new Set();
+  let count = 0;
+  for (const key of filled) {
+    if (seen.has(key)) continue;
+    count += 1;
+    const stack = [key];
+    while (stack.length) {
+      const k = stack.pop();
+      if (seen.has(k) || !filled.has(k)) continue;
+      seen.add(k);
+      const [x, y] = k.split(',').map(Number);
+      stack.push(`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`);
+    }
+  }
+  return count;
+};
+
+test('十二个品种都有形体和配色', () => {
+  assert.deepEqual(BREED_IDS.sort(), ['black', 'chinchilla', 'goat', 'golden', 'husky', 'lion',
+    'parrot', 'samoyed', 'sheep', 'tabby', 'tiger', 'white']);
   assert.equal(W, 48, '画布宽度变了就要同步检查所有几何常量');
   assert.equal(H, 54, '画布高度变了就要同步检查所有几何常量');
   for (const breed of BREED_IDS) {
     const palette = PALETTES[breed];
-    for (const ch of ['o', 'f', 'F', 'L', 'w', 'p', 'i', 's', 'e', 't', 'r', 'g']) {
+    for (const ch of ['o', 'f', 'F', 'L', 'w', 'p', 'i', 's', 'e', 't', 'r', 'g', 'n']) {
       assert.match(palette[ch], /^#[0-9a-f]{6}$/, `${breed} 缺少色板 ${ch}`);
     }
   }
 });
 
-test('每个品种的外轮廓左右对称', () => {
+test('正面的外轮廓左右对称（鹦鹉按设计是侧头，单独排除）', () => {
   for (const breed of BREED_IDS) {
+    if (BREEDS[breed].asymmetric) continue;
     for (const eyes of EYES) {
       for (const breath of [0, 1]) {
         for (const ear of [0, 1]) {
@@ -131,7 +154,7 @@ test('眼睛成对落在脸上，四种状态互不相同', () => {
   assert.equal(grids.size, 4, '四种眼睛状态应该互不相同');
 });
 
-test('七个品种长得都不一样', () => {
+test('十二个品种长得都不一样', () => {
   const shapes = new Set();
   for (const breed of BREED_IDS) {
     const { body } = buildSprite(breed, frameOf());
@@ -158,12 +181,60 @@ test('品种特征到位：虎斑有条纹、哈士奇有面罩、狗都有项�
   assert.ok(tabby.split('F').length > white.split('F').length, '狸花应该比白猫多出虎斑');
 });
 
+test('三档转身都画得出来，而且互不相同', () => {
+  for (const breed of BREED_IDS) {
+    const sig = (turn) => buildSprite(breed, frameOf({ turn })).body.map((r) => r.join('')).join('|');
+    const front = sig(0);
+    const half = sig(0.5);
+    const side = sig(1);
+    assert.notEqual(front, half, `${breed} 侧转一半没有变化`);
+    assert.notEqual(half, side, `${breed} 完全侧面和侧转一半一样`);
+    assert.notEqual(front, side, `${breed} 侧面没有变化`);
+    // 转身过程必须是渐进的：正面和侧面的像素差异应大于相邻两档
+    for (const turn of [0, 0.5, 1]) {
+      const rows = buildSprite(breed, frameOf({ turn })).body;
+      assert.equal(components(rows), 1, `${breed} 在 turn=${turn} 时身体裂开了`);
+    }
+  }
+});
+
+test('朝左就是朝右的严格镜像', () => {
+  for (const breed of BREED_IDS) {
+    for (const turn of [0, 0.5, 1]) {
+      const right = buildSprite(breed, frameOf({ turn, dir: 1 }));
+      const left = buildSprite(breed, frameOf({ turn, dir: -1 }));
+      const flipRows = (rows) => rows.map((row) => row.slice().reverse());
+      assert.deepEqual(left.body, flipRows(right.body), `${breed}/${turn} 朝左不是镜像`);
+      assert.deepEqual(left.tail, flipRows(right.tail), `${breed}/${turn} 尾巴朝左不是镜像`);
+      assert.deepEqual(left.eyes, flipRows(right.eyes), `${breed}/${turn} 眼睛朝左不是镜像`);
+    }
+  }
+});
+
+test('侧面只留一只眼睛，正面两只都在', () => {
+  for (const breed of BREED_IDS) {
+    const front = eyeGrid(breed, frameOf({ turn: 0 }));
+    const side = eyeGrid(breed, frameOf({ turn: 1 }));
+    const frontCells = cells(front);
+    const sideCells = cells(side);
+    assert.ok(frontCells.length > 0 && sideCells.length > 0);
+    // 正面时眼睛围绕中心对称，侧面时只剩朝向那一侧
+    const mid = W / 2;
+    assert.ok(frontCells.some(({ x }) => x < mid), `${breed} 正面缺了左边的眼睛`);
+    assert.ok(frontCells.some(({ x }) => x > mid), `${breed} 正面缺了右边的眼睛`);
+    assert.ok(sideCells.every(({ x }) => x > mid), `${breed} 侧面不该还有左边那只眼睛`);
+    assert.ok(sideCells.length < frontCells.length, `${breed} 侧面的眼睛没有减少`);
+  }
+});
+
 test('动画帧确实在变', () => {
   for (const breed of BREED_IDS) {
     const sig = (f, part = 'body') => buildSprite(breed, f)[part].map((r) => r.join('')).join('|');
     assert.notEqual(sig(frameOf()), sig(frameOf({ breath: 1 })), `${breed} 呼吸帧没有变化`);
     assert.notEqual(sig(frameOf({ tail: 0 }), 'tail'), sig(frameOf({ tail: 2 }), 'tail'), `${breed} 尾巴帧没有变化`);
-    assert.notEqual(sig(frameOf({ ear: 0 })), sig(frameOf({ ear: 1 })), `${breed} 抖耳帧没有变化`);
+    if (BREEDS[breed].ear !== 'none') {
+      assert.notEqual(sig(frameOf({ ear: 0 })), sig(frameOf({ ear: 1 })), `${breed} 抖耳帧没有变化`);
+    }
     assert.notEqual(sig(frameOf({ happy: true })), sig(frameOf()), `${breed} 开心表情没有变化`);
   }
 });
