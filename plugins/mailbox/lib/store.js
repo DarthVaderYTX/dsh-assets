@@ -56,6 +56,19 @@ export function writeState(state) {
   return state;
 }
 
+/** 登录态摘要：面板据此显示「已保持登录 N 天」，也不暴露任何凭据。 */
+export function sessionInfo(account) {
+  const session = account.session || {};
+  const mode = session.mode || (account.kind === 'feishu' ? 'feishu' : account.auth === 'xoauth2' ? 'xoauth2' : 'password');
+  return {
+    mode,
+    // 凭据都存在本机且不会自然过期：密码/授权码长期有效，OAuth 靠 refresh_token 自动续期。
+    startedAt: Number(session.startedAt || account.createdAt || 0),
+    rememberDays: Number(session.rememberDays || 30),
+    renewable: mode === 'xoauth2' || mode === 'feishu',
+  };
+}
+
 /** 对外暴露的账号视图：不含密码、不含 refresh_token。 */
 export function publicAccount(account) {
   return {
@@ -68,6 +81,7 @@ export function publicAccount(account) {
     preset: account.preset || 'custom',
     imap: account.imap,
     smtp: account.smtp,
+    session: sessionInfo(account),
     createdAt: account.createdAt,
   };
 }

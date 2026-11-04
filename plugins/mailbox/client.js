@@ -84,6 +84,9 @@ window.__ModuleLoader__.load({
       qrFailed: '扫码失败',
       regenerate: '重新生成',
       feishuBadge: '飞书',
+      sessionDays: '已保持登录 {days} 天',
+      sessionKept: '凭据只存本机，默认保持登录 30 天，不会反复要密码。',
+      authNeeded: '登录态失效，需要重新登录',
       larkMissing: '本机没有安装 lark-cli，无法扫码登录飞书邮箱',
       qrExpired: '二维码已过期，请重新生成',
       resizeHint: '拖动调整宽度，双击恢复默认',
@@ -162,6 +165,9 @@ window.__ModuleLoader__.load({
       qrFailed: 'Scan failed',
       regenerate: 'Regenerate',
       feishuBadge: 'Feishu',
+      sessionDays: 'Signed in for {days} days',
+      sessionKept: 'Credentials stay on this machine; the session is kept for 30 days by default.',
+      authNeeded: 'Sign-in expired, please sign in again',
       larkMissing: 'lark-cli is not installed, QR sign-in is unavailable',
       qrExpired: 'The code expired, generate a new one',
       resizeHint: 'Drag to resize, double-click to reset',
@@ -216,6 +222,9 @@ window.__ModuleLoader__.load({
 .mbx-account-text { min-width: 0; flex: 1; }
 .mbx-account-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px;
   display: flex; align-items: center; gap: 6px; }
+".mbx-warn { flex: none; width: 14px; height: 14px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 10px; font-weight: 700; cursor: help;
+  color: #fff; background: var(--dsw-alias-state-error-primary); }
 .mbx-tag { flex: none; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 15px;
   color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .mbx-account-mail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
@@ -899,8 +908,21 @@ function initialOf(text) {
                           ? h('span', { className: 'mbx-tag' }, t('feishuBadge'))
                           : null,
                       ),
-                      h('div', { className: 'mbx-account-mail' }, account.email),
+                      h(
+                        'div',
+                        { className: 'mbx-account-mail', title: t('sessionKept') },
+                        account.email,
+                        account.session && account.session.startedAt
+                          ? ' · ' +
+                            t('sessionDays', {
+                              days: String(Math.max(0, Math.floor((Date.now() - account.session.startedAt) / 86400000))),
+                            })
+                          : '',
+                      ),
                     ),
+                    account.status && account.status.error
+                      ? h('span', { className: 'mbx-warn', title: account.status.error }, '!')
+                      : null,
                     h(
                       'button',
                       {

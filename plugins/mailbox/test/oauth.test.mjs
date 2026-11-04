@@ -209,6 +209,9 @@ test('HTTP 路由：Outlook 扫码登录后落库，且不泄露 refresh_token',
     assert.equal(account.email, 'demo@example.com');
     assert.equal(account.auth, 'xoauth2');
     assert.equal(account.refreshToken, undefined);
+    assert.equal(account.session.mode, 'xoauth2');
+    assert.equal(account.session.rememberDays, 30);
+    assert.equal(account.session.renewable, true);
 
     const stored = JSON.parse(fs.readFileSync(path.join(tempHome, 'mailbox', 'accounts.json'), 'utf8'));
     assert.equal(stored.accounts.length, 1);

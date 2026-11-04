@@ -204,6 +204,8 @@ test('HTTP 路由：扫码登录生成二维码、轮询成功后落库', async 
     assert.equal(accounts.json.accounts[0].kind, 'feishu');
     assert.equal(accounts.json.accounts[0].email, 'demo@example.com');
     assert.equal(accounts.json.accounts[0].password, undefined);
+    assert.equal(accounts.json.accounts[0].session.mode, 'feishu');
+    assert.equal(accounts.json.accounts[0].session.renewable, true);
   } finally {
     for (const cleanup of cleanups) cleanup();
   }

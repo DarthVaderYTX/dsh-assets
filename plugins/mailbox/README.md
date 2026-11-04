@@ -32,6 +32,7 @@ Outlook 走标准的 OAuth 设备码：扫固定二维码 → 在 `login.microso
 ## 功能
 
 - **多账号**：账号按生成的 id 区分，同一条邮箱地址可以加多份，用「标签」区分（工作 / 个人 / 测试……）。
+- **默认保持登录**：凭据只存本机，账号一旦加上就不会反复要密码（默认按 30 天算）。密码 / 授权码本身不过期；OAuth 账号靠 `refresh_token` 自动续期，`refresh_token` 轮换后立刻落盘。面板里每个账号显示「已保持登录 N 天」，登录态失效时账号行会亮红色感叹号，不会悄悄消失。
 - **三栏宽度可调**：账号/文件夹、邮件列表、读信区之间各有一根分隔条，拖动即可改宽度；双击分隔条复位，聚焦后按 ←/→ 微调（Shift 加速）。宽度存在 `localStorage`，面板变窄时自动收回，读信区保底 280px。
 - **扫码登录**：添加账号弹窗里先选服务商，支持扫码的会多出「扫码登录」页签。
   - **飞书**：二维码由 `lark-cli auth qrcode` 动态生成，`auth login --device-code` 在后台等待确认；飞书账号不需要也不保存密码。
@@ -105,6 +106,7 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 - OAuth 账号的 `refresh_token` 和密码一样明文存在 `$DSH_HOME/mailbox/accounts.json`（0600），对外接口只暴露 `auth` 字段，不会把 token 回传前端。
 - Microsoft 侧用的是公开的第一方客户端 ID（`d3590ed6-…`，Office 的公共客户端），因此不需要你注册应用；如果贵司租户通过条件访问策略禁用了设备码流，会在扫码阶段被拒，只能用应用专用密码。
 - Gmail 没有接入扫码：Google 的设备码授权只对「电视与受限输入设备」开放，邮件类受限 scope 拿不到，硬做也只能要你自建 OAuth 客户端。
+- **163 / 126 / yeah.net 没有接入扫码，是刻意不做**：它们的扫码登录（`scanlogin.mail.163.com/proxy/getqrcodeid` → `/proxy/getUrlQrcode` → `/proxy/ngxqrcodeauthstatus` → `/proxy/qrcodeauth` → `reg.163.com/services/ticketlogin`）确实存在，也能跑通到「拿到网页会话 Cookie」这一步，但那份 Cookie 只对网页版有效；163 的 IMAP/SMTP 只认「客户端授权码」，两条通道不互通。要用网页版就得复刻 `mail.163.com/js6` 的私有接口（sid + 风控指纹 + 多步 compose），拿不到 IMAP，改版即挂，所以这条线没做。QQ 邮箱同理。
 - **163 / 126 需要先发 ID 命令再 LOGIN**，客户端已经按这个顺序做；直接 LOGIN 会被回 `Unsafe Login`。
 - 实测（2026-11-04，本机网络）：`imap.qq.com` / `imap.163.com` / `imap.gmail.com` 的 TLS 握手、CAPABILITY、LOGIN 拒绝路径均正常；Gmail 会回 `NO [AUTHENTICATIONFAILED]`（强制 OAuth，需要应用专用密码或改走 OAuth）；QQ 在认证失败时直接断开连接，客户端会把这种情形翻译成「服务端拒绝了这次登录」。`smtp.qq.com:465` 的 AUTH 拒绝路径同样正常。
 - 附件走 HTTP 传输（单封上限 18MB），超大邮件直接拒绝下载并提示。
