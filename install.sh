@@ -262,11 +262,32 @@ uninstall_skill() {
 
 # ---------------------------------------------------------------- plugin
 
+# desktop profile 归 DeepSeek Harness 应用独占：`dsh plugin --profile desktop ...`
+# 会被 CLI 直接拒绝（error: profile "desktop" is managed exclusively by the
+# Electron application），只有一个内部开关能让 desktop-host 自己写。所以这里
+# 提前拦下并给出可执行的替代路径，而不是把 CLI 的报错原样抛给用户。
+refuse_desktop_profile() {
+  case "$(printf '%s' "$PROFILE" | tr '[:upper:]' '[:lower:]')" in
+    desktop)
+      die "profile desktop 由 DeepSeek Harness 应用独占，命令行装/卸插件会被拒。
+      · 装：应用内「插件」页从本地目录安装，指向 $REPO_ROOT/plugins/$1
+      · 或手工改 $DSH_HOME/profiles/desktop/package.json（dependencies + dsh.profile.bundles），
+        再用应用自带 pnpm 在 profile 目录跑 install
+      · 详见本仓库 README 的「desktop profile」一节"
+      ;;
+  esac
+}
+
+is_desktop_profile() {
+  [ "$(printf '%s' "$PROFILE" | tr '[:upper:]' '[:lower:]')" = "desktop" ]
+}
+
 install_plugin() {
   local name="$1" src dsh manifest
   src="$REPO_ROOT/plugins/$name"
   [ -f "$src/package.json" ] || die "插件不存在: $src"
   [ -f "$src/cordis.patch.yml" ] || die "$name 缺少 cordis.patch.yml，不是合法的 dsh bundle"
+  refuse_desktop_profile "$name"
   dsh="$(require_dsh)"
 
   # 已装且指向本仓库时，pnpm 会原地更新链接，无需 force。
@@ -286,6 +307,7 @@ install_plugin() {
 
 uninstall_plugin() {
   local name="$1" dsh manifest
+  refuse_desktop_profile "$name"
   dsh="$(require_dsh)"
   if dry "$dsh plugin --profile $PROFILE remove $name"; then return 0; fi
   "$dsh" plugin --profile "$PROFILE" remove "$name"
@@ -325,6 +347,9 @@ cmd_list() {
   done
 
   printf '\n%s\n' "plugins  (profile: $PROFILE)"
+  if is_desktop_profile; then
+    dim "  该 profile 归应用独占：只读检查，装/卸请走应用内插件页"
+  fi
   any=0
   for name in $(repo_plugins); do
     any=1
@@ -356,6 +381,9 @@ cmd_doctor() {
     printf 'profile   %s（已初始化）\n' "$PROFILE"
   else
     printf 'profile   %s（首次安装插件时会初始化）\n' "$PROFILE"
+  fi
+  if is_desktop_profile; then
+    printf '           %s\n' "desktop 归应用独占：本脚本只读，插件请走应用内插件页"
   fi
   if [ -d "$DSH_HOME/skills" ]; then
     printf 'skills    %s\n' "$DSH_HOME/skills"

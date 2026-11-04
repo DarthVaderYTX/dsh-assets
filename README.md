@@ -64,11 +64,11 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | --- | --- |
 | `list` | 列出 skill / 插件及安装状态（已链接 / 存在同名目录 / 链接指向别处 / 悬空链接 / 未安装），并标出仓库里已删除但本机仍有残留的项 |
 | `skill <name...>` | 软链到 `$DSH_HOME/skills/<name>`，已存在则幂等跳过 |
-| `plugin <name...>` | 调 `dsh plugin --profile <p> add <仓库内绝对路径>`，并回读 profile 核对是否进了 `dsh.profile.bundles` |
+| `plugin <name...>` | 调 `dsh plugin --profile <p> add <仓库内绝对路径>`，并回读 profile 核对是否进了 `dsh.profile.bundles`；`--profile desktop` 会被提前拦下 |
 | `all` | 上面两个全跑一遍 |
 | `uninstall skill <name...>` | 只删本仓库创建的链接；实体目录仅在与仓库内容完全一致时删除 |
 | `uninstall skill --all` | 清理全部托管项：指向本仓库的链接（含仓库已改名的悬空链接）+ 内容一致的副本 |
-| `uninstall plugin <name...>` | 走 `dsh plugin --profile <p> remove`，之后回读 manifest 确认确实移除 |
+| `uninstall plugin <name...>` | 走 `dsh plugin --profile <p> remove`，之后回读 manifest 确认确实移除；`--profile desktop` 会被提前拦下 |
 | `uninstall plugin --all` | 卸载 profile 里所有来自本仓库的插件 |
 | `uninstall all` | 上面两项都做 |
 | `doctor` | 打印仓库路径、DSH_HOME、dsh 版本、profile 与 skills 目录状态 |
@@ -87,6 +87,14 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 
 - **不读 `$DSH_PROFILE`。** dsh 会把该变量注入子进程（本机实测值是保留的 `desktop`），照抄会往保留 profile 里装东西，所以默认固定 `web`，要改就用 `--profile`。
 - **skill 只扫一层。** dsh 找的是 `$DSH_HOME/skills/<name>/SKILL.md`，所以软链必须指向目录本身；装完不用重启，新会话即可用（插件需要重启 dsh）。
+
+### desktop profile
+
+`desktop` 这个 profile 归 DeepSeek Harness 应用独占：`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`error: profile "desktop" is managed exclusively by the Electron application`）。所以：
+
+- `./install.sh list --profile desktop`、`doctor --profile desktop` 可用，只读，用来核对装没装、装的是不是本仓库那份。
+- `./install.sh plugin ... --profile desktop`、`uninstall plugin ... --profile desktop` 会**在调用 CLI 之前**直接报错并给出替代路径，不会把 CLI 的原始报错抛出来。
+- 真要改桌面端插件，两条路：应用内「插件」页从本地目录安装（指向 `plugins/<name>`）；或手工改 `~/.dsh/profiles/desktop/package.json` 的 `dependencies` 与 `dsh.profile.bundles`，再用应用自带 pnpm 在 profile 目录跑 `install`。
 
 删除侧的安全边界：不碰用户自己的目录——只有"指向本仓库的链接"和"与仓库内容逐字节一致的副本"会被删；被改过的副本、指向别处的链接、你自己的同名目录，一律只提示不动手。`list` 会把"仓库里已经删掉但本机还装着"的残留标出来。
 
@@ -126,6 +134,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | skill 增删模板、脚本、`types/` 子目录 | 该 skill 的 `types/INDEX.md` 及对应 `types/<type>/README.md` |
 | 改 skill 的适用范围、选型或执行流程 | `SKILL.md` 正文，以及本 README「当前内容」中该资产的说明列 |
 | 改插件对外行为、依赖或挂载方式 | 该插件目录下的 README，以及本 README 的说明列 |
+| **改任何插件的代码**（改文件名、改包名、加删文件、换 profile） | 同批复查三处：该插件 README、本 README、`install.sh`。重点核对命令与参数、profile 归属、目录/包名约定、`package.json` 的 `files` 清单、卸载与残留清理逻辑 |
 | 新增 / 改动安装或维护脚本 | 本 README 的「安装与卸载」小节 |
 | 源码基线（基线版本/提交）变化 | 本 README 的基线记录，以及受影响插件的兼容性核对 |
 | 改仓库约定（存放 / 提交 / 推送） | 本 README 对应小节 |
