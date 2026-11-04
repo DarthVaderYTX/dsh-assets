@@ -218,12 +218,16 @@ test('侧面只留一只眼睛，正面两只都在', () => {
     const frontCells = cells(front);
     const sideCells = cells(side);
     assert.ok(frontCells.length > 0 && sideCells.length > 0);
-    // 正面时眼睛围绕中心对称，侧面时只剩朝向那一侧
-    const mid = W / 2;
-    assert.ok(frontCells.some(({ x }) => x < mid), `${breed} 正面缺了左边的眼睛`);
-    assert.ok(frontCells.some(({ x }) => x > mid), `${breed} 正面缺了右边的眼睛`);
-    assert.ok(sideCells.every(({ x }) => x > mid), `${breed} 侧面不该还有左边那只眼睛`);
+    // 正面是两只眼睛（两个连通块），侧面只剩一只
+    assert.equal(components(front), 2, `${breed} 正面应该是两只眼睛`);
+    assert.equal(components(side), 1, `${breed} 侧面应该只剩一只眼睛`);
     assert.ok(sideCells.length < frontCells.length, `${breed} 侧面的眼睛没有减少`);
+    // 侧面那只眼睛要盖在脸上，不能悬空
+    const { body, tail } = buildSprite(breed, frameOf({ turn: 1 }));
+    for (const { x, y } of sideCells) {
+      const under = body[y][x] !== '.' ? body[y][x] : tail[y][x];
+      assert.ok(under !== '.' && under !== 'o', `${breed} 侧面的眼睛悬空在 (${x},${y})`);
+    }
   }
 });
 

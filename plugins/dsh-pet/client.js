@@ -253,10 +253,10 @@ function turnShift(turn, factor = 1) {
 const LAYOUT = {
   cat: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
   dog: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
-  bird: { eyeY: 17.2, near: 26.4, far: 21.6, scale: 0.88 },
+  bird: { eyeY: 17.2, near: 28.2, far: 19.0, scale: 0.78 },
   // 羊和山羊脑袋窄，眼睛得铺开一点、转身时少挪一点，才不会挤成斗鸡眼
-  sheep: { eyeY: 21.0, near: 28.0, far: 20.0, scale: 0.76, eyeNear: 1.4 },
-  goat: { eyeY: 20.0, near: 28.2, far: 19.8, scale: 0.78, eyeNear: 1.4 },
+  sheep: { eyeY: 21.0, near: 28.0, far: 20.0, scale: 0.76, eyeNear: -0.8 },
+  goat: { eyeY: 20.0, near: 28.2, far: 19.8, scale: 0.78, eyeNear: -0.8 },
 };
 
 const layoutOf = (breed) => LAYOUT[BREEDS[breed].species] || LAYOUT.cat;
@@ -513,9 +513,10 @@ function eyeGrid(breed, frame) {
   const L = layoutOf(breed);
   const bob = frame.breath ? -1 : 0;
   const kind = frame.eyes || 'open';
-  const y = L.eyeY + bob;
-  // 转过身后脑袋收窄，近侧眼睛也略微缩一点，免得顶出轮廓
-  drawEyeShape(g, L.near + T.t * (L.eyeNear ?? 1.8), y, kind, L.scale * (1 - 0.12 * T.t));
+  // 侧转时眼睛几乎留在原地、略微上抬：往前甩的是鼻子和嘴，
+  // 眼睛跟着鼻子一起跑才会看着像脸裂开了
+  const y = L.eyeY + bob - (L.liftY ?? 1.2) * T.t;
+  drawEyeShape(g, L.near + T.t * (L.eyeNear ?? -1.0), y, kind, L.scale * (1 - 0.12 * T.t));
   if (raw < 0.95) {
     if (raw === 0) {
       // 正面：把近侧那只眼睛整体镜像过去，左右严格对称
