@@ -81,6 +81,7 @@ window.__ModuleLoader__.load({
       feishuBadge: '飞书',
       larkMissing: '本机没有安装 lark-cli，无法扫码登录飞书邮箱',
       qrExpired: '二维码已过期，请重新生成',
+      resizeHint: '拖动调整宽度，双击恢复默认',
     };
 
     const EN = {
@@ -153,6 +154,7 @@ window.__ModuleLoader__.load({
       feishuBadge: 'Feishu',
       larkMissing: 'lark-cli is not installed, QR sign-in is unavailable',
       qrExpired: 'The code expired, generate a new one',
+      resizeHint: 'Drag to resize, double-click to reset',
     };
 
     /* ------------------------------------------------------------ 样式 */
@@ -179,9 +181,18 @@ window.__ModuleLoader__.load({
 .mbx-btn:hover { border-color: var(--dsw-alias-border-l2); }
 .mbx-btn.is-primary { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); color: #fff; }
 .mbx-btn:disabled { opacity: .5; cursor: default; }
-.mbx-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 170px 300px minmax(0, 1fr); }
-.mbx-col { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); }
+.mbx-body { flex: 1; min-height: 0; display: grid; overflow: hidden; }
+.mbx-col { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .mbx-col.is-last { border-right: 0; }
+.mbx-splitter { position: relative; min-width: 0; padding: 0; border: 0; background: transparent;
+  cursor: col-resize; touch-action: none; }
+.mbx-splitter::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; right: 2px;
+  background: var(--dsw-alias-border-l1); transition: background .12s ease; }
+.mbx-splitter:hover::after, .mbx-splitter:focus-visible::after, .mbx-splitter.is-active::after {
+  background: var(--dsw-alias-brand-primary); }
+.mbx-splitter:focus-visible { outline: none; }
+.mbx-root.is-resizing { cursor: col-resize; user-select: none; }
+.mbx-root.is-resizing .mbx-frame, .mbx-root.is-resizing .mbx-modal { pointer-events: none; }
 .mbx-col-title { padding: 8px 12px 4px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
   color: var(--dsw-alias-label-secondary); }
 .mbx-scroll { flex: 1; min-height: 0; overflow: auto; }
@@ -289,7 +300,29 @@ window.__ModuleLoader__.load({
       return (bytes / 1024 / 1024).toFixed(1) + ' MB';
     }
 
-    function initialOf(text) {
+    const COLUMNS_KEY = 'dsh-mailbox:columns';
+const DEFAULT_COLUMNS = { accounts: 170, list: 300 };
+const MIN_ACCOUNTS = 132;
+const MIN_LIST = 240;
+const MIN_READER = 280;
+const SPLITTER_W = 6;
+
+function readColumns() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(COLUMNS_KEY) || 'null');
+    if (parsed && Number.isFinite(parsed.accounts) && Number.isFinite(parsed.list)) {
+      return {
+        accounts: Math.max(MIN_ACCOUNTS, Math.round(parsed.accounts)),
+        list: Math.max(MIN_LIST, Math.round(parsed.list)),
+      };
+    }
+  } catch {
+    /* 坏数据回默认 */
+  }
+  return { ...DEFAULT_COLUMNS };
+}
+
+function initialOf(text) {
       const value = String(text || '?').trim();
       return value.slice(0, 1).toUpperCase();
     }
@@ -394,6 +427,84 @@ window.__ModuleLoader__.load({
       const [qr, setQr] = React.useState(null);
       const [pendingRemove, setPendingRemove] = React.useState(null);
       const [toast, setToast] = React.useState(null);
+      // 三栏宽度可拖：左（账号/文件夹）、中（列表）可调，右（读信）吃剩余空间。
+      const [cols, setCols] = React.useState(readColumns);
+      const [resizing, setResizing] = React.useState(false);
+      const bodyRef = React.useRef(null);
+
+      const clampCols = (current, which, next) => {
+        const total = bodyRef.current ? bodyRef.current.clientWidth : 900;
+        const other = which === 'accounts' ? current.list : current.accounts;
+        const min = which === 'accounts' ? MIN_ACCOUNTS : MIN_LIST;
+        const room = total - other - MIN_READER - 2 * SPLITTER_W;
+        const max = Math.max(min, room);
+        return { ...current, [which]: Math.round(Math.min(max, Math.max(min, next))) };
+      };
+
+      const startResize = (which) => (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const startX = event.clientX;
+        const startWidth = which === 'accounts' ? cols.accounts : cols.list;
+        setResizing(true);
+        const onMove = (moveEvent) => {
+          const next = startWidth + (moveEvent.clientX - startX);
+          setCols((current) => clampCols(current, which, next));
+        };
+        const onUp = () => {
+          setResizing(false);
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      };
+
+      const resizeByKey = (which) => (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const step = event.shiftKey ? 48 : 16;
+        const delta = event.key === 'ArrowLeft' ? -step : step;
+        setCols((current) => clampCols(current, which, (which === 'accounts' ? current.accounts : current.list) + delta));
+      };
+
+      const resetColumn = (which) => () =>
+        setCols((current) => ({ ...current, [which]: which === 'accounts' ? DEFAULT_COLUMNS.accounts : DEFAULT_COLUMNS.list }));
+
+      // 拖动时每帧都写 localStorage 太重，停手 200ms 再存。
+      React.useEffect(() => {
+        const timer = setTimeout(() => {
+          try {
+            window.localStorage.setItem(COLUMNS_KEY, JSON.stringify(cols));
+          } catch {
+            /* 隐私模式忽略 */
+          }
+        }, 200);
+        return () => clearTimeout(timer);
+      }, [cols]);
+
+      // 面板变窄时把保存的宽度收回可用范围，避免读信区被挤没。
+      React.useEffect(() => {
+        const element = bodyRef.current;
+        if (!element || typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver(() => {
+          const total = element.clientWidth;
+          if (!total) return;
+          setCols((current) => {
+            const accounts = Math.min(
+              current.accounts,
+              Math.max(MIN_ACCOUNTS, total - current.list - MIN_READER - 2 * SPLITTER_W),
+            );
+            const list = Math.min(
+              current.list,
+              Math.max(MIN_LIST, total - accounts - MIN_READER - 2 * SPLITTER_W),
+            );
+            return accounts === current.accounts && list === current.list ? current : { accounts, list };
+          });
+        });
+        observer.observe(element);
+        return () => observer.disconnect();
+      }, []);
 
       const accounts = state.accounts;
       const providers = state.providers;
@@ -703,9 +814,30 @@ window.__ModuleLoader__.load({
           : null,
       );
 
+      const splitter = (which) =>
+        h('div', {
+          key: 'splitter-' + which,
+          className: 'mbx-splitter' + (resizing ? ' is-active' : ''),
+          role: 'separator',
+          'aria-orientation': 'vertical',
+          'aria-label': t('resizeHint'),
+          title: t('resizeHint'),
+          tabIndex: 0,
+          onPointerDown: startResize(which),
+          onDoubleClick: resetColumn(which),
+          onKeyDown: resizeByKey(which),
+        });
+
       const body = h(
         'div',
-        { className: 'mbx-body' },
+        {
+          className: 'mbx-body',
+          ref: bodyRef,
+          style: {
+            gridTemplateColumns:
+              cols.accounts + 'px ' + SPLITTER_W + 'px ' + cols.list + 'px ' + SPLITTER_W + 'px minmax(0, 1fr)',
+          },
+        },
         // 左：账号 + 文件夹
         h(
           'div',
@@ -780,6 +912,7 @@ window.__ModuleLoader__.load({
               )
             : null,
         ),
+        splitter('accounts'),
         // 中：邮件列表
         h(
           'div',
@@ -819,6 +952,7 @@ window.__ModuleLoader__.load({
                     ),
           ),
         ),
+        splitter('list'),
         // 右：读信
         h(
           'div',
@@ -1261,7 +1395,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'mbx-root' },
+        { className: 'mbx-root' + (resizing ? ' is-resizing' : '') },
         h('style', null, CSS),
         head,
         body,
