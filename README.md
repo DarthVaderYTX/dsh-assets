@@ -105,6 +105,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `how-to-write-document` | skill | [skills/how-to-write-document](skills/how-to-write-document) | 六类文档写作规范与模板：paper / prd / one-pager / experiment-report / research-report / technical-design |
 | `dsh-perf-profiler` | plugin | [plugins/dsh-perf-profiler](plugins/dsh-perf-profiler) | 把 hook 监听器与工具执行体的耗时可归因到插件/hook 点/工具/单次调用；支持实时报告与离线 JSONL 分析 |
 | `work-clock` | plugin | [plugins/work-clock](plugins/work-clock) | 浮窗工作时钟：打卡工时（下班 = 打卡 + 9 小时）、天气、今日飞书日程，临近日程 10/5/1 分钟与午餐/晚餐/会议开始时提醒 |
+| `dsh-pet` | plugin | [plugins/dsh-pet](plugins/dsh-pet) | 悬浮像素宠物：按住拖到窗口任意位置，点一下会跳、冒爱心、说一句话；猫/狗两种手绘像素形象可切换，位置与形象会记住 |
 
 ## 存放约定
 
