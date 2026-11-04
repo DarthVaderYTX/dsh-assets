@@ -32,6 +32,7 @@ Outlook 走标准的 OAuth 设备码：扫固定二维码 → 在 `login.microso
 ## 功能
 
 - **多账号**：账号按生成的 id 区分，同一条邮箱地址可以加多份，用「标签」区分（工作 / 个人 / 测试……）。
+- **服务商小图标**：飞书、Outlook / Microsoft 365、Gmail、QQ、163、阿里云、自定义各有一个品牌色小图标，账号列表、顶部账号标签、添加账号的服务商下拉里都能一眼区分；图标全部内联在 `client.js`，不联网、不额外装包。
 - **默认保持登录**：凭据只存本机，账号一旦加上就不会反复要密码（默认按 30 天算）。密码 / 授权码本身不过期；OAuth 账号靠 `refresh_token` 自动续期，`refresh_token` 轮换后立刻落盘。面板里每个账号显示「已保持登录 N 天」，登录态失效时账号行会亮红色感叹号，不会悄悄消失。
 - **三栏宽度可调**：账号/文件夹、邮件列表、读信区之间各有一根分隔条，拖动即可改宽度；双击分隔条复位，聚焦后按 ←/→ 微调（Shift 加速）。宽度存在 `localStorage`，面板变窄时自动收回，读信区保底 280px。
 - **扫码登录**：添加账号弹窗里先选服务商，支持扫码的会多出「扫码登录」页签。
@@ -94,6 +95,10 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 ```
 
 账号凭据位置：`$DSH_HOME/mailbox/accounts.json`（`DSH_HOME` 默认 `~/.dsh`）。
+
+## 图标来源
+
+飞书用官方矢量标记；Outlook / Gmail / QQ / 阿里云取自 [Simple Icons](https://simpleicons.org)（CC0）的官方图形；163 只找得到官方 favicon，内联成 data URI 位图；自定义邮箱用中性信封。全部按品牌色渲染，内联在 `client.js` 里，不联网、不新增依赖。
 
 ## 凭据与已知限制
 

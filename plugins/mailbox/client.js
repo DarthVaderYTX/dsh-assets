@@ -216,9 +216,13 @@ window.__ModuleLoader__.load({
   border-left: 2px solid transparent; }
 .mbx-account:hover { background: var(--dsw-alias-bg-layer-2); }
 .mbx-account.is-active { border-left-color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
-.mbx-avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); color: var(--dsw-alias-brand-primary);
-  font-weight: 600; font-size: 11px; flex: none; }
+.mbx-avatar { width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  background: var(--dsw-alias-bg-layer-2); flex: none; }
+.mbx-picon { display: block; flex: none; object-fit: contain; }
+.mbx-select-row { display: flex; align-items: center; gap: 8px; }
+.mbx-select-icon { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; background: var(--dsw-alias-bg-layer-2); flex: none; }
+.mbx-select-row .mbx-select { flex: 1; }
 .mbx-account-text { min-width: 0; flex: 1; }
 .mbx-account-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px;
   display: flex; align-items: center; gap: 6px; }
@@ -343,7 +347,50 @@ function readColumns() {
   return { ...DEFAULT_COLUMNS };
 }
 
-function initialOf(text) {
+    /* ---------------------------------------------------- 服务商小图标 */
+
+    // 优先用各家的官方矢量标记；163 只找得到官方 favicon 位图，直接内联成 data URI。
+    const BRAND_ICONS = {
+      feishu: { color: '#3370FF', viewBox: '0 0 497 512', path: 'm177.803 358.2l40.97 44.93c-30.652-.461-61.413 4.551-87.328 9.754C144.08 389 158.49 367.568 177.803 358.2m73.11 46.451l-48.169-52.647c9.543-1.27 20.202-2.094 31.804-3.44c32.47 7.322 54.089 25.091 68.926 49.388c-16.053 3.403-33.189 6.697-52.561 6.7m-68.44-369c47.958 7.494 64.709 28.864 60.847 63.46c-83.711 44.084-133.924 156.5-145.55 209.22c-9.393 42.588-10.39 77.567-33.826 113.913c-35.587.89-42.159-2.869-59.564 10.44L0 454.147c15.159-13.417 19.46-7.006 47.047-10c-4.585 5.086-9.673 10.227-15.403 15.454c-19.705 23.88 21.544 72.554 46.276 43.326c15.75-11.84 28.03-38.095 41.197-65.365c24.443-1.805 55.521-3.509 86.461-4.82c2.813 9.248 7.42 17.82 15.284 25.163c3.007-8.622 9.108-17.444 17.081-26.388c23.532-.782 45.491-1.259 62.56-1.286c0 0 16.863-29.977 82.44-29.977c65.575 0 66.95 20.73 70.447 6.745c5.246-20.985 45.087-21.898 42.718-28.48c-6.745-18.735-31.271-5.257-50.962 7.495h-35.224c-5.808-24.544-48.807 2.717-78.23 6.381c-15.713-17.451-30.117-35.824-53.734-52.102c49.401-14.246 166.023-104.59 114.727-224.827c-15.423-36.151-36.467-86.41-57.707-101.175c-49.404-34.341-101.92 3.998-101.92 3.998h-33.055c-8.892 1.209-10.855 2.61-17.53 17.361' },
+      outlook: { color: '#0F6CBD', path: 'M7.88 12.04q0 .45-.11.87-.1.41-.33.74-.22.33-.58.52-.37.2-.87.2t-.85-.2q-.35-.21-.57-.55-.22-.33-.33-.75-.1-.42-.1-.86t.1-.87q.1-.43.34-.76.22-.34.59-.54.36-.2.87-.2t.86.2q.35.21.57.55.22.34.31.77.1.43.1.88zM24 12v9.38q0 .46-.33.8-.33.32-.8.32H7.13q-.46 0-.8-.33-.32-.33-.32-.8V18H1q-.41 0-.7-.3-.3-.29-.3-.7V7q0-.41.3-.7Q.58 6 1 6h6.5V2.55q0-.44.3-.75.3-.3.75-.3h12.9q.44 0 .75.3.3.3.3.75V10.85l1.24.72h.01q.1.07.18.18.07.12.07.25zm-6-8.25v3h3v-3zm0 4.5v3h3v-3zm0 4.5v1.83l3.05-1.83zm-5.25-9v3h3.75v-3zm0 4.5v3h3.75v-3zm0 4.5v2.03l2.41 1.5 1.34-.8v-2.73zM9 3.75V6h2l.13.01.12.04v-2.3zM5.98 15.98q.9 0 1.6-.3.7-.32 1.19-.86.48-.55.73-1.28.25-.74.25-1.61 0-.83-.25-1.55-.24-.71-.71-1.24t-1.15-.83q-.68-.3-1.55-.3-.92 0-1.64.3-.71.3-1.2.85-.5.54-.75 1.3-.25.74-.25 1.63 0 .85.26 1.56.26.72.74 1.23.48.52 1.17.81.69.3 1.56.3zM7.5 21h12.39L12 16.08V17q0 .41-.3.7-.29.3-.7.3H7.5zm15-.13v-7.24l-5.9 3.54Z' },
+      gmail: { color: '#EA4335', path: 'M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z' },
+      qq: { color: '#12B7F5', path: 'M21.395 15.035a40 40 0 0 0-.803-2.264l-1.079-2.695c.001-.032.014-.562.014-.836C19.526 4.632 17.351 0 12 0S4.474 4.632 4.474 9.241c0 .274.013.804.014.836l-1.08 2.695a39 39 0 0 0-.802 2.264c-1.021 3.283-.69 4.643-.438 4.673.54.065 2.103-2.472 2.103-2.472 0 1.469.756 3.387 2.394 4.771-.612.188-1.363.479-1.845.835-.434.32-.379.646-.301.778.343.578 5.883.369 7.482.189 1.6.18 7.14.389 7.483-.189.078-.132.132-.458-.301-.778-.483-.356-1.233-.646-1.846-.836 1.637-1.384 2.393-3.302 2.393-4.771 0 0 1.563 2.537 2.103 2.472.251-.03.581-1.39-.438-4.673' },
+      aliyun: { color: '#FF6A00', path: 'M3.996 4.517h5.291L8.01 6.324 4.153 7.506a1.668 1.668 0 0 0-1.165 1.601v5.786a1.668 1.668 0 0 0 1.165 1.6l3.857 1.183 1.277 1.807H3.996A3.996 3.996 0 0 1 0 15.487V8.513a3.996 3.996 0 0 1 3.996-3.996m16.008 0h-5.291l1.277 1.807 3.857 1.182c.715.227 1.17.889 1.165 1.601v5.786a1.668 1.668 0 0 1-1.165 1.6l-3.857 1.183-1.277 1.807h5.291A3.996 3.996 0 0 0 24 15.487V8.513a3.996 3.996 0 0 0-3.996-3.996m-4.007 8.345H8.002v-1.804h7.995Z' },
+      '163': { color: '#E63C33', img: 'data:image/png;base64,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' },
+      custom: {
+        color: 'currentColor',
+        path:
+          'M3 6.5A2.5 2.5 0 0 1 5.5 4h13A2.5 2.5 0 0 1 21 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11Zm2.4.5 6.6 4.8 6.6-4.8H5.4Zm13.6 2.1-7 5.1-7-5.1v8.4c0 .6.4 1 1 1h12c.6 0 1-.4 1-1V9.1Z',
+      },
+    };
+
+    function ProviderIcon({ preset, size = 14 }) {
+      const icon = BRAND_ICONS[preset] || BRAND_ICONS.custom;
+      if (icon.img) {
+        return h('img', {
+          className: 'mbx-picon',
+          src: icon.img,
+          width: size,
+          height: size,
+          alt: String(preset || 'mail'),
+          draggable: false,
+        });
+      }
+      return h(
+        'svg',
+        {
+          className: 'mbx-picon',
+          width: size,
+          height: size,
+          viewBox: icon.viewBox || '0 0 24 24',
+          'aria-hidden': 'true',
+          fill: icon.color,
+        },
+        h('path', { d: icon.path }),
+      );
+    }
+
+    function initialOf(text) {
       const value = String(text || '?').trim();
       return value.slice(0, 1).toUpperCase();
     }
@@ -799,6 +846,7 @@ function initialOf(text) {
               onClick: () => setActiveId(account.id),
               title: account.email,
             },
+            h(ProviderIcon, { preset: account.preset, size: 12 }),
             h('span', { className: 'mbx-chip-name' }, account.label || account.email),
             account.status && account.status.unread > 0
               ? h('span', { className: 'mbx-badge' }, String(account.status.unread))
@@ -896,7 +944,7 @@ function initialOf(text) {
                       className: 'mbx-account' + (active && account.id === active.id ? ' is-active' : ''),
                       onClick: () => setActiveId(account.id),
                     },
-                    h('span', { className: 'mbx-avatar' }, initialOf(account.label || account.email)),
+                    h('span', { className: 'mbx-avatar' }, h(ProviderIcon, { preset: account.preset, size: 15 })),
                     h(
                       'span',
                       { className: 'mbx-account-text' },
@@ -1161,16 +1209,21 @@ function initialOf(text) {
                 { className: 'mbx-field' },
                 h('label', null, t('provider')),
                 h(
-                  'select',
-                  {
-                    className: 'mbx-select',
-                    value: addForm.preset,
-                    onChange: (event) => {
-                      cancelQr();
-                      setAddForm({ ...addForm, preset: event.target.value, error: null });
+                  'div',
+                  { className: 'mbx-select-row' },
+                  h('span', { className: 'mbx-select-icon' }, h(ProviderIcon, { preset: addForm.preset, size: 16 })),
+                  h(
+                    'select',
+                    {
+                      className: 'mbx-select',
+                      value: addForm.preset,
+                      onChange: (event) => {
+                        cancelQr();
+                        setAddForm({ ...addForm, preset: event.target.value, error: null });
+                      },
                     },
-                  },
-                  ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
+                    ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
+                  ),
                 ),
                 provider.hint ? h('div', { className: 'mbx-hint' }, provider.hint) : null,
                 supportsQr ? null : h('div', { className: 'mbx-hint' }, unsupported),
