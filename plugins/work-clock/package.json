@@ -1,0 +1,33 @@
+{
+  "name": "work-clock",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Floating work-day clock with clock-in timing (9-hour workday), weather, calendar agenda with manual and 5-minute refresh, and 10/5/1-minute advance reminders.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "engines": {
+    "dsh": ">=0.2.0 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

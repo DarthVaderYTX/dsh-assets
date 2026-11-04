@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Work Clock",
+    "description": "A floating clock with clock-in work timing (off-work at clock-in + 9 hours), weather, today’s calendar with manual and 5-minute refresh, and 10/5/1-minute advance reminders plus lunch, dinner, and meeting-start alerts."
+  }
+}
