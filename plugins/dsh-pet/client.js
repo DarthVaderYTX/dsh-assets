@@ -241,7 +241,7 @@ function turnShift(turn, factor = 1) {
     face: t * 4.2, // 口鼻中心
     eyeFar: t * 6.2, // 远侧那只眼睛往中间挪
     eyeNear: t * 2.0, // 近侧那只眼睛往边上挪
-    farScale: 1 - 0.5 * t, // 远眼缩小
+    farScale: 1 - 0.62 * t, // 远眼缩小
     nearEar: -t * 5.0,
     farEar: t * 6.0,
     body: t * 1.2,
@@ -253,10 +253,10 @@ function turnShift(turn, factor = 1) {
 const LAYOUT = {
   cat: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
   dog: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
-  bird: { eyeY: 17.2, near: 28.2, far: 19.0, scale: 0.78 },
+  bird: { eyeY: 17.2, near: 28.2, far: 19.0, scale: 0.78, eyeFar: 4.0 },
   // 羊和山羊脑袋窄，眼睛得铺开一点、转身时少挪一点，才不会挤成斗鸡眼
-  sheep: { eyeY: 21.0, near: 28.0, far: 20.0, scale: 0.76, eyeNear: -0.8 },
-  goat: { eyeY: 20.0, near: 28.2, far: 19.8, scale: 0.78, eyeNear: -0.8 },
+  sheep: { eyeY: 21.0, near: 28.0, far: 20.0, scale: 0.76, eyeNear: -0.8, eyeFar: 3.0 },
+  goat: { eyeY: 20.0, near: 28.2, far: 19.8, scale: 0.78, eyeNear: -0.8, eyeFar: 3.0 },
 };
 
 const layoutOf = (breed) => LAYOUT[BREEDS[breed].species] || LAYOUT.cat;
@@ -395,47 +395,59 @@ function drawHead(g, breed, frame) {
 }
 
 /** 口鼻、胸腹、爪子这些浅色块。 */
-function drawMuzzle(g, breed, frame) {
+function drawSnout(g, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
+  const T = turnShift(frame.turn, TURN_FACTOR[art.species] ?? 1);
   const bob = (frame.breath ? -1 : 0) + (frame.lookY || 0);
-  // 眼珠往哪边看，口鼻就跟着挪一点，不然眼睛动了嘴不动，脸上会散架
   const cx = 24 + T.face + (frame.lookX || 0);
 
   if (art.species === 'bird') {
-    // 钩状喙：上喙大、下喙小，往右伸出脑袋
     const bx = 32.6 + T.t * 2 + T.face * 0.4;
-    // 上喙：从额头下方斜伸出去，末端带钩
     triangle(g, [bx - 3.0, 15.4 + bob], [bx - 2.0, 21.0 + bob], [bx + 7.4, 19.2 + bob], 'g');
     ellipse(g, bx + 6.6, 19.6 + bob, 1.9, 1.7, 'g');
-    // 下喙
     triangle(g, [bx - 2.4, 20.2 + bob], [bx - 1.2, 23.2 + bob], [bx + 4.2, 21.2 + bob], 'n');
-    // 腮红
-    ellipse(g, bx - 6.4, 21.6 + bob, 2.6, 1.8, 'p');
     return;
   }
-
   if (art.species === 'sheep') {
     ellipse(g, cx, 25.2 + bob, 4.2, 3.2, 'w');
-    ellipse(g, 24 + T.body, 38, 5.0, 6.0, 'w');
     return;
   }
-
   if (art.species === 'goat') {
     ellipse(g, cx, 23.6 + bob, 4.6, 3.4, 'w');
-    ellipse(g, 24 + T.body, 38, 4.0, 4.6, 'w');
-    // 山羊胡：用一串椭圆，左右严格对称
     for (const [dy, rx, ry] of [[0, 2.0, 1.1], [1.4, 1.7, 1.1], [2.6, 1.3, 1.1], [3.6, 0.9, 1.0]]) {
       ellipse(g, cx, 27.0 + dy + bob, rx, ry, 'n');
     }
     return;
   }
-
   if (art.species === 'cat') ellipse(g, cx, 30.4 + bob, 6.8, 4.2, 'w');
   else ellipse(g, cx, 30.2 + bob, 6.6, 4.6, 'w');
-
   if (T.t >= 0.4) {
     ellipse(g, cx + 5.4, 29.8 + bob, 4.2 * Math.min(1, T.t), 3.2 * Math.min(1, T.t) + 0.6, 'w');
+  }
+}
+
+/** 口鼻凸起占住的格子：远侧眼睛转到它后面就该被挡住。 */
+function snoutCells(breed, frame) {
+  const g = blank();
+  drawSnout(g, breed, frame);
+  const set = new Set();
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if (g[y][x] !== '.') set.add(y * W + x);
+    }
+  }
+  return set;
+}
+
+function drawMuzzle(g, breed, frame) {
+  const art = BREEDS[breed];
+  const T = turnShift(frame.turn, TURN_FACTOR[art.species] ?? 1);
+  const bob = (frame.breath ? -1 : 0) + (frame.lookY || 0);
+
+  drawSnout(g, breed, frame);
+  if (art.species === 'bird') {
+    const bx = 32.6 + T.t * 2 + T.face * 0.4;
+    ellipse(g, bx - 6.4, 21.6 + bob, 2.6, 1.8, 'p');
   }
 
   ellipse(g, 24 + T.body, 43.6, 4.8, 5.0, 'w');
@@ -506,7 +518,7 @@ function drawEyeShape(g, cx, cy, kind, s) {
   rect(g, cx + k(1.2), cy + k(2.2), k(1.2), k(1.2), 's');
 }
 
-function eyeGrid(breed, frame) {
+function eyeGrid(breed, frame, body) {
   const g = blank();
   const raw = Math.max(0, Math.min(1, frame.turn || 0));
   const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
@@ -529,7 +541,22 @@ function eyeGrid(breed, frame) {
         if (g[iy][mx] === '.') g[iy][mx] = ch;
       }
     } else {
-      drawEyeShape(g, L.far + T.eyeFar, y, kind, L.scale * T.farScale);
+      // 远侧眼睛转到口鼻后面去了：只留下还露在毛发上的部分，
+      // 被鼻子、嘴、口鼻浅色块挡住的像素就当作看不见
+      const far = blank();
+      // 远眼往中间收：脑袋越小收得越少，免得和近侧那只糊成一只
+      drawEyeShape(far, L.far + T.t * (L.eyeFar ?? 6.2), y, kind, L.scale * T.farScale);
+      const snout = snoutCells(breed, frame);
+      for (let iy = 0; iy < H; iy += 1) {
+        for (let ix = 0; ix < W; ix += 1) {
+          if (far[iy][ix] === '.') continue;
+          const under = body ? (body[iy][ix] !== '.' ? body[iy][ix] : '.') : 'f';
+          if (under === '.' || under === 'o') continue;
+          // 口鼻在它前面：这一段被挡住，看不见
+          if (snout.has(iy * W + ix)) continue;
+          if (g[iy][ix] === '.') g[iy][ix] = far[iy][ix];
+        }
+      }
     }
   }
   return g;
@@ -797,7 +824,7 @@ function buildSprite(breed, frame = {}) {
   }
 
   const tail = tailShape(key, f);
-  const eyes = eyeGrid(key, f);
+  const eyes = eyeGrid(key, f, rows);
 
   if (f.dir === -1) {
     return { body: flip(rows), tail: flip(tail), eyes: flip(eyes) };

@@ -13,7 +13,7 @@ function loadSprite() {
   assert.ok(start > 0 && end > start, 'client.js 里找不到精灵代码区');
   return new Function(
     `${source.slice(start, end)}
-     return { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank };`,
+     return { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank, snoutCells };`,
   )();
 }
 
@@ -26,7 +26,7 @@ function loadTraits() {
     return TRAITS;`)();
 }
 
-const { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank } = loadSprite();
+const { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank, snoutCells } = loadSprite();
 const TRAITS = loadTraits();
 const BREED_IDS = Object.keys(BREEDS);
 const EYES = ['open', 'half', 'closed', 'happy'];
@@ -246,6 +246,46 @@ test('眼睛永远画在脸上，不会顶出轮廓或者悬空', () => {
         }
       }
     }
+  }
+});
+
+test('侧转时远侧眼睛被口鼻挡住，不是浮在鼻子上', () => {
+  // 把眼睛按连通块拆开：右边那块是近侧眼睛（在前面），另一块是远侧眼睛（该被挡）
+  const blobs = (rows) => {
+    const filled = new Set(cells(rows).map(({ x, y }) => `${x},${y}`));
+    const seen = new Set();
+    const out = [];
+    for (const key of filled) {
+      if (seen.has(key)) continue;
+      const blob = [];
+      const stack = [key];
+      while (stack.length) {
+        const at = stack.pop();
+        if (seen.has(at) || !filled.has(at)) continue;
+        seen.add(at);
+        const [x, y] = at.split(',').map(Number);
+        blob.push({ x, y });
+        stack.push(`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`);
+      }
+      out.push(blob);
+    }
+    return out;
+  };
+
+  for (const breed of BREED_IDS) {
+    const frame = frameOf({ turn: 0.5 });
+    const { body } = buildSprite(breed, frame);
+    const eyes = eyeGrid(breed, frame, body);
+    const snout = snoutCells(breed, frame);
+    const parts = blobs(eyes);
+    assert.equal(parts.length, 2, `${breed} 半侧身时应该还有两只眼睛`);
+    const near = parts.reduce((a, b) => (a[0].x > b[0].x ? a : b));
+    const far = parts.find((b) => b !== near);
+    for (const { x, y } of far) {
+      assert.ok(!snout.has(y * W + x), `${breed} 远侧眼睛在 (${x},${y}) 没被口鼻挡住`);
+    }
+    // 遮挡只挡住一部分：远侧眼睛要还露着，不能整只消失
+    assert.ok(far.length >= 6, `${breed} 半侧身时远侧眼睛整个不见了`);
   }
 });
 
