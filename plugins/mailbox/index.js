@@ -6,12 +6,23 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { ImapClient, ImapError } from './lib/imap.js';
 import { SmtpClient } from './lib/smtp.js';
 import { buildMessage, parseMessage, previewText } from './lib/mime.js';
 import { PROVIDERS, resolveProvider } from './lib/providers.js';
 import { nextAccountId, publicAccount, readState, storeDir, writeState } from './lib/store.js';
+import { FeishuRuntime } from './lib/feishu-runtime.js';
+import {
+  cleanLarkError,
+  mailboxProfile,
+  qrcodePng,
+  resolveLarkBinary,
+  startDeviceLogin,
+  waitForDeviceLogin,
+} from './lib/lark.js';
 
 export const inject = ['webServer', 'connection'];
 
@@ -473,11 +484,61 @@ export function apply(ctx, config = {}) {
     logger('[mailbox] 无法创建账号目录 ' + storeDir() + '：' + error.message);
   }
 
+  const createRuntime = (account) =>
+    account.kind === 'feishu'
+      ? new FeishuRuntime(account, hub, logger)
+      : new AccountRuntime(account, hub, logger);
+
   const bootAccount = (account) => {
-    const runtime = new AccountRuntime(account, hub, logger);
+    const runtime = createRuntime(account);
     runtimes.set(account.id, runtime);
     runtime.startWatching();
     return runtime;
+  };
+
+  // 扫码登录的临时会话：id → { status, deviceCode, pngPath, child, account }
+  const pendingLogins = new Map();
+  const pendingFile = (id) => path.join(os.tmpdir(), 'dsh-mailbox-qr-' + id + '.png');
+
+  const cleanupPending = (pending) => {
+    try {
+      pending.child?.kill('SIGTERM');
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(pending.pngPath, { force: true });
+    } catch {
+      /* ignore */
+    }
+    pendingLogins.delete(pending.id);
+  };
+
+  /** 飞书账号不走密码：身份来自 lark-cli 当前的用户登录。 */
+  const addFeishuAccount = async (input) => {
+    const email = await mailboxProfile();
+    const state = readState();
+    const existing = state.accounts.find((item) => (item.kind || 'imap') === 'feishu' && item.email === email);
+    if (existing) {
+      if (!runtimes.has(existing.id)) bootAccount(existing);
+      return { ok: true, account: publicAccount(existing), reused: true };
+    }
+    const label = String(input?.label || '').trim() || email;
+    const { id, counter } = nextAccountId(state);
+    const stored = {
+      id,
+      kind: 'feishu',
+      label,
+      email,
+      username: email,
+      preset: 'feishu',
+      createdAt: Date.now(),
+    };
+    state.accounts.push(stored);
+    state.counter = counter;
+    writeState(state);
+    bootAccount(stored);
+    return { ok: true, account: publicAccount(stored) };
   };
 
   // 启动时恢复已登录的账号
@@ -512,12 +573,12 @@ export function apply(ctx, config = {}) {
     },
 
     async 'POST /accounts/test'(body) {
+      if (body.kind === 'feishu') {
+        const email = await mailboxProfile();
+        return { ok: true, email };
+      }
       const account = normalizeAccount(body);
-      const probe = new AccountRuntime(
-        { ...account, id: 'probe', password: account.password },
-        hub,
-        logger,
-      );
+      const probe = createRuntime({ ...account, id: 'probe' });
       try {
         const boxes = await probe.listFolders();
         return { ok: true, folders: boxes.length };
@@ -527,12 +588,15 @@ export function apply(ctx, config = {}) {
     },
 
     async 'POST /accounts'(body) {
+      if (body.kind === 'feishu') {
+        return addFeishuAccount(body);
+      }
       const account = normalizeAccount(body);
       const state = readState();
       if (state.accounts.some((item) => item.email === account.email && item.username === account.username && item.label === account.label)) {
         throw new HttpError(409, '已存在同名账号，换个标签即可添加第二份');
       }
-      const probe = new AccountRuntime({ ...account, id: 'probe' }, hub, logger);
+      const probe = createRuntime({ ...account, id: 'probe' });
       try {
         await probe.listFolders();
       } finally {
@@ -557,6 +621,78 @@ export function apply(ctx, config = {}) {
       return { ok: true };
     },
 
+    async 'POST /feishu/login/start'() {
+      if (!resolveLarkBinary()) throw new HttpError(400, '本机没有 lark-cli，无法扫码登录飞书邮箱');
+      const started = await startDeviceLogin('mail');
+      const id = 'qr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const pngPath = pendingFile(id);
+      await qrcodePng(started.verificationUrl, pngPath, 320);
+      const pending = {
+        id,
+        status: 'waiting',
+        error: null,
+        account: null,
+        pngPath,
+        createdAt: Date.now(),
+        child: null,
+      };
+      pendingLogins.set(id, pending);
+
+      const child = waitForDeviceLogin(started.deviceCode);
+      pending.child = child;
+      let stderr = '';
+      child.stderr.on('data', (chunk) => (stderr += chunk.toString('utf8')));
+      child.stdout.resume();
+      child.on('error', (error) => {
+        pending.status = 'error';
+        pending.error = error.message;
+      });
+      child.on('close', async (code) => {
+        if (pending.status !== 'waiting') return;
+        if (code !== 0) {
+          pending.status = 'error';
+          pending.error = cleanLarkError(stderr) || '扫码登录未完成或已超时';
+          return;
+        }
+        try {
+          const result = await addFeishuAccount({ label: '' });
+          pending.status = 'ok';
+          pending.account = result.account;
+        } catch (error) {
+          pending.status = 'error';
+          pending.error = error?.message || String(error);
+        }
+      });
+
+      return { ok: true, id, qr: '/mailbox/api/feishu/login/qr?id=' + id, expiresIn: started.expiresIn };
+    },
+
+    async 'GET /feishu/login/qr'(query) {
+      const pending = pendingLogins.get(String(query.get('id') || ''));
+      if (!pending || !fs.existsSync(pending.pngPath)) throw new HttpError(404, '二维码已失效，请重新生成');
+      return { file: { path: pending.pngPath, contentType: 'image/png' } };
+    },
+
+    async 'POST /feishu/login/poll'(body) {
+      const pending = pendingLogins.get(String(body.id || ''));
+      if (!pending) throw new HttpError(404, '登录会话已失效，请重新生成二维码');
+      return { ok: true, status: pending.status, error: pending.error, account: pending.account };
+    },
+
+    async 'POST /feishu/login/cancel'(body) {
+      const pending = pendingLogins.get(String(body.id || ''));
+      if (pending) {
+        pending.status = 'cancelled';
+        try {
+          pending.child?.kill('SIGTERM');
+        } catch {
+          /* ignore */
+        }
+        cleanupPending(pending);
+      }
+      return { ok: true };
+    },
+
     async 'GET /folders'(query) {
       const runtime = requireAccount(query.get('account'));
       return { ok: true, folders: await runtime.listFolders() };
@@ -572,7 +708,7 @@ export function apply(ctx, config = {}) {
 
     async 'GET /message'(query) {
       const runtime = requireAccount(query.get('account'));
-      const uid = Number(query.get('uid'));
+      const uid = String(query.get('uid') || '').trim();
       if (!uid) throw new HttpError(400, '缺少 uid');
       const message = await runtime.message(uid, query.get('folder') || 'INBOX', query.get('unseen') !== '1');
       return { ok: true, message, status: runtime.status };
@@ -580,7 +716,7 @@ export function apply(ctx, config = {}) {
 
     async 'POST /flags'(body) {
       const runtime = requireAccount(body.account);
-      await runtime.setSeen(Number(body.uid), body.seen !== false, body.folder || 'INBOX');
+      await runtime.setSeen(String(body.uid), body.seen !== false, body.folder || 'INBOX');
       const unread = await runtime.list(body.folder || 'INBOX', 1).catch(() => null);
       return { ok: true, unread: unread ? unread.unread : runtime.status.unread };
     },
@@ -616,7 +752,7 @@ export function apply(ctx, config = {}) {
 
     async 'GET /attachment'(query) {
       const runtime = requireAccount(query.get('account'));
-      const uid = Number(query.get('uid'));
+      const uid = String(query.get('uid') || '').trim();
       const index = Number(query.get('index'));
       const item = await runtime.attachment(uid, index, query.get('folder') || 'INBOX');
       return { raw: item };
@@ -645,6 +781,21 @@ export function apply(ctx, config = {}) {
     try {
       const body = req.method === 'POST' ? await readBody(req) : {};
       const result = await handler(req.method === 'GET' ? url.searchParams : body);
+      if (result && result.file) {
+        let bytes;
+        try {
+          bytes = fs.readFileSync(result.file.path);
+        } catch {
+          throw new HttpError(404, '文件已失效');
+        }
+        res.writeHead(200, {
+          'content-type': result.file.contentType || 'application/octet-stream',
+          'content-length': bytes.length,
+          'cache-control': 'no-store',
+        });
+        res.end(bytes);
+        return;
+      }
       if (result && result.raw) {
         const item = result.raw;
         const filename = item.filename || 'attachment.bin';
@@ -676,6 +827,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => () => {
     for (const runtime of runtimes.values()) runtime.dispose();
     runtimes.clear();
+    for (const pending of [...pendingLogins.values()]) cleanupPending(pending);
   }, 'mailbox: close accounts');
 }
 

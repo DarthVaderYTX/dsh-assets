@@ -60,6 +60,7 @@ export function writeState(state) {
 export function publicAccount(account) {
   return {
     id: account.id,
+    kind: account.kind || 'imap',
     label: account.label,
     email: account.email,
     username: account.username,

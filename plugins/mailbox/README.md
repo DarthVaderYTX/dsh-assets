@@ -1,6 +1,6 @@
 # mailbox
 
-内置侧边栏里的邮箱：多账号收发邮件，IMAP IDLE 实时收信并响铃提醒，读信、回信、加附件都不离开面板。
+内置侧边栏里的邮箱：多账号收发邮件，IMAP IDLE 实时收信并响铃提醒，读信、回信、加附件都不离开面板；飞书邮箱支持**手机扫码登录**，不用申请应用专用密码。
 
 包名 `mailbox`，host 半（`index.js`）负责协议与凭据，client 半（`client.js`）只做界面。
 
@@ -15,15 +15,20 @@
 | `lib/mime.js` | MIME 编解码：RFC 2047 主题、charset 转换、multipart、附件、`message/rfc822` |
 | `lib/store.js` | 账号持久化到 `$DSH_HOME/mailbox/accounts.json`（0600） |
 | `lib/providers.js` | 飞书 / QQ / 163 / Gmail / Outlook / 阿里云 / 自定义预设 |
-| `test/` | 本地假 IMAP+SMTP 服务器与 `node --test` 用例 |
+| `lib/lark.js` | 飞书后端：调本机 `lark-cli`（设备码扫码登录、Open API 收发信、`+watch` 推送） |
+| `lib/feishu-runtime.js` | 飞书账号运行时，接口与 IMAP 账号一致，路由和前端不用区分 |
+| `test/` | 本地假 IMAP+SMTP 服务器、假 `lark-cli`，以及 `node --test` 用例 |
 | `cordis.patch.yml` | bundle patch，把 `mailbox` 插入 loader |
 | `locale/*.json` | 插件元信息 |
 
-依赖只有 Node 内置模块（`node:net`、`node:tls`、`node:buffer`），**没有任何第三方包**：dsh profile 由 Electron 应用托管，装不了 npm 依赖，所以协议栈自己写。
+依赖只有 Node 内置模块（`node:net`、`node:tls`、`node:buffer`、`node:child_process`），**没有任何第三方包**：dsh profile 由 Electron 应用托管，装不了 npm 依赖，所以协议栈自己写。
+
+飞书账号不直连 IMAP，而是复用本机已安装的 [`lark-cli`](https://github.com/larksuite/cli)：它负责 OAuth 扫码登录与 Open API 调用，插件只负责展示二维码、解析返回。没装 `lark-cli` 时插件照常工作，只是加不了飞书账号。
 
 ## 功能
 
 - **多账号**：账号按生成的 id 区分，同一条邮箱地址可以加多份，用「标签」区分（工作 / 个人 / 测试……）。
+- **飞书扫码登录**：添加账号弹窗里选「飞书扫码」，点「生成二维码」，用手机飞书扫一下即完成授权；二维码由 `lark-cli auth qrcode` 生成，随后 `auth login --device-code` 在后台等待确认。飞书账号不需要也不保存密码。
 - **实时收信**：每个账号一条 IDLE 长连接，服务器推送 `EXISTS` 就立刻拉新邮件摘要，推给面板并发提示音；连接断了按 3s → 60s 指数退避重连。服务商不支持 IDLE 时退化成 60 秒轮询。
 - **提示**：WebAudio 双音「叮咚」，面板右下角弹 6 秒 toast，侧边栏图标带未读圆点；提示音可在标题栏关掉（存 `localStorage`）。
 - **收发一体**：读信（纯文本或 HTML）、回复、转发、新建、多附件（合计 18MB 上限）都在面板内完成，附件下载直接走浏览器下载。
@@ -44,6 +49,10 @@
 | GET | `/message?account=&folder=&uid=` | 读信（默认标已读） |
 | POST | `/flags` | 已读 / 未读 |
 | POST | `/send` | 发信（收件人、抄送、主题、正文、附件 base64） |
+| POST | `/feishu/login/start` | 飞书扫码登录：发起设备码授权并生成二维码，返回会话 id |
+| GET | `/feishu/login/qr?id=` | 二维码 PNG |
+| POST | `/feishu/login/poll` | 轮询扫码结果，成功后自动落库并开始收信 |
+| POST | `/feishu/login/cancel` | 取消本次扫码 |
 | GET | `/attachment?account=&folder=&uid=&index=` | 下载附件 |
 | GET | `/events?after=&timeout=` | 新邮件长轮询，最长 60s |
 | GET | `/status` | 总未读数 |
@@ -83,6 +92,8 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 - 只支持 **用户名 + 密码/应用专用密码** 的 IMAP/SMTP 基本认证，**不支持 OAuth**：Gmail、Outlook 这类强制 OAuth 的账号需要先用应用专用密码（若租户关闭了 basic auth 则无法登录）。
 - 发信只走 SMTP，**不会自动 APPEND 到「已发送」**：多数服务商在 SMTP 投递后会自行保存副本，但行为不统一。
 - 只做收件箱的实时提醒；其他文件夹靠手动刷新。
+- **飞书账号的凭据不在本插件里**：它用的是 `lark-cli` 的登录态（本机 Keychain / 配置文件），所以一个 `lark-cli` 登录同一时间只对应一个飞书邮箱；要换账号得重新扫码，多开飞书邮箱暂不支持。
+- 飞书账号的实时提醒优先用 `mail +watch` 的 WebSocket 推送；当前应用没订阅邮件事件时 `+watch` 会秒退，插件自动降级成 **60 秒轮询**，未读数上限 400。
 - **163 / 126 需要先发 ID 命令再 LOGIN**，客户端已经按这个顺序做；直接 LOGIN 会被回 `Unsafe Login`。
 - 实测（2026-11-04，本机网络）：`imap.qq.com` / `imap.163.com` / `imap.gmail.com` 的 TLS 握手、CAPABILITY、LOGIN 拒绝路径均正常；Gmail 会回 `NO [AUTHENTICATIONFAILED]`（强制 OAuth，需要应用专用密码或改走 OAuth）；QQ 在认证失败时直接断开连接，客户端会把这种情形翻译成「服务端拒绝了这次登录」。`smtp.qq.com:465` 的 AUTH 拒绝路径同样正常。
 - 附件走 HTTP 传输（单封上限 18MB），超大邮件直接拒绝下载并提示。

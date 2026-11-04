@@ -70,6 +70,17 @@ window.__ModuleLoader__.load({
       accountWatching: '实时收信中',
       mailFrom: '来自 {name}',
       readInPanel: '读完可直接回复，不用切走。',
+      tabFeishu: '飞书扫码',
+      tabImap: '邮箱密码',
+      feishuHint: '用手机飞书扫码授权，不用生成应用专用密码。授权后本机会用 lark-cli 的登录态收发飞书邮箱。',
+      generateQr: '生成二维码',
+      qrWaiting: '等待手机扫码…',
+      qrOk: '已登录',
+      qrFailed: '扫码失败',
+      regenerate: '重新生成',
+      feishuBadge: '飞书',
+      larkMissing: '本机没有安装 lark-cli，无法扫码登录飞书邮箱',
+      qrExpired: '二维码已过期，请重新生成',
     };
 
     const EN = {
@@ -131,6 +142,17 @@ window.__ModuleLoader__.load({
       accountWatching: 'Listening for mail',
       mailFrom: 'from {name}',
       readInPanel: 'Read and reply without leaving the panel.',
+      tabFeishu: 'Feishu QR',
+      tabImap: 'Password',
+      feishuHint: 'Scan with the Feishu mobile app — no app password needed. The panel then uses your local lark-cli session.',
+      generateQr: 'Show QR code',
+      qrWaiting: 'Waiting for the scan…',
+      qrOk: 'Signed in',
+      qrFailed: 'Scan failed',
+      regenerate: 'Regenerate',
+      feishuBadge: 'Feishu',
+      larkMissing: 'lark-cli is not installed, QR sign-in is unavailable',
+      qrExpired: 'The code expired, generate a new one',
     };
 
     /* ------------------------------------------------------------ 样式 */
@@ -171,7 +193,10 @@ window.__ModuleLoader__.load({
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); color: var(--dsw-alias-brand-primary);
   font-weight: 600; font-size: 11px; flex: none; }
 .mbx-account-text { min-width: 0; flex: 1; }
-.mbx-account-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.mbx-account-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px;
+  display: flex; align-items: center; gap: 6px; }
+.mbx-tag { flex: none; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 15px;
+  color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .mbx-account-mail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
   color: var(--dsw-alias-label-secondary); }
 .mbx-folder { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 12px;
@@ -235,6 +260,13 @@ window.__ModuleLoader__.load({
 .mbx-file { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 8px;
   border: 1px dashed var(--dsw-alias-border-l1); border-radius: 6px; }
 .mbx-link { color: var(--dsw-alias-brand-primary); cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
+.mbx-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--dsw-alias-border-l1); padding-bottom: 8px; }
+.mbx-tab { padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent;
+  color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 12px; }
+.mbx-tab.is-active { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
+.mbx-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0; }
+.mbx-qr { width: 240px; height: 240px; border-radius: 8px; background: #fff; padding: 8px; box-sizing: border-box; }
 `;
 
     /* ------------------------------------------------------------ 工具 */
@@ -358,6 +390,8 @@ window.__ModuleLoader__.load({
       const [messageState, setMessageState] = React.useState('idle');
       const [compose, setCompose] = React.useState(null);
       const [addForm, setAddForm] = React.useState(null);
+      const [addMode, setAddMode] = React.useState('feishu');
+      const [qr, setQr] = React.useState(null);
       const [pendingRemove, setPendingRemove] = React.useState(null);
       const [toast, setToast] = React.useState(null);
 
@@ -450,6 +484,52 @@ window.__ModuleLoader__.load({
           setToast({ title: t('failed'), body: error.message });
         }
       };
+
+      const cancelQr = React.useCallback(() => {
+        setQr((current) => {
+          if (current?.id) {
+            api('/feishu/login/cancel', { method: 'POST', body: { id: current.id } }).catch(() => {});
+          }
+          return null;
+        });
+      }, []);
+
+      const startQrLogin = async () => {
+        setQr({ id: '', src: '', status: 'starting', error: null });
+        try {
+          const data = await api('/feishu/login/start', { method: 'POST', body: {} });
+          setQr({ id: data.id, src: data.qr, status: 'waiting', error: null });
+        } catch (error) {
+          setQr({ id: '', src: '', status: 'error', error: error.message });
+        }
+      };
+
+      React.useEffect(() => {
+        if (!qr || qr.status !== 'waiting' || !qr.id) return undefined;
+        let stopped = false;
+        const timer = setInterval(async () => {
+          try {
+            const data = await api('/feishu/login/poll', { method: 'POST', body: { id: qr.id } });
+            if (stopped) return;
+            if (data.status === 'ok') {
+              setQr(null);
+              setAddForm(null);
+              setToast({ title: t('qrOk'), body: (data.account && data.account.email) || '' });
+              await props.store.refreshAccounts();
+            } else if (data.status === 'error' || data.status === 'cancelled') {
+              setQr((current) => (current ? { ...current, status: 'error', error: data.error || t('qrFailed') } : current));
+            }
+          } catch (error) {
+            if (!stopped) {
+              setQr((current) => (current ? { ...current, status: 'error', error: error.message } : current));
+            }
+          }
+        }, 2000);
+        return () => {
+          stopped = true;
+          clearInterval(timer);
+        };
+      }, [qr?.id, qr?.status]);
 
       const startCompose = (mode, source) => {
         const replyTo = source ? source.from?.address || '' : '';
@@ -648,7 +728,14 @@ window.__ModuleLoader__.load({
                     h(
                       'span',
                       { className: 'mbx-account-text' },
-                      h('div', { className: 'mbx-account-label' }, account.label || account.email),
+                      h(
+                        'div',
+                        { className: 'mbx-account-label' },
+                        account.label || account.email,
+                        account.kind === 'feishu'
+                          ? h('span', { className: 'mbx-tag' }, t('feishuBadge'))
+                          : null,
+                      ),
                       h('div', { className: 'mbx-account-mail' }, account.email),
                     ),
                     h(
@@ -859,121 +946,176 @@ window.__ModuleLoader__.load({
               ),
               h(
                 'div',
-                { className: 'mbx-field' },
-                h('label', null, t('provider')),
-                h(
-                  'select',
-                  {
-                    className: 'mbx-select',
-                    value: addForm.preset,
-                    onChange: (event) => setAddForm({ ...addForm, preset: event.target.value }),
+                { className: 'mbx-tabs' },
+                h('button', {
+                  type: 'button',
+                  className: 'mbx-tab' + (addMode === 'feishu' ? ' is-active' : ''),
+                  onClick: () => {
+                    cancelQr();
+                    setAddMode('feishu');
                   },
-                  ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
-                ),
-                provider.hint ? h('div', { className: 'mbx-hint' }, provider.hint) : null,
+                }, t('tabFeishu')),
+                h('button', {
+                  type: 'button',
+                  className: 'mbx-tab' + (addMode === 'imap' ? ' is-active' : ''),
+                  onClick: () => {
+                    cancelQr();
+                    setAddMode('imap');
+                  },
+                }, t('tabImap')),
               ),
-              h(
-                'div',
-                { className: 'mbx-field' },
-                h('label', null, t('accountLabel')),
-                h('input', {
-                  className: 'mbx-input',
-                  value: addForm.label,
-                  placeholder: t('accountLabelHint'),
-                  onChange: (event) => setAddForm({ ...addForm, label: event.target.value }),
-                }),
-              ),
-              h(
-                'div',
-                { className: 'mbx-field' },
-                h('label', null, t('email')),
-                h('input', {
-                  className: 'mbx-input',
-                  value: addForm.email,
-                  placeholder: 'you@example.com',
-                  onChange: (event) => setAddForm({ ...addForm, email: event.target.value }),
-                }),
-              ),
-              h(
-                'div',
-                { className: 'mbx-field' },
-                h('label', null, t('password')),
-                h('input', {
-                  className: 'mbx-input',
-                  type: 'password',
-                  value: addForm.password,
-                  onChange: (event) => setAddForm({ ...addForm, password: event.target.value }),
-                }),
-                h('div', { className: 'mbx-hint' }, t('passwordHint')),
-              ),
-              h(
-                'div',
-                { style: { display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 } },
-                h(
-                  'div',
-                  { className: 'mbx-field' },
-                  h('label', null, t('imapHost')),
-                  h('input', {
-                    className: 'mbx-input',
-                    value: addForm.imapHost,
-                    placeholder: (provider.imap && provider.imap.host) || 'imap.example.com',
-                    onChange: (event) => setAddForm({ ...addForm, imapHost: event.target.value }),
-                  }),
-                ),
-                h(
-                  'div',
-                  { className: 'mbx-field' },
-                  h('label', null, 'Port'),
-                  h('input', {
-                    className: 'mbx-input',
-                    value: addForm.imapPort,
-                    placeholder: String((provider.imap && provider.imap.port) || 993),
-                    onChange: (event) => setAddForm({ ...addForm, imapPort: event.target.value }),
-                  }),
-                ),
-              ),
-              h(
-                'div',
-                { style: { display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 } },
-                h(
-                  'div',
-                  { className: 'mbx-field' },
-                  h('label', null, t('smtpHost')),
-                  h('input', {
-                    className: 'mbx-input',
-                    value: addForm.smtpHost,
-                    placeholder: (provider.smtp && provider.smtp.host) || 'smtp.example.com',
-                    onChange: (event) => setAddForm({ ...addForm, smtpHost: event.target.value }),
-                  }),
-                ),
-                h(
-                  'div',
-                  { className: 'mbx-field' },
-                  h('label', null, 'Port'),
-                  h('input', {
-                    className: 'mbx-input',
-                    value: addForm.smtpPort,
-                    placeholder: String((provider.smtp && provider.smtp.port) || 465),
-                    onChange: (event) => setAddForm({ ...addForm, smtpPort: event.target.value }),
-                  }),
-                ),
-              ),
-              addForm.error ? h('div', { className: 'mbx-error' }, addForm.error) : null,
+              addMode === 'feishu'
+                ? h(
+                    'div',
+                    { className: 'mbx-qr-wrap' },
+                    h('div', { className: 'mbx-hint' }, t('feishuHint')),
+                    qr && qr.status === 'waiting' && qr.src
+                      ? h('img', { className: 'mbx-qr', src: qr.src, alt: 'QR' })
+                      : null,
+                    qr && qr.status === 'waiting'
+                      ? h('div', { className: 'mbx-hint' }, t('qrWaiting'))
+                      : null,
+                    qr && qr.status === 'starting' ? h('div', { className: 'mbx-hint' }, t('loading')) : null,
+                    qr && qr.status === 'error'
+                      ? h('div', { className: 'mbx-error' }, qr.error || t('qrFailed'))
+                      : null,
+                    h(
+                      'div',
+                      { style: { display: 'flex', gap: 8 } },
+                      h('button', {
+                        type: 'button',
+                        className: 'mbx-btn is-primary',
+                        onClick: startQrLogin,
+                        disabled: Boolean(qr) && (qr.status === 'waiting' || qr.status === 'starting'),
+                      }, qr && qr.status === 'waiting' ? t('regenerate') : t('generateQr')),
+                    ),
+                  )
+                : h(
+                    React.Fragment,
+                    null,
+                    h(
+                      'div',
+                      { className: 'mbx-field' },
+                      h('label', null, t('provider')),
+                      h(
+                        'select',
+                        {
+                          className: 'mbx-select',
+                          value: addForm.preset,
+                          onChange: (event) => setAddForm({ ...addForm, preset: event.target.value }),
+                        },
+                        ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
+                      ),
+                      provider.hint ? h('div', { className: 'mbx-hint' }, provider.hint) : null,
+                    ),
+                    h(
+                      'div',
+                      { className: 'mbx-field' },
+                      h('label', null, t('accountLabel')),
+                      h('input', {
+                        className: 'mbx-input',
+                        value: addForm.label,
+                        placeholder: t('accountLabelHint'),
+                        onChange: (event) => setAddForm({ ...addForm, label: event.target.value }),
+                      }),
+                    ),
+                    h(
+                      'div',
+                      { className: 'mbx-field' },
+                      h('label', null, t('email')),
+                      h('input', {
+                        className: 'mbx-input',
+                        value: addForm.email,
+                        placeholder: 'you@example.com',
+                        onChange: (event) => setAddForm({ ...addForm, email: event.target.value }),
+                      }),
+                    ),
+                    h(
+                      'div',
+                      { className: 'mbx-field' },
+                      h('label', null, t('password')),
+                      h('input', {
+                        className: 'mbx-input',
+                        type: 'password',
+                        value: addForm.password,
+                        onChange: (event) => setAddForm({ ...addForm, password: event.target.value }),
+                      }),
+                      h('div', { className: 'mbx-hint' }, t('passwordHint')),
+                    ),
+                    h(
+                      'div',
+                      { style: { display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 } },
+                      h(
+                        'div',
+                        { className: 'mbx-field' },
+                        h('label', null, t('imapHost')),
+                        h('input', {
+                          className: 'mbx-input',
+                          value: addForm.imapHost,
+                          placeholder: (provider.imap && provider.imap.host) || 'imap.example.com',
+                          onChange: (event) => setAddForm({ ...addForm, imapHost: event.target.value }),
+                        }),
+                      ),
+                      h(
+                        'div',
+                        { className: 'mbx-field' },
+                        h('label', null, 'Port'),
+                        h('input', {
+                          className: 'mbx-input',
+                          value: addForm.imapPort,
+                          placeholder: String((provider.imap && provider.imap.port) || 993),
+                          onChange: (event) => setAddForm({ ...addForm, imapPort: event.target.value }),
+                        }),
+                      ),
+                    ),
+                    h(
+                      'div',
+                      { style: { display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 } },
+                      h(
+                        'div',
+                        { className: 'mbx-field' },
+                        h('label', null, t('smtpHost')),
+                        h('input', {
+                          className: 'mbx-input',
+                          value: addForm.smtpHost,
+                          placeholder: (provider.smtp && provider.smtp.host) || 'smtp.example.com',
+                          onChange: (event) => setAddForm({ ...addForm, smtpHost: event.target.value }),
+                        }),
+                      ),
+                      h(
+                        'div',
+                        { className: 'mbx-field' },
+                        h('label', null, 'Port'),
+                        h('input', {
+                          className: 'mbx-input',
+                          value: addForm.smtpPort,
+                          placeholder: String((provider.smtp && provider.smtp.port) || 465),
+                          onChange: (event) => setAddForm({ ...addForm, smtpPort: event.target.value }),
+                        }),
+                      ),
+                    ),
+                  ),
+              addMode === 'imap' && addForm.error ? h('div', { className: 'mbx-error' }, addForm.error) : null,
               h(
                 'div',
                 { className: 'mbx-actions' },
                 h('button', {
                   type: 'button',
                   className: 'mbx-btn',
-                  onClick: () => setAddForm(null),
+                  onClick: () => {
+                    cancelQr();
+                    setAddForm(null);
+                  },
                   disabled: addForm.busy,
-                }, t('cancel')),
-                h('button', {
-                  type: 'button',
-                  className: 'mbx-btn is-primary',
-                  onClick: submitAccount,
-                  disabled: addForm.busy || !addForm.email || !addForm.password,
-                }, addForm.busy ? t('connecting') : t('connect')),
+                }, addMode === 'feishu' ? t('close') : t('cancel')),
+                addMode === 'imap'
+                  ? h('button', {
+                      type: 'button',
+                      className: 'mbx-btn is-primary',
+                      onClick: submitAccount,
+                      disabled: addForm.busy || !addForm.email || !addForm.password,
+                    }, addForm.busy ? t('connecting') : t('connect'))
+                  : null,
               ),
             ),
           ),
