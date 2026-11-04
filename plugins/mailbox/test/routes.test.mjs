@@ -140,6 +140,17 @@ test('HTTP 路由：鉴权、账号 CRUD、列信、发信、长轮询', async (
   }
 });
 
+test('事件中心的游标比当前大时按 0 处理', async () => {
+  const { EventHub } = await import('../index.js');
+  const hub = new EventHub();
+  hub.push({ type: 'mail', uid: 1 });
+  const before = await hub.wait(99, 50);
+  assert.equal(before.length, 1);
+  assert.equal(before[0].uid, 1);
+  const empty = await hub.wait(1, 40);
+  assert.deepEqual(empty, []);
+});
+
 test('HTTP 路由：宿主拒绝时返回 401 且不执行业务', async () => {
   const { ctx, routes } = fakeContext(false);
   apply(ctx, {});

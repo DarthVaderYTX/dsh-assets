@@ -48,9 +48,14 @@ export class EventHub {
     return record;
   }
 
-  /** 长期轮询：等到 `after` 之后的第一条事件，或超时返回空数组。 */
+  /**
+   * 长期轮询：等到 `after` 之后的第一条事件，或超时返回空数组。
+   * 客户端存的 seq 比当前大（宿主重启过，seq 从 0 重新计数）时按 0 处理，
+   * 否则会永远等不到新事件。
+   */
   wait(after, timeoutMs) {
-    const pending = this.events.filter((event) => event.seq > after);
+    const baseline = after > this.seq ? 0 : after;
+    const pending = this.events.filter((event) => event.seq > baseline);
     if (pending.length > 0) return Promise.resolve(pending);
     return new Promise((resolve) => {
       let settled = false;
@@ -61,7 +66,7 @@ export class EventHub {
         this.waiters.delete(onEvent);
         resolve(value);
       };
-      const onEvent = () => finish(this.events.filter((event) => event.seq > after));
+      const onEvent = () => finish(this.events.filter((event) => event.seq > baseline));
       const timer = setTimeout(() => finish([]), timeoutMs);
       this.waiters.add(onEvent);
     });

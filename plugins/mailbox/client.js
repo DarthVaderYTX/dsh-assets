@@ -1240,7 +1240,9 @@ window.__ModuleLoader__.load({
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
                 if (stopped) return;
-                if (data.seq) store.set({ seq: data.seq });
+                // 宿主重启后 seq 会从头计数；host 半对「游标比当前大」按 0 处理。
+                const seq = Number(data.seq) || 0;
+                if (seq !== store.state.seq) store.set({ seq });
                 const events = data.events || [];
                 for (const event of events) {
                   if (event.type !== 'mail') continue;
