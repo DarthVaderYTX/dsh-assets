@@ -15,7 +15,7 @@
 | `lib/mime.js` | MIME 编解码：RFC 2047 主题、charset 转换、multipart、附件、`message/rfc822` |
 | `lib/store.js` | 账号持久化到 `$DSH_HOME/mailbox/accounts.json`（0600） |
 | `lib/providers.js` | 飞书 / QQ / 163 / Gmail / Outlook / 阿里云 / 自定义预设 |
-| `lib/lark.js` | 飞书后端：调本机 `lark-cli`（设备码扫码登录、Open API 收发信、`+watch` 推送） |
+| `lib/lark.js` | 飞书后端：调本机 `lark-cli`（设备码扫码登录、Open API 收发信、`+watch` 推送），所有邮件命令固定 `--as user` |
 | `lib/oauth.js` | 通用 OAuth 2.0 设备码登录（RFC 8628）+ XOAUTH2 payload，目前接 Microsoft 365 |
 | `lib/feishu-runtime.js` | 飞书账号运行时，接口与 IMAP 账号一致，路由和前端不用区分 |
 | `assets/qr-microsoft-device.png` | 微软固定验证页 `https://login.microsoft.com/device` 的二维码，一次生成后随包发布 |
@@ -107,7 +107,9 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 - 发信只走 SMTP，**不会自动 APPEND 到「已发送」**：多数服务商在 SMTP 投递后会自行保存副本，但行为不统一。
 - 只做收件箱的实时提醒；其他文件夹靠手动刷新。
 - **飞书账号的凭据不在本插件里**：它用的是 `lark-cli` 的登录态（本机 Keychain / 配置文件），所以一个 `lark-cli` 登录同一时间只对应一个飞书邮箱；要换账号得重新扫码，多开飞书邮箱暂不支持。
-- 飞书账号的实时提醒优先用 `mail +watch` 的 WebSocket 推送；当前应用没订阅邮件事件时 `+watch` 会秒退，插件自动降级成 **60 秒轮询**，未读数上限 400。
+- 飞书账号的实时提醒走 `lark-cli mail +watch` 的 WebSocket 推送：它用**用户身份**调 `user_mailbox.event` 订阅当前邮箱的事件，不需要在飞书开放平台给应用加事件订阅，插件也不以应用（bot）身份访问邮件。连接断了自动重连（3s 起），连续 3 次失败才降级成 **15 秒轮询**，并在账号行用圆点标出当前模式（绿=实时推送，橙=轮询）。
+- 所有飞书邮件命令都显式带 `--as user`，不依赖本机 `lark-cli config default-as` 的取值：邮件属于用户本人，应用身份既读不到也不该代管。
+- 未读数上限 400（`+triage` 单页上限），超过显示 400。
 - OAuth 账号的 `refresh_token` 和密码一样明文存在 `$DSH_HOME/mailbox/accounts.json`（0600），对外接口只暴露 `auth` 字段，不会把 token 回传前端。
 - Microsoft 侧用的是公开的第一方客户端 ID（`d3590ed6-…`，Office 的公共客户端），因此不需要你注册应用；如果贵司租户通过条件访问策略禁用了设备码流，会在扫码阶段被拒，只能用应用专用密码。
 - Gmail 没有接入扫码：Google 的设备码授权只对「电视与受限输入设备」开放，邮件类受限 scope 拿不到，硬做也只能要你自建 OAuth 客户端。

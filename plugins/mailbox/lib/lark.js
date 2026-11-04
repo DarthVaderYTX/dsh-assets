@@ -89,12 +89,25 @@ export function parseJsonOutput(text) {
   }
 }
 
+/**
+ * 飞书邮件一律以「用户身份」调用。
+ *
+ * 为什么不是应用（bot）身份：个人邮箱属于用户本人，应用身份读不到也不该代管；
+ * lark-cli 的默认身份取决于本机配置（`lark-cli config default-as`），
+ * 所以每条命令都显式带上 `--as user`，不赌配置正确。
+ */
+function asUser(args) {
+  if (!Array.isArray(args) || args[0] !== 'mail') return args;
+  return args.includes('--as') ? args : [...args, '--as', 'user'];
+}
+
 export async function runLark(args, options = {}) {
   const binary = options.binary || resolveLarkBinary();
   if (!binary) throw new LarkError('没找到 lark-cli：请先安装并 `lark-cli auth login --domain mail`');
   const timeout = options.timeoutMs || 60000;
+  const argv = asUser(args);
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, {
+    const child = spawn(binary, argv, {
       cwd: options.cwd || os.tmpdir(),
       env: childEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -106,7 +119,7 @@ export async function runLark(args, options = {}) {
       if (settled) return;
       settled = true;
       child.kill('SIGKILL');
-      reject(new LarkError('lark-cli 超时（' + Math.round(timeout / 1000) + 's）：' + args.slice(0, 2).join(' ')));
+      reject(new LarkError('lark-cli 超时（' + Math.round(timeout / 1000) + 's）：' + argv.slice(0, 2).join(' ')));
     }, timeout);
     child.stdout.on('data', (chunk) => (stdout += chunk.toString('utf8')));
     child.stderr.on('data', (chunk) => (stderr += chunk.toString('utf8')));
@@ -420,7 +433,7 @@ export function watchMail(options = {}) {
   const args = ['mail', '+watch', '--format', 'data', '--msg-format', 'metadata'];
   if (options.mailbox) args.push('--mailbox', options.mailbox);
   if (options.folders) args.push('--folders', JSON.stringify(options.folders));
-  return spawn(binary, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+  return spawn(binary, asUser(args), { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 /** 逐行解析 NDJSON。 */

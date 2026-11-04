@@ -30,7 +30,7 @@ const attachmentServer = http.createServer((req, res) => {
 await new Promise((resolve) => attachmentServer.listen(0, '127.0.0.1', resolve));
 process.env.FAKE_ATTACH_URL = 'http://127.0.0.1:' + attachmentServer.address().port + '/file';
 
-const { FeishuRuntime } = await import('../lib/feishu-runtime.js');
+const { FeishuRuntime, WATCH_TUNING } = await import('../lib/feishu-runtime.js');
 const { apply } = await import('../index.js');
 
 const account = { id: 'feishu_1', kind: 'feishu', label: '飞书', email: 'demo@example.com', username: 'demo@example.com' };
@@ -111,15 +111,42 @@ test('飞书运行时：列信、读信、附件、标已读、发信', async ()
 test('飞书运行时：推送不可用时降级成轮询', async () => {
   const hub = newHub();
   const runtime = new FeishuRuntime(account, hub, () => {});
+  const saved = { ...WATCH_TUNING, retryDelays: [...WATCH_TUNING.retryDelays] };
+  // 把重试等待压到毫秒级，测试只验证「失败 3 次后降级」这条逻辑。
+  Object.assign(WATCH_TUNING, { minAliveMs: 50, retryDelays: [10, 10], reconnectDelay: 10 });
   try {
     runtime.startWatching();
-    for (let i = 0; i < 60 && !runtime.degraded; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+    for (let i = 0; i < 80 && !runtime.degraded; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.equal(runtime.degraded, true);
+    assert.equal(runtime.status.mode, 'poll');
     assert.equal(runtime.status.watching, true);
   } finally {
     runtime.dispose();
+    Object.assign(WATCH_TUNING, saved);
+  }
+});
+
+test('飞书调用一律带 --as user：邮件归用户本人，不走应用身份', async () => {
+  fs.writeFileSync(logFile, '');
+  const runtime = new FeishuRuntime(account, newHub(), () => {});
+  runtime.degraded = true;
+  try {
+    await runtime.list('INBOX', 5);
+    await runtime.listFolders();
+    await runtime.send({ to: ['a@example.com'], subject: 's', text: 't' });
+  } finally {
+    runtime.dispose();
+  }
+  const lines = readLog()
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => line.startsWith('mail '));
+  assert.ok(lines.length >= 3, '应该记录到多次 mail 调用：' + lines.join(' | '));
+  for (const line of lines) {
+    assert.match(line, /--as user/, '缺少 --as user：' + line);
   }
 });
 

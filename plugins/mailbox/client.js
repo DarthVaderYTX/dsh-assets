@@ -85,6 +85,9 @@ window.__ModuleLoader__.load({
       regenerate: '重新生成',
       feishuBadge: '飞书',
       sessionDays: '已保持登录 {days} 天',
+      liveWatch: '实时推送',
+      livePoll: '轮询中',
+      liveStarting: '连接中',
       sessionKept: '凭据只存本机，默认保持登录 30 天，不会反复要密码。',
       authNeeded: '登录态失效，需要重新登录',
       larkMissing: '本机没有安装 lark-cli，无法扫码登录飞书邮箱',
@@ -166,6 +169,9 @@ window.__ModuleLoader__.load({
       regenerate: 'Regenerate',
       feishuBadge: 'Feishu',
       sessionDays: 'Signed in for {days} days',
+      liveWatch: 'Live push',
+      livePoll: 'Polling',
+      liveStarting: 'Connecting',
       sessionKept: 'Credentials stay on this machine; the session is kept for 30 days by default.',
       authNeeded: 'Sign-in expired, please sign in again',
       larkMissing: 'lark-cli is not installed, QR sign-in is unavailable',
@@ -219,6 +225,10 @@ window.__ModuleLoader__.load({
 .mbx-avatar { width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
   background: var(--dsw-alias-bg-layer-2); flex: none; }
 .mbx-picon { display: block; flex: none; object-fit: contain; }
+.mbx-live { flex: none; width: 6px; height: 6px; border-radius: 50%; cursor: help; }
+.mbx-live.is-watch { background: #34C759; }
+.mbx-live.is-poll { background: #FF9F0A; }
+.mbx-live.is-starting { background: var(--dsw-alias-label-secondary); opacity: .5; }
 .mbx-select-row { display: flex; align-items: center; gap: 8px; }
 .mbx-select-icon { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center;
   justify-content: center; background: var(--dsw-alias-bg-layer-2); flex: none; }
@@ -970,6 +980,20 @@ function readColumns() {
                     ),
                     account.status && account.status.error
                       ? h('span', { className: 'mbx-warn', title: account.status.error }, '!')
+                      : null,
+                    account.kind === 'feishu' || (account.status && account.status.mode)
+                      ? h('span', {
+                          className:
+                            'mbx-live is-' +
+                            String((account.status && account.status.mode) || 'starting'),
+                          title: t(
+                            (account.status && account.status.mode) === 'watch'
+                              ? 'liveWatch'
+                              : (account.status && account.status.mode) === 'poll'
+                                ? 'livePoll'
+                                : 'liveStarting',
+                          ),
+                        })
                       : null,
                     h(
                       'button',

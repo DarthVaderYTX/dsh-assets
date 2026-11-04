@@ -19,17 +19,41 @@ import {
   watchMail,
 } from './lark.js';
 
-const POLL_MS = 60000;
+/**
+ * 推送通道的调节参数：轮询间隔、重连节奏、判定「秒退」的阈值。
+ * 抽成对象是为了让测试能把等待时间压到毫秒级。
+ */
+export const WATCH_TUNING = {
+  // 推送不可用时的兜底轮询间隔。15 秒对「实时提醒」够用，也不会把 API 打爆。
+  pollMs: 15000,
+  // 连接活过这个时长就算正常断线，直接重连；否则计入失败次数。
+  minAliveMs: 15000,
+  // 连续失败时的重试间隔；用完还没成功就降级成轮询。
+  retryDelays: [3000, 10000],
+  // 正常断线后的重连等待。
+  reconnectDelay: 3000,
+};
 
 export class FeishuRuntime {
   constructor(account, hub, logger) {
     this.account = account;
     this.hub = hub;
     this.logger = logger;
-    this.status = { connected: false, error: null, unread: 0, lastSync: 0, watching: false, kind: 'feishu' };
+    this.status = {
+      connected: false,
+      error: null,
+      unread: 0,
+      lastSync: 0,
+      watching: false,
+      mode: 'starting',
+      kind: 'feishu',
+    };
     this.disposed = false;
     this.watchChild = null;
     this.pollTimer = null;
+    this.reconnectTimer = null;
+    this.watchLog = '';
+    this.watchFailures = 0;
     this.known = new Set();
     this.degraded = false;
   }
@@ -132,6 +156,7 @@ export class FeishuRuntime {
   }
 
   attachWatch() {
+    if (this.disposed) return;
     let child = null;
     try {
       child = watchMail({ mailbox: this.account.email });
@@ -141,15 +166,31 @@ export class FeishuRuntime {
       return;
     }
     this.watchChild = child;
+    this.status.mode = 'watch';
     this.status.watching = true;
     const startedAt = Date.now();
-    readNdjson(child.stdout, (payload) => this.onPush(payload));
+    this.watchLog = '';
+    readNdjson(child.stdout, (payload) => {
+      this.watchFailures = 0;
+      this.onPush(payload);
+    });
     child.stderr.on('data', (chunk) => {
       const text = chunk.toString('utf8').trim();
-      if (text) this.log('watch stderr: ' + text.slice(0, 200));
+      if (!text) return;
+      // 推送连接的诊断信息量很大，留一截给报错用，不整段进日志。
+      this.watchLog = (this.watchLog + text + '\n').slice(-2000);
+      if (/error|fail|denied|not\s+subscrib|unauthor/i.test(text)) this.log('watch stderr: ' + text.slice(0, 200));
     });
     child.on('error', () => this.onWatchExit(startedAt));
     child.on('close', () => this.onWatchExit(startedAt));
+  }
+
+  lastWatchError() {
+    const lines = String(this.watchLog || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return lines.slice(-1)[0] || '没有更多信息';
   }
 
   onWatchExit(startedAt) {
@@ -157,18 +198,34 @@ export class FeishuRuntime {
     this.status.watching = false;
     if (this.disposed) return;
     const lived = Date.now() - startedAt;
-    // 秒退说明当前应用没有订阅邮件事件，直接降级成轮询，别反复重连。
-    if (lived < 15000) {
-      this.degraded = true;
-      this.log('邮件事件推送不可用（' + Math.round(lived / 1000) + 's 后退出），改用 ' + POLL_MS / 1000 + ' 秒轮询');
-      this.startPolling();
+    // 活得够久说明推送通道本身可用，只是断线，直接重连。
+    if (lived >= WATCH_TUNING.minAliveMs) {
+      this.watchFailures = 0;
+      this.reconnectTimer = setTimeout(() => this.attachWatch(), WATCH_TUNING.reconnectDelay);
       return;
     }
-    setTimeout(() => this.attachWatch(), 5000);
+    this.watchFailures = (this.watchFailures || 0) + 1;
+    if (this.watchFailures <= WATCH_TUNING.retryDelays.length) {
+      const delay = WATCH_TUNING.retryDelays[this.watchFailures - 1];
+      this.log('新邮件推送连接失败（' + Math.round(lived / 1000) + 's 退出），' + delay / 1000 + 's 后重试');
+      this.reconnectTimer = setTimeout(() => this.attachWatch(), delay);
+      return;
+    }
+    this.degraded = true;
+    this.log(
+      '新邮件推送不可用（连续 ' +
+        this.watchFailures +
+        ' 次失败），改用 ' +
+        WATCH_TUNING.pollMs / 1000 +
+        ' 秒轮询：' +
+        this.lastWatchError(),
+    );
+    this.startPolling();
   }
 
   startPolling() {
     if (this.pollTimer || this.disposed) return;
+    this.status.mode = 'poll';
     this.status.watching = true;
     const tick = async () => {
       if (this.disposed) return;
@@ -188,7 +245,7 @@ export class FeishuRuntime {
         this.status.error = error?.message || String(error);
       }
       if (this.disposed) return;
-      this.pollTimer = setTimeout(tick, POLL_MS);
+      this.pollTimer = setTimeout(tick, WATCH_TUNING.pollMs);
     };
     tick().catch(() => undefined);
   }
@@ -231,6 +288,10 @@ export class FeishuRuntime {
     if (this.pollTimer) {
       clearTimeout(this.pollTimer);
       this.pollTimer = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
     try {
       this.watchChild?.kill('SIGTERM');
