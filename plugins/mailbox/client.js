@@ -934,7 +934,15 @@ window.__ModuleLoader__.load({
         modals.push(
           h(
             'div',
-            { key: 'add', className: 'mbx-modal', onClick: () => (addForm.busy ? null : setAddForm(null)) },
+            {
+              key: 'add',
+              className: 'mbx-modal',
+              onClick: () => {
+                if (addForm.busy) return;
+                cancelQr();
+                setAddForm(null);
+              },
+            },
             h(
               'div',
               { className: 'mbx-modal-card', onClick: (event) => event.stopPropagation() },
@@ -942,7 +950,14 @@ window.__ModuleLoader__.load({
                 'div',
                 { className: 'mbx-modal-title' },
                 h('span', null, t('addAccount')),
-                h('button', { type: 'button', className: 'mbx-link', onClick: () => setAddForm(null) }, '✕'),
+                h('button', {
+                  type: 'button',
+                  className: 'mbx-link',
+                  onClick: () => {
+                    cancelQr();
+                    setAddForm(null);
+                  },
+                }, '✕'),
               ),
               h(
                 'div',
