@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'dsh-pet';
     const STORE_KEY = 'dsh.pet.v1';
-    const SCALE = 3; // 32×36 的像素格 → 96×108
+    const SCALE = 2; // 48×54 的像素格 → 96×108
     const TICK_MS = 110;
     const HAPPY_MS = 950;
     const BUBBLE_MS = 1700;
@@ -15,13 +15,13 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------ 精灵开始
     // #region sprite
 
-// 像素宠物精灵：32×36 网格，几何铺色 + 自动描边 + 体积明暗 + 品种花纹。
+// 像素宠物精灵：48×54 网格，几何铺色 + 自动描边 + 体积明暗 + 品种花纹。
 // 纯函数、不依赖 React；按帧参数生成（呼吸 / 眨眼 / 尾巴 / 表情 / 耳朵）。
+// 坐标就是格子坐标（1 格 = 1 像素），换分辨率只改 W/H 和几何常量。
 
-const W = 32;
-const H = 36;
+const W = 48;
+const H = 54;
 
-/** 七个品种：耳朵形状、花纹、以及后面动画用的性格参数在 pet.js 里。 */
 const BREEDS = {
   tabby: { species: 'cat', ear: 'pointy', pattern: 'tabby' },
   white: { species: 'cat', ear: 'pointy', pattern: 'none' },
@@ -33,37 +33,30 @@ const BREEDS = {
 };
 
 const PALETTES = {
-  // 狸花：灰褐底 + 深色虎斑
   tabby: {
     o: '#3a2c22', f: '#b09a7c', F: '#6f5c47', L: '#d3c2a6', w: '#f4ead6',
     p: '#f0a0b4', i: '#8fbf5e', s: '#ffffff', e: '#2a1d17', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a',
   },
-  // 白猫
   white: {
     o: '#8c7f74', f: '#fdfaf4', F: '#e6dcd0', L: '#ffffff', w: '#ffffff',
     p: '#ffb3c6', i: '#79b9e6', s: '#ffffff', e: '#3a3230', t: '#ff8fa8', r: '#e0563f', g: '#e8c05a',
   },
-  // 黑猫
   black: {
     o: '#141115', f: '#443b49', F: '#302a35', L: '#6f6679', w: '#574f5e',
-    p: '#c98a9c', i: '#f2c14e', s: '#fff6c9', e: '#12100f', t: '#e08aa0', r: '#e0563f', g: '#e8c05a',
+    p: '#c98a9c', i: '#f2c14e', s: '#fff6c9', e: '#0f0d0c', t: '#e08aa0', r: '#e0563f', g: '#e8c05a',
   },
-  // 金渐层：奶油底、毛尖带金
   chinchilla: {
     o: '#584636', f: '#f0e0c0', F: '#d8c49c', L: '#fff8e6', w: '#fffaf0',
     p: '#ffb3c6', i: '#86b96b', s: '#ffffff', e: '#3a2f26', t: '#ff8fa8', r: '#e0563f', g: '#d9a94e',
   },
-  // 金毛
   golden: {
     o: '#4a2f18', f: '#e6a955', F: '#c1843a', L: '#f8d191', w: '#fff1d9',
     p: '#f0a0b4', i: '#5a3a1e', s: '#ffffff', e: '#2b1d14', t: '#ff7f9c', r: '#d94f3d', g: '#e8c05a',
   },
-  // 萨摩耶
   samoyed: {
     o: '#6f6862', f: '#fdfbf6', F: '#e4ded4', L: '#ffffff', w: '#ffffff',
     p: '#ffb3c6', i: '#3c3029', s: '#ffffff', e: '#2b211d', t: '#ff8fa8', r: '#5aa0e0', g: '#e8c05a',
   },
-  // 哈士奇
   husky: {
     o: '#33383d', f: '#98a0a7', F: '#4c5259', L: '#cdd4da', w: '#fdfbf7',
     p: '#ffb3c6', i: '#7ec8e3', s: '#ffffff', e: '#201c1a', t: '#ff8fa8', r: '#d94f3d', g: '#e8c05a',
@@ -79,40 +72,79 @@ function put(g, x, y, ch) {
   g[iy][ix] = ch;
 }
 
-function ellipse(g, cx, cy, rx, ry, ch) {
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W; x += 1) {
-      const dx = (x + 0.5 - cx) / rx;
-      const dy = (y + 0.5 - cy) / ry;
-      if (dx * dx + dy * dy <= 1) g[y][x] = ch;
+function rect(g, x, y, w, h, ch) {
+  for (let iy = Math.round(y); iy < Math.round(y + h); iy += 1) {
+    for (let ix = Math.round(x); ix < Math.round(x + w); ix += 1) {
+      if (ix < 0 || iy < 0 || ix >= W || iy >= H) continue;
+      g[iy][ix] = ch;
     }
   }
 }
 
-function rounded(g, x0, y0, w, h, ch, radius) {
-  for (let y = y0; y < y0 + h; y += 1) {
-    for (let x = x0; x < x0 + w; x += 1) {
-      const cx = Math.min(Math.max(x + 0.5, x0 + radius), x0 + w - radius);
-      const cy = Math.min(Math.max(y + 0.5, y0 + radius), y0 + h - radius);
-      const dx = x + 0.5 - cx;
-      const dy = y + 0.5 - cy;
-      if (dx * dx + dy * dy > radius * radius) continue;
-      put(g, x, y, ch);
+function ellipse(g, cx, cy, rx, ry, ch) {
+  for (let iy = 0; iy < H; iy += 1) {
+    for (let ix = 0; ix < W; ix += 1) {
+      const dx = (ix + 0.5 - cx) / rx;
+      const dy = (iy + 0.5 - cy) / ry;
+      if (dx * dx + dy * dy <= 1) g[iy][ix] = ch;
     }
   }
 }
 
 function triangle(g, a, b, c, ch) {
   const cross = (p, q, r) => (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1]);
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W; x += 1) {
-      const p = [x + 0.5, y + 0.5];
+  for (let iy = 0; iy < H; iy += 1) {
+    for (let ix = 0; ix < W; ix += 1) {
+      const p = [ix + 0.5, iy + 0.5];
       const d1 = cross(p, a, b);
       const d2 = cross(p, b, c);
       const d3 = cross(p, c, a);
       const neg = d1 < 0 || d2 < 0 || d3 < 0;
       const pos = d1 > 0 || d2 > 0 || d3 > 0;
-      if (!(neg && pos)) g[y][x] = ch;
+      if (!(neg && pos)) g[iy][ix] = ch;
+    }
+  }
+}
+
+/** 圆角矩形：坐姿身体用。 */
+function round(g, x, y, w, h, r, ch) {
+  for (let iy = 0; iy < H; iy += 1) {
+    for (let ix = 0; ix < W; ix += 1) {
+      const px = ix + 0.5;
+      const py = iy + 0.5;
+      if (px < x || px > x + w || py < y || py > y + h) continue;
+      const cx = Math.min(Math.max(px, x + r), x + w - r);
+      const cy = Math.min(Math.max(py, y + r), y + h - r);
+      const dx = px - cx;
+      const dy = py - cy;
+      if (dx * dx + dy * dy > r * r) continue;
+      g[iy][ix] = ch;
+    }
+  }
+}
+
+/** 1 像素宽的线。 */
+function line(g, x0, y0, x1, y1, ch) {
+  let ax = Math.round(x0);
+  let ay = Math.round(y0);
+  const bx = Math.round(x1);
+  const by = Math.round(y1);
+  const dx = Math.abs(bx - ax);
+  const dy = Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1;
+  const sy = ay < by ? 1 : -1;
+  let err = dx - dy;
+  for (let guard = 0; guard < 400; guard += 1) {
+    if (ax >= 0 && ay >= 0 && ax < W && ay < H) g[ay][ax] = ch;
+    if (ax === bx && ay === by) break;
+    const e2 = err * 2;
+    if (e2 > -dy) {
+      err -= dy;
+      ax += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      ay += sy;
     }
   }
 }
@@ -121,6 +153,37 @@ function mirror(g) {
   for (let y = 0; y < H; y += 1) {
     for (let x = 0; x < W / 2; x += 1) g[y][W - 1 - x] = g[y][x];
   }
+}
+
+/** 把左半边的一块翻到右半边（眼睛、眉毛用，保证严格对称）。 */
+function mirrorRegion(g, x0, y0, w, h) {
+  for (let y = y0; y < y0 + h; y += 1) {
+    for (let x = x0; x < x0 + w; x += 1) {
+      const tx = W - 1 - x;
+      if (y < 0 || y >= H || tx < 0 || tx >= W || x < 0 || x >= W) continue;
+      g[y][tx] = g[y][x];
+    }
+  }
+}
+
+/** 耳朵和脑袋的接缝会留下一格宽的裂缝，补掉再描边。 */
+function closeGaps(g) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let y = 1; y < H - 1; y += 1) {
+      for (let x = 1; x < W - 1; x += 1) {
+        if (g[y][x] !== '.') continue;
+        const n = (g[y][x - 1] !== '.' ? 1 : 0) + (g[y][x + 1] !== '.' ? 1 : 0) +
+          (g[y - 1][x] !== '.' ? 1 : 0) + (g[y + 1][x] !== '.' ? 1 : 0);
+        if (n >= 3) {
+          g[y][x] = 'f';
+          changed = true;
+        }
+      }
+    }
+  }
+  return g;
 }
 
 function outlined(g) {
@@ -149,37 +212,46 @@ function rimShadow(rows) {
   return rows;
 }
 
-// --------------------------------------------------------------- 形体
+function dither(rows, ch, from, step = 2) {
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if ((x + y) % step !== 0) continue;
+      if (from.includes(rows[y][x])) rows[y][x] = ch;
+    }
+  }
+  return rows;
+}
 
-function drawEars(g, breed, frame) {
-  const ear = BREEDS[breed].ear;
-  const twitch = frame.ear ? 1 : 0;
+// ---------------------------------------------------------------- 耳朵
 
-  if (ear === 'pointy') {
-    // 猫：尖耳 + 圆底
-    ellipse(g, 9.4, 9.0 - twitch * 0.6, 3.4, 3.4, 'f');
-    triangle(g, [6.6 - twitch * 0.9, 1.2 + twitch * 0.5], [4.6, 10.0], [12.8, 7.4], 'f');
-    mirror(g);
+function ears(g, breed, frame) {
+  const art = BREEDS[breed];
+  const t = frame.ear ? 1 : 0;
+
+  if (art.ear === 'pointy') {
+    // 猫：大三角 + 圆底
+    triangle(g, [10 - t * 1.2, 2 + t * 0.8], [6.5, 16], [21, 10.5], 'f');
+    ellipse(g, 12.8, 14.6 - t * 0.4, 4.8, 4.6, 'f');
+    // 耳窝
+    triangle(g, [11.4 - t * 1.0, 7.4 + t * 0.7], [10.2, 13.2], [15.6, 11.4], 'p');
     return;
   }
 
-  if (ear === 'prick') {
-    // 萨摩耶 / 哈士奇：立耳，三角更厚，左右张开
-    triangle(g, [7.0 - twitch * 0.8, 1.0 + twitch * 0.4], [4.8, 9.6], [12.4, 6.6], 'f');
-    ellipse(g, 9.2, 8.4 - twitch * 0.5, 2.8, 2.8, 'f');
-    mirror(g);
-    return;
+  if (art.ear === 'prick') {
+    // 萨摩耶 / 哈士奇：立耳，窄而高
+    triangle(g, [11.5 - t * 1.0, 2.5 + t * 0.6], [8, 16], [20, 11], 'f');
+    ellipse(g, 13.0, 14.6 - t * 0.4, 4.2, 4.0, 'f');
+    triangle(g, [12.4 - t * 0.8, 7.6 + t * 0.5], [10.8, 13.0], [15.8, 11.4], 'p');
   }
-
-  // 金毛：垂耳（头画完再压上去）
 }
 
-function drawFloppy(g, frame) {
-  const drop = frame.ear ? 0.8 : 0;
-  ellipse(g, 8.2, 12.0 + drop, 2.0, 5.0, 'F');
-  ellipse(g, 7.8, 16.0 + drop, 1.9, 1.9, 'F');
-  mirror(g);
+function floppyEars(g, frame) {
+  const drop = frame.ear ? 1.2 : 0;
+  ellipse(g, 12.4, 21.0 + drop, 3.2, 7.0, 'F');
+  ellipse(g, 11.8, 27.2 + drop, 2.9, 2.8, 'F');
 }
+
+// ---------------------------------------------------------------- 形体
 
 function bodyShape(breed, frame) {
   const art = BREEDS[breed];
@@ -187,207 +259,217 @@ function bodyShape(breed, frame) {
   const g = blank();
   const bob = frame.breath ? -1 : 0;
 
-  rounded(g, 9, 20, 15, 14, 'f', 5);
-  drawEars(g, breed, frame);
+  // 身体
+  round(g, 16.5, 33, 15, 18.5, 6, 'f');
+  ellipse(g, 24, 40, 8, 7.2, 'f');
 
-  ellipse(g, 16, 13.4 + bob, 8.4, 7.6, 'f');
+  // 耳朵先画，再被脑袋压住下半截，耳窝就不会溢到脸上
+  ears(g, breed, frame);
+  mirror(g);
 
-  if (art.ear === 'floppy') drawFloppy(g, frame);
+  // 头
+  ellipse(g, 24, 22 + bob, 13.5, 12.4, 'f');
 
-  if (cat) ellipse(g, 16, 17.6 + bob, 4.8, 3.0, 'w');
-  else ellipse(g, 16, 17.8 + bob, 5.6, 3.8, 'w');
+  if (art.ear === 'floppy') {
+    floppyEars(g, frame);
+    mirror(g);
+  }
 
-  ellipse(g, 16, 29.6, 4.6, 4.2, 'w');
-  ellipse(g, 13.0, 33.4, 2.6, 1.5, 'w');
+  // 口鼻 / 胸腹 / 前爪
+  if (cat) ellipse(g, 24, 30.4 + bob, 6.8, 4.2, 'w');
+  else ellipse(g, 24, 30.2 + bob, 6.6, 4.6, 'w');
+
+  ellipse(g, 24, 43.6, 4.8, 5.0, 'w');
+  ellipse(g, 20.0, 51.0, 3.0, 2.0, 'w');
   mirror(g);
 
   return g;
 }
 
-// --------------------------------------------------------------- 花纹
+// ---------------------------------------------------------------- 花纹
 
-function paintPattern(rows, breed, frame) {
-  const pattern = BREEDS[breed].pattern;
+function pattern(rows, breed, frame) {
+  const art = BREEDS[breed];
   const bob = frame.breath ? -1 : 0;
-  const only = (x, y, ch, allowed) => {
-    if (y < 0 || y >= H || x < 0 || x >= W) return;
+  const on = (x, y, ch, allowed) => {
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
     if (allowed.includes(rows[y][x])) rows[y][x] = ch;
   };
   const fur = ['f', 'F', 'L'];
 
-  if (pattern === 'tabby') {
-    // 额头三道虎斑 + 两颊各一道 + 身上两道 + 尾巴环
-    for (const [x, y, w] of [[14, 8, 1], [16, 8, 1], [18, 8, 1], [14, 9, 1], [16, 9, 1], [18, 9, 2]]) {
-      for (let i = 0; i < w; i += 1) only(x + i, y + bob, 'F', fur);
+  if (art.pattern === 'tabby') {
+    // 额头三竖 + 一道横，凑成虎斑的「王」
+    for (const x of [20, 24, 28]) {
+      for (let y = 12 + bob; y < 18 + bob; y += 1) on(x, y, 'F', fur);
     }
-    for (const [x, y] of [[8, 14], [9, 14], [8, 15], [9, 15], [22, 14], [23, 14], [22, 15], [23, 15]]) {
-      only(x, y + bob, 'F', fur);
+    for (let x = 19; x < 30; x += 1) on(x, 12 + bob, 'F', fur);
+    // 两颊各两道
+    for (const [x, y] of [[12, 24], [13, 25], [12, 27], [13, 28], [35, 24], [34, 25], [35, 27], [34, 28]]) {
+      on(x, y + bob, 'F', fur);
     }
-    for (const [x, y] of [[11, 24], [12, 24], [11, 25], [12, 25], [19, 24], [20, 24], [19, 25], [20, 25]]) {
-      only(x, y, 'F', fur);
-    }
-  }
-
-  if (pattern === 'gold') {
-    // 金渐层：头顶到背脊的金色毛尖
-    for (const [x, y] of [[13, 7], [14, 7], [17, 7], [18, 7], [13, 8], [18, 8], [12, 9], [19, 9]]) {
-      only(x, y + bob, 'g', fur);
-    }
-    for (const [x, y] of [[11, 22], [12, 22], [19, 22], [20, 22], [11, 23], [20, 23], [10, 24], [21, 24]]) {
-      only(x, y, 'g', fur);
+    // 身上三道
+    for (const [x, y] of [[17, 40], [18, 41], [30, 40], [29, 41], [17, 44], [30, 44], [18, 47], [29, 47]]) {
+      on(x, y, 'F', fur);
     }
   }
 
-  if (pattern === 'sheen') {
-    // 黑猫：一道冷调高光，避免整只糊成一团
-    for (const [x, y] of [[12, 7], [13, 6], [14, 6], [12, 8], [11, 10], [10, 11], [10, 12]]) {
-      only(x, y + bob, 'L', fur);
+  if (art.pattern === 'gold') {
+    for (const [x, y] of [[19, 11], [20, 11], [28, 11], [27, 11], [22, 10], [23, 10], [25, 10], [26, 10],
+      [17, 12], [30, 12], [15, 14], [32, 14]]) {
+      on(x, y + bob, 'g', fur);
     }
-    for (const [x, y] of [[12, 26], [11, 27], [12, 27], [13, 28]]) only(x, y, 'L', fur);
+    for (const [x, y] of [[17, 37], [18, 38], [29, 37], [16, 40], [31, 40]]) on(x, y, 'g', fur);
   }
 
-  if (pattern === 'mask') {
-    // 哈士奇：额头白色火焰纹 + 头顶深色帽子
-    for (const [x, y] of [[15, 6], [16, 6], [15, 7], [16, 7], [15, 8], [16, 8], [15, 9], [16, 9], [15, 10], [16, 10]]) {
-      only(x, y + bob, 'w', fur);
+  if (art.pattern === 'sheen') {
+    line(rows, 16, 11, 13, 16, 'L');
+    line(rows, 17, 12, 14, 16, 'L');
+  }
+
+  if (art.pattern === 'mask') {
+    // 额头白色火焰纹
+    for (let y = 11 + bob; y < 25 + bob; y += 1) {
+      on(23, y, 'w', fur);
+      on(24, y, 'w', fur);
+      on(25, y, 'w', fur);
     }
-    for (const [x, y] of [[10, 6], [11, 6], [12, 6], [19, 6], [20, 6], [21, 6], [9, 7], [22, 7], [9, 8], [22, 8]]) {
-      only(x, y + bob, 'F', fur);
-    }
+    // 眼周深色帽子
+    ellipse(rows, 15.6, 15.5 + bob, 4.8, 3.4, 'F');
+    ellipse(rows, 32.4, 15.5 + bob, 4.8, 3.4, 'F');
     // 耳尖压深
-    for (const [x, y] of [[7, 2], [8, 3], [7, 3], [24, 2], [23, 3], [24, 3]]) only(x, y + bob, 'F', fur);
+    for (const [x, y] of [[10, 4], [11, 6], [12, 8], [37, 4], [36, 6], [35, 8]]) on(x, y + bob, 'F', fur);
   }
 
-  if (pattern === 'fluff') {
-    // 萨摩耶：耳缘一圈浅灰，撑出蓬松感
-    for (const [x, y] of [[7, 4], [8, 5], [24, 4], [23, 5], [6, 6], [25, 6], [6, 7], [25, 7]]) {
-      only(x, y + bob, 'F', fur);
+  if (art.pattern === 'fluff') {
+    for (const [x, y] of [[9.6, 8], [10, 10], [10.6, 12], [38, 8], [37.6, 10], [37, 12]]) {
+      on(Math.round(x), y + bob, 'F', fur);
     }
   }
 
   return rows;
 }
 
-// --------------------------------------------------------------- 五官
+// ---------------------------------------------------------------- 五官
+
+function drawEye(g, kind) {
+  const cx = 17.5;
+  const cy = 23;
+
+  if (kind === 'happy') {
+    line(g, cx - 3.2, cy + 1.2, cx - 1.4, cy - 1.8, 'o');
+    line(g, cx - 1.4, cy - 1.8, cx + 1.4, cy + 1.2, 'o');
+    line(g, cx + 1.4, cy + 1.2, cx + 3.2, cy - 1.2, 'o');
+    return;
+  }
+
+  if (kind === 'closed') {
+    line(g, cx - 3.2, cy + 0.4, cx - 1.4, cy + 1.8, 'o');
+    line(g, cx - 1.4, cy + 1.8, cx + 1.4, cy + 1.8, 'o');
+    line(g, cx + 1.4, cy + 1.8, cx + 3.2, cy + 0.4, 'o');
+    return;
+  }
+
+  if (kind === 'half') {
+    ellipse(g, cx, cy + 1, 3.0, 1.5, 'e');
+    ellipse(g, cx, cy + 1.2, 3.0, 0.9, 'i');
+    for (const x of [-3.2, 3.2]) ellipse(g, cx + x, cy + 0.4, 0.9, 1.1, 'o');
+    return;
+  }
+
+  // 睁眼：外框 → 虹膜 → 瞳孔 → 高光
+  ellipse(g, cx, cy, 4.0, 4.7, 'o');
+  ellipse(g, cx, cy + 0.3, 3.2, 3.9, 'i');
+  ellipse(g, cx, cy + 0.5, 1.3, 2.6, 'e');
+  rect(g, cx - 2.6, cy - 2.9, 2.0, 1.8, 's');
+  rect(g, cx + 1.2, cy + 2.2, 1.2, 1.2, 's');
+}
+
+function eyeGrid(breed, frame) {
+  const g = blank();
+  const bob = frame.breath ? -1 : 0;
+  const shifted = blank();
+  drawEye(shifted, frame.eyes || 'open');
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W / 2; x += 1) {
+      if (shifted[y][x] === '.') continue;
+      const ty = y + bob;
+      if (ty < 0 || ty >= H) continue;
+      g[ty][x] = shifted[y][x];
+      g[ty][W - 1 - x] = shifted[y][x];
+    }
+  }
+  return g;
+}
 
 function drawFace(rows, breed, frame) {
   const cat = BREEDS[breed].species === 'cat';
   const bob = frame.breath ? -1 : 0;
-  const noseY = 16 + bob;
   const tongue = frame.happy || frame.tongue;
-  // 开心时嘴角往两边咧开一格，和待机区分开
   const smile = frame.happy;
 
+  // 鼻子
   if (cat) {
-    for (const x of [14, 15, 16, 17]) put(rows, x, noseY, 'p');
-    for (const x of [15, 16]) put(rows, x, noseY + 1, 'p');
-    put(rows, 14, noseY + 2, 'o');
-    put(rows, 17, noseY + 2, 'o');
-    if (smile) {
-      put(rows, 13, noseY + 2, 'o');
-      put(rows, 18, noseY + 2, 'o');
-    }
-    if (tongue) {
-      for (const x of [15, 16]) {
-        put(rows, x, noseY + 3, 'o');
-        put(rows, x, noseY + 4, 't');
-      }
-    } else {
-      put(rows, 15, noseY + 3, 'o');
-      put(rows, 16, noseY + 3, 'o');
-    }
+    triangle(rows, [21.5, 26.6 + bob], [26.5, 26.6 + bob], [24, 29.4 + bob], 'p');
+    line(rows, 24, 28.6 + bob, 24, 30.2 + bob, 'o');
   } else {
-    ellipse(rows, 16, noseY + 0.6, 2.2, 1.6, 'e');
-    put(rows, 15, noseY - 0.2, 's');
-    put(rows, 16, noseY - 0.2, 's');
-    put(rows, 14, noseY + 2, 'o');
-    put(rows, 17, noseY + 2, 'o');
-    if (smile) {
-      put(rows, 13, noseY + 2, 'o');
-      put(rows, 18, noseY + 2, 'o');
-    }
-    if (tongue) {
-      for (const x of [15, 16]) {
-        put(rows, x, noseY + 3, 'o');
-        put(rows, x, noseY + 4, 't');
-        put(rows, x, noseY + 5, 't');
-      }
-    } else {
-      put(rows, 15, noseY + 3, 'o');
-      put(rows, 16, noseY + 3, 'o');
-    }
-    for (const x of [11, 12, 19, 20]) put(rows, x, 9 + bob, 'F');
+    ellipse(rows, 24, 27.0 + bob, 2.8, 2.2, 'e');
+    rect(rows, 22.2, 25.8 + bob, 1.4, 1.0, 's');
+    line(rows, 24, 28.8 + bob, 24, 30.4 + bob, 'o');
+    // 眉毛点
+    for (const [x, y] of [[14, 17], [16, 16], [32, 17], [34, 16]]) put(rows, x, y + bob, 'F');
   }
 
-  return rows;
+  // 嘴
+  const my = 31 + bob;
+  line(rows, 24, 30.2 + bob, 24, my, 'o');
+  line(rows, 24, my, 21.5, my + (smile ? 1.4 : 0.8), 'o');
+  line(rows, 24, my, 26.5, my + (smile ? 1.4 : 0.8), 'o');
+
+  if (tongue) {
+    rect(rows, 22.6, my + 1.2, 2.8, cat ? 1.8 : 2.6, 't');
+    line(rows, 24, my + 2.0, 24, my + (cat ? 3.0 : 3.8), 'e');
+  }
 }
 
-/** 眼睛模板：5×5，'i' 是虹膜（颜色随品种）。 */
-function eyeTemplate(kind) {
-  if (kind === 'happy') {
-    return [[0, 3, 'o'], [1, 2, 'o'], [2, 1, 'o'], [3, 2, 'o'], [4, 3, 'o']];
-  }
-  if (kind === 'closed') {
-    return [[0, 3, 'o'], [1, 3, 'o'], [2, 3, 'o'], [3, 3, 'o'], [4, 3, 'o'],
-            [1, 2, 'o'], [3, 2, 'o']];
-  }
-  if (kind === 'half') {
-    return [[0, 3, 'o'], [1, 3, 'o'], [2, 3, 'o'], [3, 3, 'o'], [4, 3, 'o'],
-            [0, 2, 'o'], [4, 2, 'o'], [1, 2, 'i'], [2, 2, 'i'], [3, 2, 'i']];
-  }
-  return [
-    [1, 0, 'o'], [2, 0, 'o'], [3, 0, 'o'],
-    [0, 1, 'o'], [1, 1, 's'], [2, 1, 'i'], [3, 1, 'i'], [4, 1, 'o'],
-    [0, 2, 'o'], [1, 2, 'i'], [2, 2, 'i'], [3, 2, 'i'], [4, 2, 'o'],
-    [0, 3, 'o'], [1, 3, 'i'], [2, 3, 'i'], [3, 3, 'i'], [4, 3, 'o'],
-    [1, 4, 'o'], [2, 4, 'o'], [3, 4, 'o'],
-  ];
-}
-
-function eyeAnchors(frame) {
-  const bob = frame.breath ? -1 : 0;
-  return [{ x: 9, y: 11 + bob }, { x: 18, y: 11 + bob }];
-}
-
-// --------------------------------------------------------------- 尾巴
+// ---------------------------------------------------------------- 尾巴
 
 function tailShape(breed, frame) {
   const art = BREEDS[breed];
   const g = blank();
-  const sway = [-2.6, 0, 2.6, 0][((frame.tail % 4) + 4) % 4];
-  const bezier = (p0, p1, p2, t) => [
+  const sway = [-3.0, 0, 3.0, 0][((frame.tail % 4) + 4) % 4];
+  const bez = (p0, p1, p2, t) => [
     (1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
     (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1],
   ];
 
   if (art.species === 'cat') {
-    const p0 = [20.6, 29.8];
-    const p1 = [28.6, 33.6];
-    const p2 = [28.8, 25.8];
+    const p0 = [30, 47];
+    const p1 = [44, 47];
+    const p2 = [37, 29];
     const ring = art.pattern === 'tabby';
-    for (let i = 0; i <= 18; i += 1) {
-      const t = i / 18;
-      const [x, y] = bezier(p0, p1, p2, t);
-      // 狸花尾巴一节一节
-      ellipse(g, x + sway * t * 1.2, y, 1.6, 1.6, ring && i % 6 >= 3 ? 'F' : 'f');
+    for (let i = 0; i <= 30; i += 1) {
+      const t = i / 30;
+      const [x, y] = bez(p0, p1, p2, t);
+      const band = ring && Math.floor(t * 7) % 2 === 1;
+      ellipse(g, x + sway * t * 1.1, y, 2.1, 2.1, band ? 'F' : 'f');
     }
-    const [tx, ty] = bezier(p0, p1, p2, 1);
-    ellipse(g, tx + sway * 1.2, ty, 1.7, 1.7, ring ? 'F' : art.pattern === 'gold' ? 'g' : 'w');
+    const [tx, ty] = bez(p0, p1, p2, 1);
+    ellipse(g, tx + sway * 1.1, ty, 2.4, 2.4, ring ? 'F' : art.pattern === 'gold' ? 'g' : 'w');
   } else {
-    const p0 = [20.8, 29.6];
-    const p1 = [28.4, 33.2];
-    const p2 = [28.2, 25.4];
-    for (let i = 0; i <= 12; i += 1) {
-      const t = i / 12;
-      const [x, y] = bezier(p0, p1, p2, t);
-      ellipse(g, x + sway * t, y, 1.9, 1.9, 'F');
+    const p0 = [30, 48];
+    const p1 = [44, 49];
+    const p2 = [41, 34];
+    for (let i = 0; i <= 22; i += 1) {
+      const t = i / 22;
+      const [x, y] = bez(p0, p1, p2, t);
+      ellipse(g, x + sway * t, y, 2.3, 2.3, t > 0.86 ? 'F' : 'f');
     }
   }
 
   return outlined(g);
 }
 
-// --------------------------------------------------------------- 组装
+// ---------------------------------------------------------------- 组装
 
 function buildSprite(breed, frame = {}) {
   const key = BREEDS[breed] ? breed : 'tabby';
@@ -400,36 +482,32 @@ function buildSprite(breed, frame = {}) {
     ear: frame.ear ? 1 : 0,
   };
 
-  const body = bodyShape(key, f);
+  const body = closeGaps(bodyShape(key, f));
   let rows = outlined(body);
   rows = rimShadow(rows);
-  paintPattern(rows, key, f);
+  rows = pattern(rows, key, f);
 
   // 头顶高光
-  for (const [x, y] of [[11, 9], [12, 9], [11, 10], [12, 10], [13, 9]]) {
-    if (rows[y][x] === 'f' || rows[y][x] === 'F') rows[y][x] = 'L';
+  const hb = f.breath ? -1 : 0;
+  for (const [x, y] of [[16, 13], [17, 12], [18, 12], [16, 14], [17, 13], [19, 13]]) {
+    if (rows[y + hb] && (rows[y + hb][x] === 'f' || rows[y + hb][x] === 'F')) rows[y + hb][x] = 'L';
   }
 
   drawFace(rows, key, f);
 
-  // 狗戴项圈：金毛红、萨摩耶蓝、哈士奇红
+  // 狗戴项圈
   if (BREEDS[key].species === 'dog') {
-    const y0 = 20;
-    for (let x = 10; x <= 21; x += 1) {
-      for (const y of [y0, y0 + 1]) {
+    for (let y = 33; y < 37; y += 1) {
+      for (let x = 16; x < 32; x += 1) {
         if (rows[y][x] !== '.' && rows[y][x] !== 'o') rows[y][x] = 'r';
       }
     }
-    for (const y of [y0 + 1, y0 + 2]) {
-      put(rows, 15, y, 'g');
-      put(rows, 16, y, 'g');
-    }
+    rect(rows, 22.6, 35.6, 2.8, 2.6, 'g');
   }
 
   return { body: rows, tail: tailShape(key, f), eyes: f.eyes };
 }
 
-/** 同色的横向连续格子并成一条 path，整只宠物只需要几个 <path>。 */
 function spritePaths(rows) {
   const byColor = new Map();
   for (const { x, y, w, ch } of spriteSpans(rows)) {
@@ -563,16 +641,6 @@ function spriteSpans(rows) {
     };
 
     const rand = ([min, max]) => min + Math.random() * (max - min);
-
-    /** 把眼睛模板摆到脸上，单独一层好让它跟着鼠标转。 */
-    function eyeGrid(frame) {
-      const g = blank();
-      const template = eyeTemplate(frame.eyes);
-      for (const { x, y } of eyeAnchors(frame)) {
-        for (const [dx, dy, ch] of template) put(g, x + dx, y + dy, ch);
-      }
-      return g;
-    }
 
     // ------------------------------------------------------------------ 文案
     const ZH = {
@@ -852,7 +920,7 @@ function spriteSpans(rows) {
       );
       const body = React.useMemo(() => spritePaths(sprite.body), [sprite]);
       const tail = React.useMemo(() => spritePaths(sprite.tail), [sprite]);
-      const eyes = React.useMemo(() => spritePaths(eyeGrid(frame)), [frame.breath, frame.eyes]);
+      const eyes = React.useMemo(() => spritePaths(eyeGrid(breed, frame)), [breed, frame.breath, frame.eyes]);
 
       const paint = (paths, keyPrefix) =>
         paths.map(({ ch, d }) => h('path', { key: keyPrefix + ch, d, fill: palette[ch] || '#000000' }));
@@ -881,7 +949,7 @@ function spriteSpans(rows) {
       const palette = PALETTES[breed] || PALETTES.tabby;
       const head = React.useMemo(() => {
         const sprite = buildSprite(breed, { breath: 0, tail: 0, eyes: 'open' });
-        return [...spritePaths(sprite.body), ...spritePaths(eyeGrid({ breath: 0, eyes: 'open' }))];
+        return [...spritePaths(sprite.body), ...spritePaths(eyeGrid(breed, { breath: 0, eyes: 'open' }))];
       }, [breed]);
       return h(
         'svg',

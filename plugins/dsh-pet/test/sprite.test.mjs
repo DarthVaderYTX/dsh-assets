@@ -13,7 +13,7 @@ function loadSprite() {
   assert.ok(start > 0 && end > start, 'client.js 里找不到精灵代码区');
   return new Function(
     `${source.slice(start, end)}
-     return { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeTemplate, eyeAnchors, blank, put };`,
+     return { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank };`,
   )();
 }
 
@@ -26,7 +26,7 @@ function loadTraits() {
     return TRAITS;`)();
 }
 
-const { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeTemplate, eyeAnchors, blank, put } = loadSprite();
+const { W, H, BREEDS, PALETTES, buildSprite, spritePaths, eyeGrid, blank } = loadSprite();
 const TRAITS = loadTraits();
 const BREED_IDS = Object.keys(BREEDS);
 const EYES = ['open', 'half', 'closed', 'happy'];
@@ -43,8 +43,8 @@ const frameOf = (patch = {}) => ({ breath: 0, tail: 0, eyes: 'open', happy: fals
 
 test('七个品种都有形体和配色', () => {
   assert.deepEqual(BREED_IDS.sort(), ['black', 'chinchilla', 'golden', 'husky', 'samoyed', 'tabby', 'white']);
-  assert.equal(W, 32);
-  assert.equal(H, 36);
+  assert.equal(W, 48, '画布宽度变了就要同步检查所有几何常量');
+  assert.equal(H, 54, '画布高度变了就要同步检查所有几何常量');
   for (const breed of BREED_IDS) {
     const palette = PALETTES[breed];
     for (const ch of ['o', 'f', 'F', 'L', 'w', 'p', 'i', 's', 'e', 't', 'r', 'g']) {
@@ -119,14 +119,13 @@ test('身体连成一块，尾巴接在身上', () => {
 test('眼睛成对落在脸上，四种状态互不相同', () => {
   const grids = new Set();
   for (const eyes of EYES) {
-    const g = blank();
-    for (const { x, y } of eyeAnchors(frameOf({ eyes }))) {
-      for (const [dx, dy, ch] of eyeTemplate(eyes)) put(g, x + dx, y + dy, ch);
-    }
+    const g = eyeGrid('tabby', frameOf({ eyes }));
     const px = cells(g);
     assert.ok(px.length > 0, `${eyes} 没有像素`);
-    assert.ok(px.every(({ x }) => x >= 8 && x <= 23), `${eyes} 眼睛跑出脸了`);
-    assert.ok(px.every(({ y }) => y >= 9 && y <= 16), `${eyes} 眼睛纵向位置异常`);
+    assert.ok(px.every(({ x }) => x >= 11 && x <= 36), `${eyes} 眼睛跑出脸了`);
+    assert.ok(px.every(({ y }) => y >= 15 && y <= 31), `${eyes} 眼睛纵向位置异常`);
+    // 左右严格对称
+    for (const { x, y } of px) assert.ok(g[y][W - 1 - x] !== '.', `${eyes} 眼睛左右不对称 (${x},${y})`);
     grids.add(g.map((row) => row.join('')).join('|'));
   }
   assert.equal(grids.size, 4, '四种眼睛状态应该互不相同');
