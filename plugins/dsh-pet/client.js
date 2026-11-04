@@ -398,8 +398,9 @@ function drawHead(g, breed, frame) {
 function drawMuzzle(g, breed, frame) {
   const art = BREEDS[breed];
   const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
-  const bob = frame.breath ? -1 : 0;
-  const cx = 24 + T.face;
+  const bob = (frame.breath ? -1 : 0) + (frame.lookY || 0);
+  // 眼珠往哪边看，口鼻就跟着挪一点，不然眼睛动了嘴不动，脸上会散架
+  const cx = 24 + T.face + (frame.lookX || 0);
 
   if (art.species === 'bird') {
     // 钩状喙：上喙大、下喙小，往右伸出脑袋
@@ -536,8 +537,8 @@ function eyeGrid(breed, frame) {
 function drawFaceOn(rows, breed, frame) {
   const art = BREEDS[breed];
   const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
-  const bob = frame.breath ? -1 : 0;
-  const cx = 24 + T.face;
+  const bob = (frame.breath ? -1 : 0) + (frame.lookY || 0);
+  const cx = 24 + T.face + (frame.lookX || 0);
   const tongue = frame.happy || frame.tongue;
   const smile = frame.happy;
 
@@ -757,6 +758,8 @@ function buildSprite(breed, frame = {}) {
     ear: frame.ear ? 1 : 0,
     turn: Number.isFinite(frame.turn) ? Math.max(0, Math.min(1, frame.turn)) : 0,
     dir: frame.dir === -1 ? -1 : 1,
+    lookX: Math.max(-1, Math.min(1, Math.round(frame.lookX || 0))),
+    lookY: Math.max(-1, Math.min(1, Math.round(frame.lookY || 0))),
   };
   const T = turnShift(f.turn);
 
@@ -1116,9 +1119,7 @@ function spriteSpans(rows) {
 .dsp-root.is-happy .dsp-figure { animation: dsp-hop 620ms cubic-bezier(.34, 1.4, .64, 1); }
 .dsp-root.is-zoomies .dsp-figure { animation: dsp-zoom 260ms ease-in-out infinite; }
 .dsp-sprite { display: block; overflow: visible; }
-.dsp-eyes { transition: transform 220ms ease-out; }
-/* 转身时眼睛是跟着脑袋一格一格重画的，别再让它自己滑过去 */
-.dsp-root.is-turned .dsp-eyes, .dsp-root.is-dragging .dsp-eyes { transition: none; }
+.dsp-eyes { transition: none; }
 .dsp-shadow {
   position: absolute;
   left: 50%;
@@ -1296,7 +1297,7 @@ function spriteSpans(rows) {
       const palette = PALETTES[breed] || PALETTES.tabby;
       const sprite = React.useMemo(
         () => buildSprite(breed, frame),
-        [breed, frame.breath, frame.tail, frame.eyes, frame.happy, frame.tongue, frame.ear, frame.turn, frame.dir],
+        [breed, frame.breath, frame.tail, frame.eyes, frame.happy, frame.tongue, frame.ear, frame.turn, frame.dir, frame.lookX, frame.lookY],
       );
       const body = React.useMemo(() => spritePaths(sprite.body), [sprite]);
       const tail = React.useMemo(() => spritePaths(sprite.tail), [sprite]);
@@ -1782,6 +1783,8 @@ function spriteSpans(rows) {
             ear: twitch && !dragging,
             turn: pose.turn,
             dir: pose.dir,
+            lookX: dozing || pose.turn > 0 ? 0 : pointerLook.x,
+            lookY: dozing || pose.turn > 0 ? 0 : pointerLook.y,
           };
           // 侧过身以后眼睛已经画在朝向上，就不用再额外偏移了
           const look = dozing || pose.turn > 0 ? { x: 0, y: 0 } : pointerLook;
