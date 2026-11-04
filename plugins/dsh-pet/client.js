@@ -231,8 +231,11 @@ function flip(rows) {
 }
 
 /** 转向的几何偏移：所有五官、耳朵、爪子按这个量往朝向一侧挪。 */
-function turnShift(turn) {
-  const t = Math.max(0, Math.min(1, turn));
+// 脑袋小的物种（鸟、羊、山羊）转身幅度要收着，不然五官会滑出脸
+const TURN_FACTOR = { cat: 1, dog: 1, bird: 0.9, sheep: 0.9, goat: 0.9 };
+
+function turnShift(turn, factor = 1) {
+  const t = Math.max(0, Math.min(1, turn)) * factor;
   return {
     t,
     face: t * 4.2, // 口鼻中心
@@ -250,9 +253,10 @@ function turnShift(turn) {
 const LAYOUT = {
   cat: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
   dog: { eyeY: 23, near: 30.5, far: 17.5, scale: 1 },
-  bird: { eyeY: 17.2, near: 27.0, far: 21.0, scale: 0.9 },
-  sheep: { eyeY: 21.2, near: 28.6, far: 19.4, scale: 0.82 },
-  goat: { eyeY: 20.2, near: 29.0, far: 19.0, scale: 0.88 },
+  bird: { eyeY: 17.2, near: 26.4, far: 21.6, scale: 0.88 },
+  // 羊和山羊脑袋窄，眼睛得铺开一点、转身时少挪一点，才不会挤成斗鸡眼
+  sheep: { eyeY: 21.0, near: 28.0, far: 20.0, scale: 0.76, eyeNear: 1.4 },
+  goat: { eyeY: 20.0, near: 28.2, far: 19.8, scale: 0.78, eyeNear: 1.4 },
 };
 
 const layoutOf = (breed) => LAYOUT[BREEDS[breed].species] || LAYOUT.cat;
@@ -298,14 +302,15 @@ function ear(g, style, cx, cyIn, dir, scale, t) {
 function drawEars(g, breed, frame) {
   const art = BREEDS[breed];
   if (art.ear === 'none') return;
-  const T = turnShift(frame.turn);
+  const raw = Math.max(0, Math.min(1, frame.turn || 0));
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const small = art.species === 'sheep' || art.species === 'goat';
   const cy = small ? 17.4 : 14.6;
   const base = small ? 32.6 : 35.2;
   const nearCx = base + T.nearEar;
   const farCx = 48 - base + T.farEar;
   const flick = frame.ear ? 1 : 0;
-  if (T.t < 0.95) ear(g, art.ear, farCx, cy, -1, T.farScale, flick);
+  if (raw < 0.95) ear(g, art.ear, farCx, cy, -1, T.farScale, flick);
   ear(g, art.ear, nearCx, cy, 1, 1, flick);
 }
 
@@ -313,7 +318,7 @@ function drawEars(g, breed, frame) {
 
 function drawTorso(g, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const cx = 24 + T.body;
   const slim = T.t * 1.4;
   const bob = frame.breath ? -1 : 0;
@@ -366,16 +371,16 @@ function drawTorso(g, breed, frame) {
 
 function drawHead(g, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const bob = frame.breath ? -1 : 0;
   const cx = 24 + T.t * 1.2;
 
   if (art.species === 'bird') {
-    ellipse(g, cx + T.t * 1.2, 19 + bob, 8.6, 8.4, 'f');
+    ellipse(g, cx + T.t * 1.2, 19 + bob, 9.2, 8.6, 'f');
     return;
   }
   if (art.species === 'sheep') {
-    ellipse(g, cx, 21.0 + bob, 6.6, 6.2, 'n');
+    ellipse(g, cx, 21.0 + bob, 9.0, 6.9, 'n');
     // 头顶一撮羊毛
     for (const [dx, dy, r] of [[-3, -4, 3.2], [3, -4, 3.2], [0, -6, 3.4]]) {
       ellipse(g, cx + dx, 21.0 + dy + bob, r, r, 'f');
@@ -383,7 +388,7 @@ function drawHead(g, breed, frame) {
     return;
   }
   if (art.species === 'goat') {
-    ellipse(g, cx, 20.0 + bob, 7.8, 7.2, 'f');
+    ellipse(g, cx, 20.0 + bob, 8.8, 7.4, 'f');
     return;
   }
   ellipse(g, cx, 22 + bob, 13.5 - T.t * 2.6, 12.4, 'f');
@@ -392,7 +397,7 @@ function drawHead(g, breed, frame) {
 /** 口鼻、胸腹、爪子这些浅色块。 */
 function drawMuzzle(g, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const bob = frame.breath ? -1 : 0;
   const cx = 24 + T.face;
 
@@ -443,7 +448,7 @@ function drawMuzzle(g, breed, frame) {
 
 function drawMane(g, breed, frame) {
   if (!BREEDS[breed].mane) return;
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const cx = 24 + T.t * 1.2;
   const bob = frame.breath ? -1 : 0;
   for (let a = 0; a < 20; a += 1) {
@@ -457,7 +462,7 @@ function drawMane(g, breed, frame) {
 
 function drawHorns(g, breed, frame) {
   if (BREEDS[breed].species !== 'goat') return;
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const cx = 24 + T.t * 1.2;
   const bob = frame.breath ? -1 : 0;
   // 两只向后上方弯的角
@@ -502,14 +507,16 @@ function drawEyeShape(g, cx, cy, kind, s) {
 
 function eyeGrid(breed, frame) {
   const g = blank();
-  const T = turnShift(frame.turn);
+  const raw = Math.max(0, Math.min(1, frame.turn || 0));
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const L = layoutOf(breed);
   const bob = frame.breath ? -1 : 0;
   const kind = frame.eyes || 'open';
   const y = L.eyeY + bob;
-  drawEyeShape(g, L.near + T.eyeNear, y, kind, L.scale);
-  if (T.t < 0.95) {
-    if (T.t === 0) {
+  // 转过身后脑袋收窄，近侧眼睛也略微缩一点，免得顶出轮廓
+  drawEyeShape(g, L.near + T.t * (L.eyeNear ?? 1.8), y, kind, L.scale * (1 - 0.12 * T.t));
+  if (raw < 0.95) {
+    if (raw === 0) {
       // 正面：把近侧那只眼睛整体镜像过去，左右严格对称
       const snapshot = [];
       for (let iy = 0; iy < H; iy += 1) for (let ix = 0; ix < W; ix += 1) {
@@ -528,7 +535,7 @@ function eyeGrid(breed, frame) {
 
 function drawFaceOn(rows, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const bob = frame.breath ? -1 : 0;
   const cx = 24 + T.face;
   const tongue = frame.happy || frame.tongue;
@@ -599,7 +606,7 @@ function drawFace(rows, breed, frame) {
 
 function applyPattern(rows, breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const bob = frame.breath ? -1 : 0;
   const on = (x, y, ch, allowed) => {
     const ix = Math.round(x);
@@ -667,7 +674,7 @@ function applyPattern(rows, breed, frame) {
 
 function tailShape(breed, frame) {
   const art = BREEDS[breed];
-  const T = turnShift(frame.turn);
+  const T = turnShift(frame.turn, TURN_FACTOR[BREEDS[breed].species] ?? 1);
   const g = blank();
   const sway = [-3.0, 0, 3.0, 0][((frame.tail % 4) + 4) % 4];
   const bez = (p0, p1, p2, t) => [
@@ -1110,6 +1117,8 @@ function spriteSpans(rows) {
 .dsp-root.is-zoomies .dsp-figure { animation: dsp-zoom 260ms ease-in-out infinite; }
 .dsp-sprite { display: block; overflow: visible; }
 .dsp-eyes { transition: transform 220ms ease-out; }
+/* 转身时眼睛是跟着脑袋一格一格重画的，别再让它自己滑过去 */
+.dsp-root.is-turned .dsp-eyes, .dsp-root.is-dragging .dsp-eyes { transition: none; }
 .dsp-shadow {
   position: absolute;
   left: 50%;
@@ -1353,7 +1362,6 @@ function spriteSpans(rows) {
           const [picking, setPicking] = React.useState(false);
           const [dragging, setDragging] = React.useState(false);
           const [pointerLook, setPointerLook] = React.useState({ x: 0, y: 0 });
-          const [glance, setGlance] = React.useState(null);
           // 转身：0 正面 → 0.5 侧四十五度 → 1 侧面，中间每一档都真的画出来
           const [pose, setPose] = React.useState({ turn: 0, dir: 1 });
           const poseRef = React.useRef({ turn: 0, dir: 1 });
@@ -1587,16 +1595,22 @@ function spriteSpans(rows) {
               const limit = Math.max(rect.width, rect.height) * 1.8;
               const dx = event.clientX - cx;
               const dy = event.clientY - cy;
-              if (Math.abs(dx) > limit || Math.abs(dy) > limit) return;
+              if (Math.abs(dx) > limit || Math.abs(dy) > limit) {
+                // 指针走远了就转回正面，别再一直扭着头
+                if (targetRef.current.turn !== 0) {
+                  targetRef.current = { turn: 0, dir: poseRef.current.dir };
+                }
+                return;
+              }
               const next = {
                 x: Math.max(-1, Math.min(1, Math.round(dx / 42))),
                 y: Math.max(-1, Math.min(1, Math.round(dy / 42))),
               };
               setPointerLook((prev) => (prev.x === next.x && prev.y === next.y ? prev : next));
-              // 离得够远就侧过身看着指针；近了就转回正面
+              // 指针靠近时：偏一点只转眼珠，偏得多一点侧转，偏到身侧才整个转过去
               const far = Math.abs(dx);
               targetRef.current = {
-                turn: far > 150 ? 1 : far > 56 ? 0.5 : 0,
+                turn: far > 118 && Math.abs(dy) < 96 ? 1 : far > 62 ? 0.5 : 0,
                 dir: dx < 0 ? -1 : 1,
               };
             };
@@ -1770,7 +1784,7 @@ function spriteSpans(rows) {
             dir: pose.dir,
           };
           // 侧过身以后眼睛已经画在朝向上，就不用再额外偏移了
-          const look = dozing || pose.turn > 0 ? { x: 0, y: 0 } : glance || pointerLook;
+          const look = dozing || pose.turn > 0 ? { x: 0, y: 0 } : pointerLook;
           const place = pos || initialPos;
           const below = place.top < 240;
           const toRight = place.left + size.w / 2 > (window.innerWidth || 1024) / 2;
@@ -1789,6 +1803,7 @@ function spriteSpans(rows) {
                   (dragging ? ' is-dragging' : '') +
                   (happy ? ' is-happy' : '') +
                   (zooming ? ' is-zoomies' : '') +
+                  (pose.turn > 0 ? ' is-turned' : '') +
                   (picking ? ' is-picking' : ''),
                 style: {
                   left: place.left + 'px',

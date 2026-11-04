@@ -227,6 +227,24 @@ test('侧面只留一只眼睛，正面两只都在', () => {
   }
 });
 
+test('眼睛永远画在脸上，不会顶出轮廓或者悬空', () => {
+  for (const breed of BREED_IDS) {
+    for (const turn of [0, 0.5, 1]) {
+      for (const eyes of EYES) {
+        const { body, tail } = buildSprite(breed, frameOf({ turn, eyes }));
+        const grid = eyeGrid(breed, frameOf({ turn, eyes }));
+        for (const { x, y } of cells(grid)) {
+          const under = body[y][x] !== '.' ? body[y][x] : tail[y][x];
+          assert.ok(
+            under !== '.' && under !== 'o',
+            `${breed}/turn${turn}/${eyes} 的眼睛落到了 (${x},${y}) 的「${under}」上`,
+          );
+        }
+      }
+    }
+  }
+});
+
 test('动画帧确实在变', () => {
   for (const breed of BREED_IDS) {
     const sig = (f, part = 'body') => buildSprite(breed, f)[part].map((r) => r.join('')).join('|');
