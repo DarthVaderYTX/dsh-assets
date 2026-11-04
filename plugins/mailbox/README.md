@@ -39,7 +39,7 @@ Outlook 走标准的 OAuth 设备码：扫固定二维码 → 在 `login.microso
   - **飞书**：二维码由 `lark-cli auth qrcode` 动态生成，`auth login --device-code` 在后台等待确认；飞书账号不需要也不保存密码。
   - **Microsoft 365 / Outlook**：扫固定二维码后在 `login.microsoft.com/device` 输一次性代码，授权完成自动落库；之后用 `refresh_token` 换 `access_token` 走 XOAUTH2，租户禁用基本认证也能用。
   - 其余服务商量不出来：它们的「扫码」只发网页登录态，换不到 IMAP/SMTP 凭据，弹窗里会直接说明原因，仍然走应用专用密码。
-- **实时收信**：每个账号一条 IDLE 长连接，服务器推送 `EXISTS` 就立刻拉新邮件摘要，推给面板并发提示音；连接断了按 3s → 60s 指数退避重连。服务商不支持 IDLE 时退化成 60 秒轮询。
+- **实时收信**：IMAP 账号每个一条 IDLE 长连接，服务器推送 `EXISTS` 就立刻拉新邮件摘要，推给面板并发提示音；连接断了按 3s → 60s 指数退避重连。服务商不支持 IDLE 时退化成 60 秒轮询。飞书账号没有 IMAP，走 10 秒短轮询（见下文）。
 - **提示**：WebAudio 双音「叮咚」，面板右下角弹 6 秒 toast，侧边栏图标带未读圆点；提示音可在标题栏关掉（存 `localStorage`）。
 - **收发一体**：读信（纯文本或 HTML）、回复、转发、新建、多附件（合计 18MB 上限）都在面板内完成，附件下载直接走浏览器下载。
 - **安全渲染**：HTML 邮件放进 `sandbox` iframe，CSP `default-src 'none'; img-src data:`，远程图片与外链脚本一律不加载。
@@ -107,9 +107,10 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 - 发信只走 SMTP，**不会自动 APPEND 到「已发送」**：多数服务商在 SMTP 投递后会自行保存副本，但行为不统一。
 - 只做收件箱的实时提醒；其他文件夹靠手动刷新。
 - **飞书账号的凭据不在本插件里**：它用的是 `lark-cli` 的登录态（本机 Keychain / 配置文件），所以一个 `lark-cli` 登录同一时间只对应一个飞书邮箱；要换账号得重新扫码，多开飞书邮箱暂不支持。
-- 飞书账号的实时提醒走 `lark-cli mail +watch` 的 WebSocket 推送：它用**用户身份**调 `user_mailbox.event` 订阅当前邮箱的事件，不需要在飞书开放平台给应用加事件订阅，插件也不以应用（bot）身份访问邮件。连接断了自动重连（3s 起），连续 3 次失败才降级成 **15 秒轮询**，并在账号行用圆点标出当前模式（绿=实时推送，橙=轮询）。
+- 飞书账号的实时提醒走**用户身份的 10 秒短轮询**：每轮只调一次 `mail user_mailbox.folders list` 拿未读数（一次调用、数值准确），涨了再拉最近 20 封未读做差分推送。不依赖飞书开放平台给应用加事件订阅，也不以 bot 身份访问邮件；实测新邮件 10~20 秒内出现在面板并响铃。
+- 如果你确实在开放平台给应用加过 `mail.user_mailbox.event.message_received_v1` 事件，可以设 `MAILBOX_FEISHU_WATCH=1` 改用 `mail +watch` 的 WebSocket 推送（即时，但要应用级配置）；连接断了按 3s 重连，连续 3 次失败自动退回轮询。
 - 所有飞书邮件命令都显式带 `--as user`，不依赖本机 `lark-cli config default-as` 的取值：邮件属于用户本人，应用身份既读不到也不该代管。
-- 未读数上限 400（`+triage` 单页上限），超过显示 400。
+- 账号行右侧的小圆点表示实时状态：绿=WebSocket 推送，橙=10 秒轮询。未读数来自 folders 接口，是准确值；面板上超过 99 显示 `99+`。
 - OAuth 账号的 `refresh_token` 和密码一样明文存在 `$DSH_HOME/mailbox/accounts.json`（0600），对外接口只暴露 `auth` 字段，不会把 token 回传前端。
 - Microsoft 侧用的是公开的第一方客户端 ID（`d3590ed6-…`，Office 的公共客户端），因此不需要你注册应用；如果贵司租户通过条件访问策略禁用了设备码流，会在扫码阶段被拒，只能用应用专用密码。
 - Gmail 没有接入扫码：Google 的设备码授权只对「电视与受限输入设备」开放，邮件类受限 scope 拿不到，硬做也只能要你自建 OAuth 客户端。

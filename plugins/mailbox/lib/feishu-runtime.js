@@ -15,7 +15,7 @@ import {
   readNdjson,
   sendMail,
   setUnread,
-  unreadCount,
+  folderUnread,
   watchMail,
 } from './lark.js';
 
@@ -24,8 +24,8 @@ import {
  * 抽成对象是为了让测试能把等待时间压到毫秒级。
  */
 export const WATCH_TUNING = {
-  // 推送不可用时的兜底轮询间隔。15 秒对「实时提醒」够用，也不会把 API 打爆。
-  pollMs: 15000,
+  // 主路径的轮询间隔：只调一次 folders 接口拿未读数，10 秒一轮 ≈ 6 次/分钟。
+  pollMs: 10000,
   // 连接活过这个时长就算正常断线，直接重连；否则计入失败次数。
   minAliveMs: 15000,
   // 连续失败时的重试间隔；用完还没成功就降级成轮询。
@@ -56,6 +56,7 @@ export class FeishuRuntime {
     this.watchFailures = 0;
     this.known = new Set();
     this.degraded = false;
+    this.baselineDone = false;
   }
 
   log(message) {
@@ -68,7 +69,7 @@ export class FeishuRuntime {
 
   async list(folder = 'INBOX', limit = 40) {
     const rows = await listMessages({ folder, max: Math.min(Math.max(limit, 1), 200), mailbox: this.account.email });
-    const unread = await unreadCount({ folder: 'INBOX', mailbox: this.account.email });
+    const unread = (await folderUnread({ mailbox: this.account.email })).inbox;
     this.status.unread = unread;
     this.status.connected = true;
     this.status.error = null;
@@ -135,24 +136,37 @@ export class FeishuRuntime {
 
   /* ------------------------------------------------------------- 新邮件 */
 
+  /**
+   * 飞书邮箱的实时监控走「用户身份的短轮询」：
+   * 每 10 秒调一次 folders 接口拿未读数，涨了再拉最近 20 封未读做差分。
+   * 不依赖飞书应用的事件订阅，也不以 bot 身份访问邮件。
+   *
+   * 如果你确实在开放平台给应用加过 mail 事件，可以设 MAILBOX_FEISHU_WATCH=1
+   * 改用 WebSocket 推送（更快，但要应用级配置）。
+   */
   startWatching() {
     if (this.disposed || this.watchChild || this.pollTimer) return;
-    this.attachWatch();
     // 首轮同步：把已有未读作为基线，避免一启动就把历史邮件当新邮件推。
     this.baseline().catch((error) => {
       this.status.error = error?.message || String(error);
       this.status.connected = false;
     });
+    if (process.env.MAILBOX_FEISHU_WATCH === '1') this.attachWatch();
+    else this.startPolling();
   }
 
   async baseline() {
     const user = await currentUser();
     this.status.connected = true;
-    const rows = await listMessages({ unreadOnly: true, folder: 'INBOX', max: 400, mailbox: this.account.email });
+    // 未读数直接问 folders（准确、一次调用）；known 只用来去重，拉最近一小批就够。
+    const counts = await folderUnread({ mailbox: this.account.email });
+    const rows = await listMessages({ unreadOnly: true, folder: 'INBOX', max: 20, mailbox: this.account.email });
     for (const row of rows) this.known.add(row.uid);
-    this.status.unread = rows.length;
+    this.unreadSeen = counts.inbox;
+    this.status.unread = counts.inbox;
     this.status.lastSync = Date.now();
-    this.log('已登录：' + (user.userName || user.openId || ''));
+    this.baselineDone = true;
+    this.log('已登录：' + (user.userName || user.openId || '') + '，未读 ' + counts.inbox);
   }
 
   attachWatch() {
@@ -230,16 +244,26 @@ export class FeishuRuntime {
     const tick = async () => {
       if (this.disposed) return;
       try {
-        const rows = await listMessages({ unreadOnly: true, folder: 'INBOX', max: 400, mailbox: this.account.email });
-        this.status.unread = rows.length;
+        const counts = await folderUnread({ mailbox: this.account.email });
+        const previous = this.unreadSeen;
         this.status.connected = true;
         this.status.error = null;
         this.status.lastSync = Date.now();
-        for (const row of rows) {
-          if (this.known.has(row.uid)) continue;
-          this.known.add(row.uid);
-          this.pushMail(row);
+        if (typeof previous === 'number' && counts.inbox > previous) {
+          const rows = await listMessages({
+            unreadOnly: true,
+            folder: 'INBOX',
+            max: 20,
+            mailbox: this.account.email,
+          });
+          const fresh = rows.filter((row) => !this.known.has(row.uid));
+          for (const row of rows) this.known.add(row.uid);
+          // 从旧到新推，面板上的提示顺序才自然。
+          for (const row of fresh.reverse()) this.pushMail(row);
         }
+        this.unreadSeen = counts.inbox;
+        // 以服务端计数为准，pushMail 的 +1 只用于推送当刻的乐观显示。
+        this.status.unread = counts.inbox;
       } catch (error) {
         this.status.connected = false;
         this.status.error = error?.message || String(error);

@@ -114,6 +114,7 @@ test('飞书运行时：推送不可用时降级成轮询', async () => {
   const saved = { ...WATCH_TUNING, retryDelays: [...WATCH_TUNING.retryDelays] };
   // 把重试等待压到毫秒级，测试只验证「失败 3 次后降级」这条逻辑。
   Object.assign(WATCH_TUNING, { minAliveMs: 50, retryDelays: [10, 10], reconnectDelay: 10 });
+  process.env.MAILBOX_FEISHU_WATCH = '1';
   try {
     runtime.startWatching();
     for (let i = 0; i < 80 && !runtime.degraded; i += 1) {
@@ -124,6 +125,7 @@ test('飞书运行时：推送不可用时降级成轮询', async () => {
     assert.equal(runtime.status.watching, true);
   } finally {
     runtime.dispose();
+    delete process.env.MAILBOX_FEISHU_WATCH;
     Object.assign(WATCH_TUNING, saved);
   }
 });
@@ -147,6 +149,41 @@ test('飞书调用一律带 --as user：邮件归用户本人，不走应用身�
   assert.ok(lines.length >= 3, '应该记录到多次 mail 调用：' + lines.join(' | '));
   for (const line of lines) {
     assert.match(line, /--as user/, '缺少 --as user：' + line);
+  }
+});
+
+test('飞书运行时：用户身份轮询能发现新邮件并推送', async () => {
+  const hub = newHub();
+  const runtime = new FeishuRuntime(account, hub, () => {});
+  const saved = { ...WATCH_TUNING };
+  process.env.FAKE_UNREAD = '1';
+  Object.assign(WATCH_TUNING, { pollMs: 40 });
+  try {
+    runtime.startWatching();
+    // 等基线跑完，否则基线可能把「新到的那封」一起吞进 known 里。
+    for (let i = 0; i < 60 && !runtime.baselineDone; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(runtime.baselineDone, true);
+    assert.equal(runtime.status.mode, 'poll');
+    assert.equal(runtime.status.unread, 1);
+    assert.equal(hub.events.length, 0, '基线阶段不该推历史邮件');
+
+    // 模拟来了一封新邮件：未读数 +1，并且列表里多一条。
+    process.env.FAKE_UNREAD = '2';
+    process.env.FAKE_EXTRA_MESSAGE = '1';
+    for (let i = 0; i < 60 && hub.events.length === 0; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(hub.events.length, 1);
+    assert.equal(hub.events[0].uid, 'm99');
+    assert.equal(hub.events[0].subject, '刚到的邮件');
+    assert.equal(runtime.status.unread, 2);
+  } finally {
+    runtime.dispose();
+    delete process.env.FAKE_UNREAD;
+    delete process.env.FAKE_EXTRA_MESSAGE;
+    Object.assign(WATCH_TUNING, saved);
   }
 });
 

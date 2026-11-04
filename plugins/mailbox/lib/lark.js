@@ -305,6 +305,25 @@ export async function listMessages(options = {}) {
   return messages.map(toRow);
 }
 
+/**
+ * 系统文件夹的准确未读数：一次调用拿到全部计数，比翻 400 封未读快得多，
+ * 也不受 `+triage` 单页 400 条的上限影响。
+ */
+export async function folderUnread(options = {}) {
+  const data = await runJson(
+    ['mail', 'user_mailbox.folders', 'list', '--user-mailbox-id', options.mailbox || 'me', '--json'],
+    { timeoutMs: 30000 },
+  );
+  const items = data?.data?.items || [];
+  const byId = (id) => items.find((item) => String(item.id || '').toUpperCase() === id) || {};
+  const inbox = byId('INBOX');
+  return {
+    inbox: Number(inbox.unread_message_count || 0),
+    inboxThreads: Number(inbox.unread_thread_count || 0),
+    byId: (id) => Number(byId(String(id).toUpperCase()).unread_message_count || 0),
+  };
+}
+
 export async function unreadCount(options = {}) {
   // +triage 单次最多 400 条；未读超过这个数时按 400 显示。
   const rows = await listMessages({ ...options, folder: options.folder || 'INBOX', max: 400, unreadOnly: true });

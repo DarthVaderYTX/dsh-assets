@@ -86,7 +86,7 @@ window.__ModuleLoader__.load({
       feishuBadge: '飞书',
       sessionDays: '已保持登录 {days} 天',
       liveWatch: '实时推送',
-      livePoll: '轮询中',
+      livePoll: '10 秒轮询',
       liveStarting: '连接中',
       sessionKept: '凭据只存本机，默认保持登录 30 天，不会反复要密码。',
       authNeeded: '登录态失效，需要重新登录',
@@ -170,7 +170,7 @@ window.__ModuleLoader__.load({
       feishuBadge: 'Feishu',
       sessionDays: 'Signed in for {days} days',
       liveWatch: 'Live push',
-      livePoll: 'Polling',
+      livePoll: '10s polling',
       liveStarting: 'Connecting',
       sessionKept: 'Credentials stay on this machine; the session is kept for 30 days by default.',
       authNeeded: 'Sign-in expired, please sign in again',
@@ -859,7 +859,11 @@ function readColumns() {
             h(ProviderIcon, { preset: account.preset, size: 12 }),
             h('span', { className: 'mbx-chip-name' }, account.label || account.email),
             account.status && account.status.unread > 0
-              ? h('span', { className: 'mbx-badge' }, String(account.status.unread))
+              ? h(
+                  'span',
+                  { className: 'mbx-badge' },
+                  account.status.unread > 99 ? '99+' : String(account.status.unread),
+                )
               : null,
           ),
         ),

@@ -74,9 +74,36 @@ if (args[0] === 'mail' && args[1] === 'user_mailboxes' && args[2] === 'profile')
   process.exit(0);
 }
 
+if (args[0] === 'mail' && args[1] === 'user_mailbox.folders' && args[2] === 'list') {
+  const unread = Number(process.env.FAKE_UNREAD || 1);
+  out({
+    ok: true,
+    identity: 'user',
+    data: {
+      items: [
+        { id: 'INBOX', name: 'Inbox', unread_message_count: unread, unread_thread_count: unread },
+        { id: 'SENT', name: 'Sent', unread_message_count: 0, unread_thread_count: 0 },
+      ],
+    },
+  });
+  process.exit(0);
+}
+
 if (args[0] === 'mail' && args[1] === '+triage') {
   const unreadOnly = has('--is-unread');
-  const messages = unreadOnly ? MESSAGES.filter((item) => item.labels.includes('UNREAD')) : MESSAGES;
+  const extra = process.env.FAKE_EXTRA_MESSAGE
+    ? [
+        {
+          message_id: 'm99',
+          subject: '刚到的邮件',
+          from: 'someone <someone@example.com>',
+          date: '2026-11-04 15:30',
+          folder: 'INBOX',
+          labels: 'UNREAD,OTHER',
+        },
+      ]
+    : [];
+  const messages = (unreadOnly ? MESSAGES.filter((item) => item.labels.includes('UNREAD')) : MESSAGES).concat(extra);
   out({ count: messages.length, has_more: false, mailbox_id: 'me', messages });
   process.exit(0);
 }
