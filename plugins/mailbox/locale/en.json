@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mail",
+    "description": "Send and receive mail from the sidebar: multiple accounts (the same address can be added more than once), IMAP IDLE new-mail alerts with a chime, plus reading, replying and attachments without leaving the panel."
+  }
+}
