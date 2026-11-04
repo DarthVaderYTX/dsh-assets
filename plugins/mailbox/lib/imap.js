@@ -16,6 +16,17 @@ export class ImapError extends Error {
   }
 }
 
+/** 把认证失败的原始响应压成一句人话。 */
+function summarizeLoginError(error) {
+  let text = String(error?.message || error);
+  if (/连接已关闭|closed/i.test(text)) {
+    return '服务端拒绝了这次登录（连接被关闭），请确认已开启 IMAP/SMTP 并使用应用专用密码';
+  }
+  if (text.includes(' → ')) text = text.split(' → ').pop();
+  text = text.replace(/^IMAP [A-Z]+ 失败：/, '').replace(/^A\d+ /, '');
+  return text.slice(0, 160);
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** `04-Nov-2026 12:00:00 +0800` → epoch ms。 */
@@ -180,6 +191,7 @@ export class ImapClient {
     this.waiters = [];
     this.closed = false;
     this.capabilities = [];
+    this.identified = false;
     this.idleTag = null;
   }
 
@@ -353,17 +365,32 @@ export class ImapClient {
   }
 
   async login(user, password) {
+    // 163 / 126 这类服务商要求 LOGIN 之前先报 ID，否则直接回 "Unsafe Login"。
+    if (this.capabilities.includes('ID') && !this.identified) {
+      await this.sendId().catch(() => undefined);
+    }
     const quotedUser = JSON.stringify(user);
     const quotedPass = JSON.stringify(password);
     try {
-      return await this.command('LOGIN ' + quotedUser + ' ' + quotedPass);
+      const response = await this.command('LOGIN ' + quotedUser + ' ' + quotedPass);
+      // 部分服务商登录后才公布 IDLE 等能力。
+      await this.capability().catch(() => undefined);
+      return response;
     } catch (error) {
-      if (this.capabilities.includes('AUTH=PLAIN')) {
-        return this.authenticatePlain(quotedUser, quotedPass);
+      const closed = /连接已关闭/.test(String(error.message));
+      if (!closed && this.capabilities.includes('AUTH=PLAIN')) {
+        try {
+          const response = await this.authenticatePlain(quotedUser, quotedPass);
+          await this.capability().catch(() => undefined);
+          return response;
+        } catch (plainError) {
+          throw new ImapError('登录失败：' + summarizeLoginError(plainError), { cause: plainError });
+        }
       }
-      throw error;
+      throw new ImapError('登录失败：' + summarizeLoginError(error), { cause: error });
     }
   }
+
 
   async authenticatePlain(user, password) {
     const tag = 'A' + (this.tag += 1);
@@ -391,9 +418,10 @@ export class ImapClient {
 
   /** RFC 2971：部分服务商（163/126）要求先报身份才允许 IMAP。 */
   async sendId(params = { name: 'dsh-mailbox', version: '1.0', vendor: 'deepseek-harness' }) {
-    if (!this.capabilities.includes('ID')) return false;
+    if (!this.capabilities.includes('ID') || this.identified) return false;
     const body = '(' + Object.entries(params).map(([key, value]) => '"' + key + '" "' + value + '"').join(' ') + ')';
     await this.command('ID ' + body, { allowFailure: true });
+    this.identified = true;
     return true;
   }
 

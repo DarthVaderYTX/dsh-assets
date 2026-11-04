@@ -123,7 +123,6 @@ export class AccountRuntime {
         await client.connect();
         await client.capability();
         await client.login(this.account.username, this.account.password);
-        await client.sendId();
         this.reader = client;
       }
       try {
@@ -307,7 +306,6 @@ export class AccountRuntime {
         await client.connect();
         await client.capability();
         await client.login(this.account.username, this.account.password);
-        await client.sendId();
         const info = await client.select('INBOX');
         let lastExists = info.exists;
         this.status.connected = true;

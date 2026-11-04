@@ -83,6 +83,8 @@ plugin_manager install_bundle  target=link:<仓库绝对路径>/plugins/mailbox
 - 只支持 **用户名 + 密码/应用专用密码** 的 IMAP/SMTP 基本认证，**不支持 OAuth**：Gmail、Outlook 这类强制 OAuth 的账号需要先用应用专用密码（若租户关闭了 basic auth 则无法登录）。
 - 发信只走 SMTP，**不会自动 APPEND 到「已发送」**：多数服务商在 SMTP 投递后会自行保存副本，但行为不统一。
 - 只做收件箱的实时提醒；其他文件夹靠手动刷新。
+- **163 / 126 需要先发 ID 命令再 LOGIN**，客户端已经按这个顺序做；直接 LOGIN 会被回 `Unsafe Login`。
+- 实测（2026-11-04，本机网络）：`imap.qq.com` / `imap.163.com` / `imap.gmail.com` 的 TLS 握手、CAPABILITY、LOGIN 拒绝路径均正常；Gmail 会回 `NO [AUTHENTICATIONFAILED]`（强制 OAuth，需要应用专用密码或改走 OAuth）；QQ 在认证失败时直接断开连接，客户端会把这种情形翻译成「服务端拒绝了这次登录」。`smtp.qq.com:465` 的 AUTH 拒绝路径同样正常。
 - 附件走 HTTP 传输（单封上限 18MB），超大邮件直接拒绝下载并提示。
 
 ## 测试
