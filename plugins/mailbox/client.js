@@ -70,9 +70,14 @@ window.__ModuleLoader__.load({
       accountWatching: '实时收信中',
       mailFrom: '来自 {name}',
       readInPanel: '读完可直接回复，不用切走。',
-      tabFeishu: '飞书扫码',
-      tabImap: '邮箱密码',
+      tabQr: '扫码登录',
+      tabPassword: '邮箱密码',
       feishuHint: '用手机飞书扫码授权，不用生成应用专用密码。授权后本机会用 lark-cli 的登录态收发飞书邮箱。',
+      oauthHint: '扫码后在打开的页面输入下方代码并登录，授权完成前别关弹窗。',
+      userCodeLabel: '一次性代码',
+      openInBrowser: '或在浏览器打开：',
+      unsupportedWebOnly: '这家邮箱的扫码只发网页登录态，换不到 IMAP/SMTP 凭据，只能用应用专用密码。',
+      unsupportedGoogle: 'Google 的设备码授权不开放邮件权限，请用应用专用密码。',
       generateQr: '生成二维码',
       qrWaiting: '等待手机扫码…',
       qrOk: '已登录',
@@ -143,9 +148,14 @@ window.__ModuleLoader__.load({
       accountWatching: 'Listening for mail',
       mailFrom: 'from {name}',
       readInPanel: 'Read and reply without leaving the panel.',
-      tabFeishu: 'Feishu QR',
-      tabImap: 'Password',
+      tabQr: 'QR sign-in',
+      tabPassword: 'Password',
       feishuHint: 'Scan with the Feishu mobile app — no app password needed. The panel then uses your local lark-cli session.',
+      oauthHint: 'Scan, then enter the code below on the page that opens. Keep this dialog open until it finishes.',
+      userCodeLabel: 'One-time code',
+      openInBrowser: 'Or open in a browser:',
+      unsupportedWebOnly: 'QR sign-in for this provider only yields a web session, not IMAP/SMTP credentials — use an app password.',
+      unsupportedGoogle: 'Google does not allow device-code sign-in for mail scopes — use an app password.',
       generateQr: 'Show QR code',
       qrWaiting: 'Waiting for the scan…',
       qrOk: 'Signed in',
@@ -278,6 +288,8 @@ window.__ModuleLoader__.load({
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
 .mbx-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0; }
 .mbx-qr { width: 240px; height: 240px; border-radius: 8px; background: #fff; padding: 8px; box-sizing: border-box; }
+.mbx-qr-code { display: flex; align-items: baseline; gap: 8px; }
+.mbx-qr-code strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; letter-spacing: .14em; }
 `;
 
     /* ------------------------------------------------------------ 工具 */
@@ -423,7 +435,7 @@ function initialOf(text) {
       const [messageState, setMessageState] = React.useState('idle');
       const [compose, setCompose] = React.useState(null);
       const [addForm, setAddForm] = React.useState(null);
-      const [addMode, setAddMode] = React.useState('feishu');
+      const [addMode, setAddMode] = React.useState('qr');
       const [qr, setQr] = React.useState(null);
       const [pendingRemove, setPendingRemove] = React.useState(null);
       const [toast, setToast] = React.useState(null);
@@ -599,19 +611,27 @@ function initialOf(text) {
       const cancelQr = React.useCallback(() => {
         setQr((current) => {
           if (current?.id) {
-            api('/feishu/login/cancel', { method: 'POST', body: { id: current.id } }).catch(() => {});
+            api('/login/cancel', { method: 'POST', body: { id: current.id } }).catch(() => {});
           }
           return null;
         });
       }, []);
 
-      const startQrLogin = async () => {
-        setQr({ id: '', src: '', status: 'starting', error: null });
+      const startQrLogin = async (preset) => {
+        setQr({ status: 'starting' });
         try {
-          const data = await api('/feishu/login/start', { method: 'POST', body: {} });
-          setQr({ id: data.id, src: data.qr, status: 'waiting', error: null });
+          const data = await api('/login/start', { method: 'POST', body: { provider: preset } });
+          setQr({
+            id: data.id,
+            src: data.qr,
+            kind: data.kind,
+            userCode: data.userCode || '',
+            verificationUri: data.verificationUri || '',
+            status: 'waiting',
+            error: null,
+          });
         } catch (error) {
-          setQr({ id: '', src: '', status: 'error', error: error.message });
+          setQr({ status: 'error', error: error.message });
         }
       };
 
@@ -620,15 +640,23 @@ function initialOf(text) {
         let stopped = false;
         const timer = setInterval(async () => {
           try {
-            const data = await api('/feishu/login/poll', { method: 'POST', body: { id: qr.id } });
+            const data = await api('/login/poll', { method: 'POST', body: { id: qr.id } });
             if (stopped) return;
             if (data.status === 'ok') {
               setQr(null);
               setAddForm(null);
               setToast({ title: t('qrOk'), body: (data.account && data.account.email) || '' });
               await props.store.refreshAccounts();
-            } else if (data.status === 'error' || data.status === 'cancelled') {
-              setQr((current) => (current ? { ...current, status: 'error', error: data.error || t('qrFailed') } : current));
+            } else if (data.status === 'error' || data.status === 'cancelled' || data.status === 'expired') {
+              setQr((current) =>
+                current
+                  ? {
+                      ...current,
+                      status: data.status === 'expired' ? 'expired' : 'error',
+                      error: data.error || t('qrFailed'),
+                    }
+                  : current,
+              );
             }
           } catch (error) {
             if (!stopped) {
@@ -771,7 +799,9 @@ function initialOf(text) {
         h('button', {
           type: 'button',
           className: 'mbx-btn',
-          onClick: () =>
+          onClick: () => {
+            setAddMode('qr');
+            setQr(null);
             setAddForm({
               preset: (providers[0] && providers[0].id) || 'custom',
               label: '',
@@ -783,7 +813,8 @@ function initialOf(text) {
               smtpPort: '',
               busy: false,
               error: null,
-            }),
+            });
+          },
           title: t('addAccount'),
         }, '＋ ' + t('addAccount')),
         h('span', { className: 'mbx-spacer' }),
@@ -966,7 +997,9 @@ function initialOf(text) {
                 h('button', {
                   type: 'button',
                   className: 'mbx-btn is-primary',
-                  onClick: () =>
+                  onClick: () => {
+                    setAddMode('qr');
+                    setQr(null);
                     setAddForm({
                       preset: (providers[0] && providers[0].id) || 'custom',
                       label: '',
@@ -978,7 +1011,8 @@ function initialOf(text) {
                       smtpPort: '',
                       busy: false,
                       error: null,
-                    }),
+                    });
+                  },
                 }, t('addAccount')),
               )
             : messageState === 'loading'
@@ -1065,6 +1099,13 @@ function initialOf(text) {
 
       if (addForm) {
         const provider = providers.find((item) => item.id === addForm.preset) || providers[0] || {};
+        const loginKind = (provider.login && provider.login.kind) || 'none';
+        const supportsQr = loginKind !== 'none';
+        const mode = supportsQr ? addMode : 'password';
+        const unsupported =
+          (provider.login && provider.login.reason) === 'googleRestricted'
+            ? t('unsupportedGoogle')
+            : t('unsupportedWebOnly');
         modals.push(
           h(
             'div',
@@ -1095,37 +1136,73 @@ function initialOf(text) {
               ),
               h(
                 'div',
-                { className: 'mbx-tabs' },
-                h('button', {
-                  type: 'button',
-                  className: 'mbx-tab' + (addMode === 'feishu' ? ' is-active' : ''),
-                  onClick: () => {
-                    cancelQr();
-                    setAddMode('feishu');
+                { className: 'mbx-field' },
+                h('label', null, t('provider')),
+                h(
+                  'select',
+                  {
+                    className: 'mbx-select',
+                    value: addForm.preset,
+                    onChange: (event) => {
+                      cancelQr();
+                      setAddForm({ ...addForm, preset: event.target.value, error: null });
+                    },
                   },
-                }, t('tabFeishu')),
-                h('button', {
-                  type: 'button',
-                  className: 'mbx-tab' + (addMode === 'imap' ? ' is-active' : ''),
-                  onClick: () => {
-                    cancelQr();
-                    setAddMode('imap');
-                  },
-                }, t('tabImap')),
+                  ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
+                ),
+                provider.hint ? h('div', { className: 'mbx-hint' }, provider.hint) : null,
+                supportsQr ? null : h('div', { className: 'mbx-hint' }, unsupported),
               ),
-              addMode === 'feishu'
+              supportsQr
+                ? h(
+                    'div',
+                    { className: 'mbx-tabs' },
+                    h('button', {
+                      type: 'button',
+                      className: 'mbx-tab' + (mode === 'qr' ? ' is-active' : ''),
+                      onClick: () => {
+                        cancelQr();
+                        setAddMode('qr');
+                      },
+                    }, t('tabQr')),
+                    h('button', {
+                      type: 'button',
+                      className: 'mbx-tab' + (mode === 'password' ? ' is-active' : ''),
+                      onClick: () => {
+                        cancelQr();
+                        setAddMode('password');
+                      },
+                    }, t('tabPassword')),
+                  )
+                : null,
+              mode === 'qr'
                 ? h(
                     'div',
                     { className: 'mbx-qr-wrap' },
-                    h('div', { className: 'mbx-hint' }, t('feishuHint')),
+                    h('div', { className: 'mbx-hint' }, loginKind === 'lark' ? t('feishuHint') : t('oauthHint')),
                     qr && qr.status === 'waiting' && qr.src
                       ? h('img', { className: 'mbx-qr', src: qr.src, alt: 'QR' })
                       : null,
-                    qr && qr.status === 'waiting'
-                      ? h('div', { className: 'mbx-hint' }, t('qrWaiting'))
+                    qr && qr.status === 'waiting' && qr.userCode
+                      ? h(
+                          'div',
+                          { className: 'mbx-qr-code' },
+                          h('span', { className: 'mbx-hint' }, t('userCodeLabel')),
+                          h('strong', null, qr.userCode),
+                        )
                       : null,
+                    qr && qr.status === 'waiting' && qr.verificationUri
+                      ? h(
+                          'div',
+                          { className: 'mbx-hint' },
+                          t('openInBrowser'),
+                          ' ',
+                          h('a', { href: qr.verificationUri, target: '_blank', rel: 'noreferrer' }, qr.verificationUri),
+                        )
+                      : null,
+                    qr && qr.status === 'waiting' ? h('div', { className: 'mbx-hint' }, t('qrWaiting')) : null,
                     qr && qr.status === 'starting' ? h('div', { className: 'mbx-hint' }, t('loading')) : null,
-                    qr && qr.status === 'error'
+                    qr && (qr.status === 'error' || qr.status === 'expired')
                       ? h('div', { className: 'mbx-error' }, qr.error || t('qrFailed'))
                       : null,
                     h(
@@ -1134,29 +1211,14 @@ function initialOf(text) {
                       h('button', {
                         type: 'button',
                         className: 'mbx-btn is-primary',
-                        onClick: startQrLogin,
+                        onClick: () => startQrLogin(addForm.preset),
                         disabled: Boolean(qr) && (qr.status === 'waiting' || qr.status === 'starting'),
-                      }, qr && qr.status === 'waiting' ? t('regenerate') : t('generateQr')),
+                      }, qr && (qr.status === 'waiting' || qr.status === 'expired') ? t('regenerate') : t('generateQr')),
                     ),
                   )
                 : h(
                     React.Fragment,
                     null,
-                    h(
-                      'div',
-                      { className: 'mbx-field' },
-                      h('label', null, t('provider')),
-                      h(
-                        'select',
-                        {
-                          className: 'mbx-select',
-                          value: addForm.preset,
-                          onChange: (event) => setAddForm({ ...addForm, preset: event.target.value }),
-                        },
-                        ...providers.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
-                      ),
-                      provider.hint ? h('div', { className: 'mbx-hint' }, provider.hint) : null,
-                    ),
                     h(
                       'div',
                       { className: 'mbx-field' },
@@ -1244,7 +1306,7 @@ function initialOf(text) {
                       ),
                     ),
                   ),
-              addMode === 'imap' && addForm.error ? h('div', { className: 'mbx-error' }, addForm.error) : null,
+              mode === 'password' && addForm.error ? h('div', { className: 'mbx-error' }, addForm.error) : null,
               h(
                 'div',
                 { className: 'mbx-actions' },
@@ -1256,8 +1318,8 @@ function initialOf(text) {
                     setAddForm(null);
                   },
                   disabled: addForm.busy,
-                }, addMode === 'feishu' ? t('close') : t('cancel')),
-                addMode === 'imap'
+                }, mode === 'qr' ? t('close') : t('cancel')),
+                mode === 'password'
                   ? h('button', {
                       type: 'button',
                       className: 'mbx-btn is-primary',

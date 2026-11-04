@@ -2,7 +2,7 @@
   "name": "mailbox",
   "version": "0.1.0",
   "private": true,
-  "description": "In-harness mailbox: multiple accounts (even the same address twice), IMAP IDLE new-mail alerts with a chime, and send/receive with attachments without leaving the panel.",
+  "description": "In-harness mailbox: multiple IMAP accounts (same address twice included) plus QR sign-in for Feishu and Microsoft 365, IMAP IDLE alerts with a chime, and send/receive with attachments without leaving the panel.",
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -14,6 +14,7 @@
     "index.js",
     "client.js",
     "lib/",
+    "assets/",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",

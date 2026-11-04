@@ -56,11 +56,12 @@ export function writeState(state) {
   return state;
 }
 
-/** 对外暴露的账号视图：不含密码。 */
+/** 对外暴露的账号视图：不含密码、不含 refresh_token。 */
 export function publicAccount(account) {
   return {
     id: account.id,
     kind: account.kind || 'imap',
+    auth: account.auth || 'password',
     label: account.label,
     email: account.email,
     username: account.username,

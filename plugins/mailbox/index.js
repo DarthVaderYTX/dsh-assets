@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { ImapClient, ImapError } from './lib/imap.js';
 import { SmtpClient } from './lib/smtp.js';
@@ -15,6 +16,7 @@ import { buildMessage, parseMessage, previewText } from './lib/mime.js';
 import { PROVIDERS, resolveProvider } from './lib/providers.js';
 import { nextAccountId, publicAccount, readState, storeDir, writeState } from './lib/store.js';
 import { FeishuRuntime } from './lib/feishu-runtime.js';
+import { MICROSOFT, emailFromIdToken, pollDeviceToken, refreshAccessToken, requestDeviceCode } from './lib/oauth.js';
 import {
   cleanLarkError,
   mailboxProfile,
@@ -30,6 +32,13 @@ const PREFIX = '/mailbox/api';
 const EVENT_LIMIT = 400;
 const MAX_BODY = 32 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL = 18 * 1024 * 1024;
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+const LOGIN_UNSUPPORTED = {
+  webOnly: '这家邮箱的扫码登录只发网页登录态，换不到 IMAP/SMTP 凭据，只能用应用专用密码',
+  googleRestricted: 'Google 的设备码授权不开放邮件类权限，请用「应用专用密码」',
+};
+
 const IDLE_CYCLE_MS = 20 * 60 * 1000;
 
 /* ------------------------------------------------------------------ errors */
@@ -42,6 +51,15 @@ class HttpError extends Error {
 }
 
 /* ------------------------------------------------------------ event queue */
+
+/** refresh_token 会被服务端轮换，落盘保存，避免下次启动失效。 */
+function persistRefreshToken(accountId, refreshToken) {
+  const state = readState();
+  const target = state.accounts.find((item) => item.id === accountId);
+  if (!target) return;
+  target.refreshToken = refreshToken;
+  writeState(state);
+}
 
 export class EventHub {
   constructor() {
@@ -104,6 +122,7 @@ export class AccountRuntime {
       watching: false,
     };
     this.cache = new Map();
+    this.token = null;
   }
 
   log(message) {
@@ -130,6 +149,49 @@ export class AccountRuntime {
     };
   }
 
+  /** OAuth 账号：refresh_token 换 access_token，内存里缓存到快过期。 */
+  async accessToken() {
+    if (this.account.auth !== 'xoauth2') return '';
+    if (this.token && this.token.expiresAt > Date.now()) return this.token.accessToken;
+    const spec = {
+      baseUrl: this.account.oauthBase || MICROSOFT.baseUrl,
+      clientId: this.account.clientId || MICROSOFT.clientId,
+      scopes: this.account.scopes || MICROSOFT.scopes,
+    };
+    const fresh = await refreshAccessToken(spec, this.account.refreshToken);
+    this.token = fresh;
+    if (fresh.refreshToken && fresh.refreshToken !== this.account.refreshToken) {
+      this.account.refreshToken = fresh.refreshToken;
+      persistRefreshToken(this.account.id, fresh.refreshToken);
+    }
+    return fresh.accessToken;
+  }
+
+  async authenticateImap(client) {
+    if (this.account.auth !== 'xoauth2') return client.login(this.account.username, this.account.password);
+    const token = await this.accessToken();
+    try {
+      return await client.authenticateXoauth2(this.account.username, token);
+    } catch (error) {
+      // token 可能刚好在服务端失效：丢掉缓存重取一次再试。
+      this.token = null;
+      const fresh = await this.accessToken();
+      return client.authenticateXoauth2(this.account.username, fresh);
+    }
+  }
+
+  async authenticateSmtp(client) {
+    if (this.account.auth !== 'xoauth2') return client.authenticate(this.account.username, this.account.password);
+    const token = await this.accessToken();
+    try {
+      return await client.authenticateXoauth2(this.account.username, token);
+    } catch (error) {
+      this.token = null;
+      const fresh = await this.accessToken();
+      return client.authenticateXoauth2(this.account.username, fresh);
+    }
+  }
+
   /** 所有读操作串行复用一个连接，避免被服务商的并发连接数限制卡住。 */
   async withReader(operation) {
     const run = async () => {
@@ -138,7 +200,7 @@ export class AccountRuntime {
         const client = new ImapClient(this.imapOptions());
         await client.connect();
         await client.capability();
-        await client.login(this.account.username, this.account.password);
+        await this.authenticateImap(client);
         this.reader = client;
       }
       try {
@@ -295,7 +357,7 @@ export class AccountRuntime {
     const client = new SmtpClient(this.smtpOptions());
     try {
       await client.connect();
-      await client.authenticate(this.account.username, this.account.password);
+      await this.authenticateSmtp(client);
       await client.send({ from: this.account.email, to: recipients, raw });
     } finally {
       await client.quit().catch(() => undefined);
@@ -321,7 +383,7 @@ export class AccountRuntime {
         this.watcher = client;
         await client.connect();
         await client.capability();
-        await client.login(this.account.username, this.account.password);
+        await this.authenticateImap(client);
         const info = await client.select('INBOX');
         let lastExists = info.exists;
         this.status.connected = true;
@@ -496,22 +558,202 @@ export function apply(ctx, config = {}) {
     return runtime;
   };
 
-  // 扫码登录的临时会话：id → { status, deviceCode, pngPath, child, account }
-  const pendingLogins = new Map();
-  const pendingFile = (id) => path.join(os.tmpdir(), 'dsh-mailbox-qr-' + id + '.png');
+  // 扫码登录的临时会话：id → { kind, status, account, file?, child?, timer? }
+  // 结束后保留 5 分钟，前端才读得到最终的 ok / error。
+  const loginSessions = new Map();
+  const sessionFile = (id) => path.join(os.tmpdir(), 'dsh-mailbox-qr-' + id + '.png');
+  const newSessionId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-  const cleanupPending = (pending) => {
+  const releaseSession = (session, status, extra = {}) => {
+    session.status = status;
+    Object.assign(session, extra);
+    session.finishedAt = Date.now();
+    if (session.timer) {
+      clearInterval(session.timer);
+      session.timer = null;
+    }
     try {
-      pending.child?.kill('SIGTERM');
+      session.child?.kill('SIGTERM');
     } catch {
       /* ignore */
     }
-    try {
-      fs.rmSync(pending.pngPath, { force: true });
-    } catch {
-      /* ignore */
+    session.child = null;
+    if (session.file) {
+      try {
+        fs.rmSync(session.file, { force: true });
+      } catch {
+        /* ignore */
+      }
+      session.file = null;
     }
-    pendingLogins.delete(pending.id);
+  };
+
+  const dropSession = (session) => {
+    releaseSession(session, 'cancelled');
+    loginSessions.delete(session.id);
+  };
+
+  const sweepSessions = () => {
+    const now = Date.now();
+    for (const session of [...loginSessions.values()]) {
+      const expired = session.finishedAt ? now - session.finishedAt > 300000 : now - session.createdAt > 1800000;
+      if (expired) dropSession(session);
+    }
+  };
+
+  /** OAuth 账号：邮箱地址取自 id_token，refresh_token 落盘。 */
+  const addOauthAccount = (providerId, spec, token, email) => {
+    const provider = resolveProvider(providerId);
+    const state = readState();
+    const existing = state.accounts.find((item) => item.auth === 'xoauth2' && item.email === email);
+    if (existing) {
+      existing.refreshToken = token.refreshToken || existing.refreshToken;
+      writeState(state);
+      if (!runtimes.has(existing.id)) bootAccount(existing);
+      return publicAccount(existing);
+    }
+    const { id, counter } = nextAccountId(state);
+    const stored = {
+      id,
+      kind: 'imap',
+      auth: 'xoauth2',
+      provider: providerId,
+      label: email,
+      email,
+      username: email,
+      preset: providerId,
+      oauthBase: spec.baseUrl,
+      clientId: spec.clientId,
+      scopes: spec.scopes,
+      refreshToken: token.refreshToken,
+      imap: { ...provider.imap },
+      smtp: { ...provider.smtp },
+      createdAt: Date.now(),
+    };
+    state.accounts.push(stored);
+    state.counter = counter;
+    writeState(state);
+    bootAccount(stored);
+    return publicAccount(stored);
+  };
+
+  /** 飞书：二维码动态生成，等待 lark-cli 的子进程退出。 */
+  const startLarkSession = async () => {
+    if (!resolveLarkBinary()) throw new HttpError(400, '本机没有 lark-cli，无法扫码登录飞书邮箱');
+    const started = await startDeviceLogin('mail');
+    const id = newSessionId('qr_');
+    const file = sessionFile(id);
+    await qrcodePng(started.verificationUrl, file, 320);
+    const session = {
+      id,
+      kind: 'lark',
+      status: 'waiting',
+      error: null,
+      account: null,
+      file,
+      child: null,
+      timer: null,
+      createdAt: Date.now(),
+    };
+    loginSessions.set(id, session);
+
+    const child = waitForDeviceLogin(started.deviceCode);
+    session.child = child;
+    let stderr = '';
+    child.stderr.on('data', (chunk) => (stderr += chunk.toString('utf8')));
+    child.stdout.resume();
+    child.on('error', (error) => {
+      if (session.status === 'waiting') releaseSession(session, 'error', { error: error.message });
+    });
+    child.on('close', async (code) => {
+      if (session.status !== 'waiting') return;
+      if (code !== 0) {
+        releaseSession(session, 'error', { error: cleanLarkError(stderr) || '扫码登录未完成或已超时' });
+        return;
+      }
+      try {
+        const created = await addFeishuAccount({ label: '' });
+        releaseSession(session, 'ok', { account: created.account });
+      } catch (error) {
+        releaseSession(session, 'error', { error: error?.message || String(error) });
+      }
+    });
+
+    return {
+      ok: true,
+      id,
+      kind: 'lark',
+      qr: '/mailbox/api/login/qr?id=' + id,
+      expiresIn: started.expiresIn,
+    };
+  };
+
+  /** Microsoft 365 / Outlook：设备码 + 固定二维码，轮询换 token。 */
+  const startOauthSession = async (providerId) => {
+    const spec = MICROSOFT;
+    const device = await requestDeviceCode(spec);
+    const id = newSessionId('oa_');
+    const session = {
+      id,
+      kind: 'oauth',
+      provider: providerId,
+      spec,
+      status: 'waiting',
+      error: null,
+      account: null,
+      userCode: device.userCode,
+      verificationUri: device.verificationUri,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + device.expiresIn * 1000,
+      timer: null,
+    };
+    loginSessions.set(id, session);
+
+    let ticking = false;
+    const tick = async () => {
+      if (session.status !== 'waiting' || ticking) return;
+      ticking = true;
+      try {
+        if (Date.now() > session.expiresAt) {
+          releaseSession(session, 'expired', { error: '二维码已过期，请重新生成' });
+          return;
+        }
+        const result = await pollDeviceToken(spec, device.deviceCode);
+        if (result.status === 'ok') {
+          const email = emailFromIdToken(result.token.idToken);
+          if (!email) {
+            releaseSession(session, 'error', { error: '授权成功但读不到邮箱地址' });
+            return;
+          }
+          const account = addOauthAccount(providerId, spec, result.token, email);
+          releaseSession(session, 'ok', { account });
+        } else if (result.status === 'denied') {
+          releaseSession(session, 'error', { error: '授权被拒绝' });
+        } else if (result.status === 'expired') {
+          releaseSession(session, 'expired', { error: '二维码已过期，请重新生成' });
+        } else if (result.status === 'error') {
+          releaseSession(session, 'error', { error: result.error });
+        }
+      } catch (error) {
+        releaseSession(session, 'error', { error: error?.message || String(error) });
+      } finally {
+        ticking = false;
+      }
+    };
+    session.timer = setInterval(tick, Math.max(2, device.interval) * 1000);
+    setTimeout(tick, 500);
+
+    return {
+      ok: true,
+      id,
+      kind: 'oauth',
+      // 微软的验证地址是固定的，扫码落到登录页，再输一次性代码。
+      qr: '/mailbox/api/assets/qr-microsoft-device.png',
+      userCode: device.userCode,
+      verificationUri: device.verificationUri,
+      expiresIn: device.expiresIn,
+      interval: device.interval,
+    };
   };
 
   /** 飞书账号不走密码：身份来自 lark-cli 当前的用户登录。 */
@@ -568,6 +810,7 @@ export function apply(ctx, config = {}) {
           hint: provider.hint,
           imap: provider.imap,
           smtp: provider.smtp,
+          login: provider.login || { kind: 'none' },
         })),
       };
     },
@@ -621,75 +864,70 @@ export function apply(ctx, config = {}) {
       return { ok: true };
     },
 
-    async 'POST /feishu/login/start'() {
-      if (!resolveLarkBinary()) throw new HttpError(400, '本机没有 lark-cli，无法扫码登录飞书邮箱');
-      const started = await startDeviceLogin('mail');
-      const id = 'qr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      const pngPath = pendingFile(id);
-      await qrcodePng(started.verificationUrl, pngPath, 320);
-      const pending = {
-        id,
-        status: 'waiting',
-        error: null,
-        account: null,
-        pngPath,
-        createdAt: Date.now(),
-        child: null,
+    async 'POST /login/start'(body) {
+      sweepSessions();
+      const providerId = String(body.provider || 'feishu');
+      const provider = resolveProvider(providerId);
+      const login = provider.login || { kind: 'none' };
+      if (login.kind === 'lark') return startLarkSession();
+      if (login.kind === 'device-code') return startOauthSession(providerId);
+      throw new HttpError(400, LOGIN_UNSUPPORTED[login.reason] || '这家邮箱不支持扫码登录，请用应用专用密码');
+    },
+
+    async 'GET /login/qr'(query) {
+      const session = loginSessions.get(String(query.get('id') || ''));
+      if (!session || !session.file || !fs.existsSync(session.file)) {
+        throw new HttpError(404, '二维码已失效，请重新生成');
+      }
+      return { file: { path: session.file, contentType: 'image/png' } };
+    },
+
+    async 'POST /login/poll'(body) {
+      const session = loginSessions.get(String(body.id || ''));
+      if (!session) throw new HttpError(404, '登录会话已失效，请重新生成二维码');
+      return {
+        ok: true,
+        status: session.status,
+        error: session.error,
+        account: session.account,
+        userCode: session.userCode,
       };
-      pendingLogins.set(id, pending);
+    },
 
-      const child = waitForDeviceLogin(started.deviceCode);
-      pending.child = child;
-      let stderr = '';
-      child.stderr.on('data', (chunk) => (stderr += chunk.toString('utf8')));
-      child.stdout.resume();
-      child.on('error', (error) => {
-        pending.status = 'error';
-        pending.error = error.message;
-      });
-      child.on('close', async (code) => {
-        if (pending.status !== 'waiting') return;
-        if (code !== 0) {
-          pending.status = 'error';
-          pending.error = cleanLarkError(stderr) || '扫码登录未完成或已超时';
-          return;
-        }
-        try {
-          const result = await addFeishuAccount({ label: '' });
-          pending.status = 'ok';
-          pending.account = result.account;
-        } catch (error) {
-          pending.status = 'error';
-          pending.error = error?.message || String(error);
-        }
-      });
+    async 'POST /login/cancel'(body) {
+      const session = loginSessions.get(String(body.id || ''));
+      if (session) dropSession(session);
+      return { ok: true };
+    },
 
-      return { ok: true, id, qr: '/mailbox/api/feishu/login/qr?id=' + id, expiresIn: started.expiresIn };
+    async 'GET /assets/qr-microsoft-device.png'() {
+      const file = path.join(PACKAGE_DIR, 'assets', 'qr-microsoft-device.png');
+      if (!fs.existsSync(file)) throw new HttpError(404, '缺少二维码资源');
+      return { file: { path: file, contentType: 'image/png' } };
+    },
+
+    // 兼容早先的飞书专用路由
+    async 'POST /feishu/login/start'() {
+      return startLarkSession();
     },
 
     async 'GET /feishu/login/qr'(query) {
-      const pending = pendingLogins.get(String(query.get('id') || ''));
-      if (!pending || !fs.existsSync(pending.pngPath)) throw new HttpError(404, '二维码已失效，请重新生成');
-      return { file: { path: pending.pngPath, contentType: 'image/png' } };
+      const session = loginSessions.get(String(query.get('id') || ''));
+      if (!session || !session.file || !fs.existsSync(session.file)) {
+        throw new HttpError(404, '二维码已失效，请重新生成');
+      }
+      return { file: { path: session.file, contentType: 'image/png' } };
     },
 
     async 'POST /feishu/login/poll'(body) {
-      const pending = pendingLogins.get(String(body.id || ''));
-      if (!pending) throw new HttpError(404, '登录会话已失效，请重新生成二维码');
-      return { ok: true, status: pending.status, error: pending.error, account: pending.account };
+      const session = loginSessions.get(String(body.id || ''));
+      if (!session) throw new HttpError(404, '登录会话已失效，请重新生成二维码');
+      return { ok: true, status: session.status, error: session.error, account: session.account };
     },
 
     async 'POST /feishu/login/cancel'(body) {
-      const pending = pendingLogins.get(String(body.id || ''));
-      if (pending) {
-        pending.status = 'cancelled';
-        try {
-          pending.child?.kill('SIGTERM');
-        } catch {
-          /* ignore */
-        }
-        cleanupPending(pending);
-      }
+      const session = loginSessions.get(String(body.id || ''));
+      if (session) dropSession(session);
       return { ok: true };
     },
 
@@ -827,7 +1065,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => () => {
     for (const runtime of runtimes.values()) runtime.dispose();
     runtimes.clear();
-    for (const pending of [...pendingLogins.values()]) cleanupPending(pending);
+    for (const session of [...loginSessions.values()]) dropSession(session);
   }, 'mailbox: close accounts');
 }
 

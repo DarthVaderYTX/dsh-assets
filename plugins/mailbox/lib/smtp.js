@@ -182,6 +182,18 @@ export class SmtpClient {
     return this.capabilities;
   }
 
+  /** XOAUTH2：AUTH XOAUTH2 <base64(user=..\x01auth=Bearer ..\x01\x01)>，微软 587 端口也用这个。 */
+  async authenticateXoauth2(user, accessToken) {
+    const supports = this.capabilities.some((line) => line.startsWith('AUTH') && /XOAUTH2/i.test(line));
+    if (!supports) throw new SmtpError('服务端不支持 XOAUTH2，请改用应用专用密码');
+    const token = Buffer.from(
+      'user=' + user + '\u0001auth=Bearer ' + accessToken + '\u0001\u0001',
+      'utf8',
+    ).toString('base64');
+    await this.command('AUTH XOAUTH2 ' + token, [235]);
+    return 'XOAUTH2';
+  }
+
   async authenticate(user, password) {
     if (this.capabilities.some((line) => line.startsWith('AUTH') && line.includes('PLAIN'))) {
       const token = Buffer.from('\u0000' + user + '\u0000' + password, 'utf8').toString('base64');

@@ -392,6 +392,39 @@ export class ImapClient {
   }
 
 
+  /**
+   * XOAUTH2（RFC 7628 的 SASL 变体，微软 / Gmail 都用它）：
+   *   客户端发 AUTHENTICATE XOAUTH2 <base64(user=..\x01auth=Bearer ..\x01\x01)>
+   *   失败时服务端回 `+ <base64 错误>`，必须补一个空行结束握手，否则连接会被挂住。
+   */
+  async authenticateXoauth2(user, accessToken) {
+    if (!this.capabilities.includes('AUTH=XOAUTH2')) {
+      throw new ImapError('服务端不支持 XOAUTH2，请改用应用专用密码');
+    }
+    const tag = 'A' + (this.tag += 1);
+    const payload = Buffer.from(
+      'user=' + user + '\u0001auth=Bearer ' + accessToken + '\u0001\u0001',
+      'utf8',
+    ).toString('base64');
+    await this.write(tag + ' AUTHENTICATE XOAUTH2 ' + payload + '\r\n');
+    for (;;) {
+      const line = await this.readLine();
+      if (line.startsWith('+')) {
+        // 服务端要求继续（通常是错误详情），回空行收尾再等最终响应。
+        await this.write('\r\n');
+        continue;
+      }
+      if (line.startsWith(tag + ' ')) {
+        const rest = line.slice(tag.length + 1);
+        if (!/^OK/i.test(rest)) {
+          throw new ImapError('IMAP XOAUTH2 失败：' + rest.trim());
+        }
+        await this.capability().catch(() => undefined);
+        return line;
+      }
+    }
+  }
+
   async authenticatePlain(user, password) {
     const tag = 'A' + (this.tag += 1);
     await this.write(tag + ' AUTHENTICATE PLAIN\r\n');

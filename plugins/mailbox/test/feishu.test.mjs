@@ -179,13 +179,14 @@ test('HTTP 路由：扫码登录生成二维码、轮询成功后落库', async 
   apply(ctx, {});
   const route = routes[0];
   try {
-    const started = await call(route, 'POST', '/mailbox/api/feishu/login/start', {});
+    const started = await call(route, 'POST', '/mailbox/api/login/start', { provider: 'feishu' });
     assert.equal(started.status, 200, started.text);
     assert.equal(started.json.ok, true);
+    assert.equal(started.json.kind, 'lark');
     const id = started.json.id;
-    assert.match(started.json.qr, /\/mailbox\/api\/feishu\/login\/qr\?id=/);
+    assert.match(started.json.qr, /\/mailbox\/api\/login\/qr\?id=/);
 
-    const png = await call(route, 'GET', '/mailbox/api/feishu/login/qr?id=' + id);
+    const png = await call(route, 'GET', '/mailbox/api/login/qr?id=' + id);
     assert.equal(png.status, 200);
     assert.equal(png.headers['content-type'], 'image/png');
     assert.equal(png.buffer.slice(0, 4).toString('hex'), '89504e47');
@@ -193,7 +194,7 @@ test('HTTP 路由：扫码登录生成二维码、轮询成功后落库', async 
     let status = 'waiting';
     for (let i = 0; i < 40 && status === 'waiting'; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      const polled = await call(route, 'POST', '/mailbox/api/feishu/login/poll', { id });
+      const polled = await call(route, 'POST', '/mailbox/api/login/poll', { id });
       status = polled.json.status;
     }
     assert.equal(status, 'ok');

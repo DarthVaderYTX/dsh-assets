@@ -59,6 +59,8 @@ export function startMockMailServer(options = {}) {
     boxes: new Map([['INBOX', []]]),
     uidNext: 1,
     listeners: new Set(),
+    // XOAUTH2 用：user → access token
+    oauthTokens: new Map(Object.entries(options.oauthTokens || {})),
   };
 
   const imapServer = net.createServer((socket) => handleImap(socket, state));
@@ -113,7 +115,7 @@ function handleImap(socket, state) {
   state.listeners.add(listener);
   socket.on('close', () => state.listeners.delete(listener));
 
-  send('* OK [CAPABILITY IMAP4rev1 IDLE AUTH=PLAIN] mock ready');
+  send('* OK [CAPABILITY IMAP4rev1 IDLE AUTH=PLAIN AUTH=XOAUTH2] mock ready');
 
   const handleLine = (line) => {
     if (idleTag && line.toUpperCase() === 'DONE') {
@@ -131,7 +133,7 @@ function handleImap(socket, state) {
     const upper = rest.toUpperCase();
 
     if (upper === 'CAPABILITY') {
-      send('* CAPABILITY IMAP4rev1 IDLE AUTH=PLAIN');
+      send('* CAPABILITY IMAP4rev1 IDLE AUTH=PLAIN AUTH=XOAUTH2');
       send(tag + ' OK CAPABILITY done');
       return;
     }
@@ -144,6 +146,22 @@ function handleImap(socket, state) {
         send(tag + ' OK LOGIN done');
       } else {
         send(tag + ' NO [AUTHENTICATIONFAILED] invalid credentials');
+      }
+      return;
+    }
+    // XOAUTH2：客户端直接把 base64(user=..\x01auth=Bearer <token>\x01\x01) 带在命令行上。
+    if (upper.startsWith('AUTHENTICATE XOAUTH2 ')) {
+      const payload = Buffer.from(rest.slice('AUTHENTICATE XOAUTH2 '.length).trim(), 'base64').toString('utf8');
+      const match = payload.match(/^user=([^\u0001]+)\u0001auth=Bearer (.+)\u0001\u0001$/);
+      const user = match ? match[1] : '';
+      const token = match ? match[2] : '';
+      if (state.oauthTokens && state.oauthTokens.get(user) === token) {
+        authenticated = true;
+        send(tag + ' OK AUTHENTICATE completed');
+      } else {
+        // 真服务器先回 `+ <base64 错误>`，客户端补空行后才给 NO。
+        send('+ ' + Buffer.from('{"status":"401","schemes":"bearer"}').toString('base64'));
+        send(tag + ' NO [AUTHENTICATIONFAILED] invalid token');
       }
       return;
     }
@@ -301,8 +319,20 @@ function handleSmtp(socket, state) {
       send('250-mock');
       send('250-SIZE 10485760');
       send('250-8BITMIME');
-      send('250-AUTH PLAIN LOGIN');
+      send('250-AUTH PLAIN LOGIN XOAUTH2');
       send('250 OK');
+      return;
+    }
+    if (upper.startsWith('AUTH XOAUTH2 ')) {
+      const payload = Buffer.from(rest.slice('AUTH XOAUTH2 '.length).trim(), 'base64').toString('utf8');
+      const match = payload.match(/^user=([^\u0001]+)\u0001auth=Bearer (.+)\u0001\u0001$/);
+      const user = match ? match[1] : '';
+      const token = match ? match[2] : '';
+      if (state.oauthTokens && state.oauthTokens.get(user) === token) {
+        send('235 2.7.0 Authentication successful');
+      } else {
+        send('535 5.7.8 Authentication failed');
+      }
       return;
     }
     if (upper.startsWith('AUTH PLAIN')) {
