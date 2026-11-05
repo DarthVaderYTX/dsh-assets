@@ -767,6 +767,7 @@ test('模板列表点进详情：内置只读', () => {
   assert.ok(findAll(view, clickable('复制')).length >= 1, '内置模板缺复制')
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '模板详情不是四个阶段')
   assert.equal(findAll(view, byClass('ae-group-edit')).length, 0, '模板里不该有分组')
+  assert.equal(findAll(view, byClass('ae-chip')).length, 0, '模板里不该出现执行模块')
 })
 
 test('自定义模板可以改字段并保存', async () => {
