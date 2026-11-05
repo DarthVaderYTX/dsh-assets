@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AutoEval",
+    "description": "四阶段评测流水线：Scraping 抓取、Annotation 标注、Metrics 指标、Reporting 报告。每个阶段都有内置执行模板，也可以换成自定义命令；内置 WebSearchTool 检索覆盖评测模板，左侧栏图标点开即可配置、运行、看报告。"
+  }
+}

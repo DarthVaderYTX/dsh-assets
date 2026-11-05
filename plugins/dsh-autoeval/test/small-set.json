@@ -1,0 +1,38 @@
+[
+  {
+    "id": "c1",
+    "bucket": "stable",
+    "query": "Python 3.13 新特性",
+    "infoPoints": ["Python", "3.13"]
+  },
+  {
+    "id": "c2",
+    "bucket": "stable",
+    "query": "TypeScript 5.9 release notes",
+    "infoPoints": ["TypeScript", "5.9"]
+  },
+  {
+    "id": "c3",
+    "bucket": "stable",
+    "query": "DeepSeek API 定价 每百万 tokens",
+    "infoPoints": ["百万"]
+  },
+  {
+    "id": "c4",
+    "bucket": "stable",
+    "query": "Linus Torvalds 出生地",
+    "infoPoints": ["Linus"]
+  },
+  {
+    "id": "c5",
+    "bucket": "stable",
+    "query": "macOS 26 新功能",
+    "infoPoints": ["macOS"]
+  },
+  {
+    "id": "c6",
+    "bucket": "hard",
+    "query": "2026 年 6 月 中国新能源汽车 销量 具体数字",
+    "infoPoints": ["万辆|销量"]
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AutoEval",
+    "description": "Four-stage evaluation pipeline: Scraping, Annotation, Metrics, Reporting. Every stage ships a preset execution template and accepts a custom command; the built-in WebSearchTool coverage template opens from its left-sidebar icon to configure, run and read reports."
+  }
+}
