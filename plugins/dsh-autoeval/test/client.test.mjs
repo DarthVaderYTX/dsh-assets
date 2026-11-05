@@ -11,7 +11,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.dirname(here)
 process.env.DSH_HOME = path.join(os.tmpdir(), 'autoeval-client-test')
 
-const { STAGES, BUILTIN_TEMPLATES } = await import(path.join(root, 'index.js'))
+const { stageCatalog, BUILTIN_TEMPLATES } = await import(path.join(root, 'index.js'))
 
 const ROW = {
   id: 'c1',
@@ -29,7 +29,7 @@ const ROW = {
 
 const STATE = {
   ok: true,
-  stages: STAGES,
+  stages: stageCatalog(),
   templates: [
     ...BUILTIN_TEMPLATES,
     {
@@ -164,6 +164,7 @@ function findAll(node, predicate) {
 
 const byClass = (name) => (node) => String(node.props.className || '') === name
 const hasClass = (name) => (node) => String(node.props.className || '').split(' ').includes(name)
+const textOf = (node) => texts(node)
 const clickable = (label) => (node) => typeof node.type === 'string'
   && typeof node.props.onClick === 'function' && texts(node).includes(label)
 
@@ -193,6 +194,18 @@ globalThis.fetch = async (url, options = {}) => {
   if (url.includes('/report')) return reply({ ok: true, text: '# AutoEval 报告\n\n通过率 66.7%' })
   if (url.includes('/runs/rerun')) return reply({ ok: true, runId: 'run-rerun' })
   if (url.includes('/runs?')) return reply({ ok: true, removed: 'run-fixture' })
+  if (url.includes('/templates/raw') && (options.method || 'GET') === 'GET') {
+    return reply({
+      ok: true,
+      id: 'my-coverage',
+      yaml: 'id: my-coverage\nname: 我的覆盖模板\nstages:\n  scraping:\n    template: websearch\n',
+      file: '/tmp/autoeval/templates/my-coverage.yaml',
+    })
+  }
+  if (url.includes('/templates/preview')) {
+    return reply({ ok: true, yaml: 'id: template-new\nname: 新建\nstages: {}\n' })
+  }
+  if (url.includes('/templates/raw')) return reply({ ok: true, template: { id: 'my-coverage', name: '我的覆盖模板' } })
   if (url.includes('/templates')) return reply({ ok: true, template: { id: 'x' } })
   return reply({ ok: false, error: `unexpected ${url}` }, 404)
 }
@@ -467,6 +480,67 @@ test('自定义模板可以改字段并保存', async () => {
   const body = JSON.parse(posted.body)
   assert.equal(body.id, 'my-coverage')
   assert.equal(body.name, '改过名的模板')
+})
+
+test('模板表单按 schema 生成控件：数字带范围、列表是 chips、命令是输入框', async () => {
+  let view = ensureTaskList()
+  findAll(view, byClass('ae-tab'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+
+  const numbers = findAll(view, (node) => node.type === 'input' && node.props.type === 'number')
+  assert.ok(numbers.length >= 2, '应该按字段类型渲染出数字输入框')
+  const maxResults = numbers.find((node) => node.props.max === 20)
+  assert.ok(maxResults, 'maxResults 的 max 没带出来')
+  assert.equal(String(maxResults.props.min), '1')
+  assert.equal(String(maxResults.props.step), '1')
+  assert.equal(String(maxResults.props.value), '5')
+
+  // 报告小节的枚举 → 多选 chips，四个选项
+  const text = texts(view)
+  assert.ok(text.includes('总览') && text.includes('未通过'), '枚举选项没渲染出来')
+  const sectionsChips = findAll(view, byClass('ae-chip'))
+    .filter((node) => ['summary', 'stages', 'cases', 'failures'].includes(textOf(node)) || ['总览', '阶段', '逐条', '未通过'].includes(textOf(node)))
+  assert.equal(sectionsChips.length, 4)
+  assert.ok(sectionsChips.every((node) => node.props['data-active'] === 'true'), '默认四个小节都该选中')
+
+  // 点掉一个再点回来
+  sectionsChips[0].props.onClick()
+  view = render(mainComponent(), {})
+  const after = findAll(view, byClass('ae-chip'))
+    .filter((node) => ['总览', '阶段', '逐条', '未通过'].includes(textOf(node)))
+  assert.equal(after.filter((node) => node.props['data-active'] === 'true').length, 3, '点一下应该取消选中')
+})
+
+test('模板 YAML 页签：读文件、改、存回去', async () => {
+  let view = ensureTaskList()
+  findAll(view, byClass('ae-tab'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  const yamlTab = findAll(view, byClass('ae-subtab')).find((node) => textOf(node) === 'YAML')
+  assert.ok(yamlTab, '没有 YAML 页签')
+  const before = calls.length
+  await yamlTab.props.onClick()
+  await settle()
+  view = render(mainComponent(), {})
+  const got = calls.slice(before).find((call) => call.method === 'GET' && call.url.includes('/templates/raw'))
+  assert.ok(got, '没有去读模板文件')
+
+  const area = findAll(view, byClass('ae-textarea ae-mono'))[0]
+  assert.ok(area, 'YAML 页签没有文本域')
+  assert.ok(String(area.props.value).includes('id: my-coverage'), '文本域没填上文件内容')
+
+  area.props.onChange({ target: { value: 'id: my-coverage\nname: 改过的名字\nstages: {}\n' } })
+  view = render(mainComponent(), {})
+  const saveButton = findAll(view, clickable('保存'))[0]
+  const saveBefore = calls.length
+  await saveButton.props.onClick()
+  await settle()
+  const posted = calls.slice(saveBefore).find((call) => call.method === 'POST' && call.url.includes('/templates/raw'))
+  assert.ok(posted, '没有 POST /templates/raw')
+  assert.ok(JSON.parse(posted.body).yaml.includes('改过的名字'), '发出去的内容不对')
 })
 
 test('模板页可以新建', () => {

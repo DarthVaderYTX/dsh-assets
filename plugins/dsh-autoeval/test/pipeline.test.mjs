@@ -272,15 +272,209 @@ test('空用例与非法的阶段模板都被拒绝', async () => {
   assert.match(bad.error, /没有执行模板/)
 })
 
-test('自定义模板可以保存、读取、删除', async () => {
+test('状态接口把字段 schema 一起发出来', async () => {
+  const state = await call('GET', '/autoeval-api/state')
+  const scraping = state.stages.find((item) => item.id === 'scraping')
+  const websearch = scraping.presets.find((item) => item.id === 'websearch')
+  assert.ok(Array.isArray(websearch.fields) && websearch.fields.length === 3)
+  const maxResults = websearch.fields.find((item) => item.key === 'maxResults')
+  assert.equal(maxResults.type, 'number')
+  assert.equal(maxResults.min, 1)
+  assert.equal(maxResults.max, 20)
+  const sections = state.stages
+    .find((item) => item.id === 'reporting')
+    .presets.find((item) => item.id === 'markdown')
+    .fields.find((item) => item.key === 'sections')
+  assert.equal(sections.type, 'list')
+  assert.deepEqual(sections.options.map((item) => item.value), ['summary', 'stages', 'cases', 'failures'])
+})
+
+test('自定义模板存成 YAML 文件，能读回来也能删', async () => {
   const saved = await call('POST', '/autoeval-api/templates', {
-    id: 'my-template', name: '我的模板', stages: { scraping: { template: 'inline', config: {} } },
+    id: 'my-template',
+    name: '我的模板',
+    description: '换个抓取间隔',
+    stages: {
+      scraping: { template: 'websearch', config: { maxResults: 8, queryField: 'q', intervalMs: 0 } },
+      annotation: { template: 'coverage-keyword', config: {} },
+      metrics: { template: 'standard', config: {} },
+      reporting: { template: 'markdown', config: { sections: ['summary'] } },
+    },
   })
-  assert.equal(saved.ok, true)
+  assert.equal(saved.ok, true, saved.error)
+
+  // 落盘为 templates/my-template.yaml，带注释、能解析
+  const file = path.join(process.env.DSH_HOME, 'storages', 'autoeval', 'templates', 'my-template.yaml')
+  const text = await fsp.readFile(file, 'utf8')
+  assert.ok(text.includes('maxResults: 8'), text)
+  assert.ok(text.includes('#'), 'YAML 里应该有字段说明注释')
+
+  const raw = await call('GET', '/autoeval-api/templates/raw?id=my-template')
+  assert.equal(raw.ok, true)
+  assert.equal(raw.file, file)
+  assert.ok(raw.yaml.includes('name: 我的模板'))
+
   let state = await call('GET', '/autoeval-api/state')
-  assert.ok(state.templates.some((item) => item.id === 'my-template'))
+  const found = state.templates.find((item) => item.id === 'my-template')
+  assert.equal(found.name, '我的模板')
+  assert.equal(found.stages.scraping.config.maxResults, 8)
+  assert.equal(found.broken, null)
+
   const removed = await call('DELETE', '/autoeval-api/templates?id=my-template')
   assert.equal(removed.removed, 1)
   state = await call('GET', '/autoeval-api/state')
   assert.ok(!state.templates.some((item) => item.id === 'my-template'))
+})
+
+test('模板可以整段 YAML 写进去', async () => {
+  const yaml = [
+    'id: yaml-template',
+    'name: 直接改 YAML 的模板',
+    'description: 手写',
+    'stages:',
+    '  scraping:',
+    '    template: websearch',
+    '    config:',
+    '      maxResults: 3',
+    '  annotation:',
+    '    template: coverage-rubric',
+    '    config:',
+    '      minCoverage: 0.8',
+    '  metrics:',
+    '    template: grouped',
+    '    config:',
+    '      groupBy: bucket',
+    '  reporting:',
+    '    template: markdown',
+    '    config:',
+    '      sections: [summary, cases]',
+    '',
+  ].join('\n')
+  const saved = await call('POST', '/autoeval-api/templates/raw', { yaml })
+  assert.equal(saved.ok, true, saved.error)
+  assert.equal(saved.template.id, 'yaml-template')
+  assert.equal(saved.template.stages.metrics.template, 'grouped')
+  assert.deepEqual(saved.template.stages.reporting.config.sections, ['summary', 'cases'])
+
+  const again = await call('GET', '/autoeval-api/templates/raw?id=yaml-template')
+  const saved2 = await call('POST', '/autoeval-api/templates/raw', { yaml: again.yaml })
+  assert.equal(saved2.ok, true, saved2.error)
+  assert.equal(saved2.template.stages.annotation.config.minCoverage, 0.8)
+  await call('DELETE', '/autoeval-api/templates?id=yaml-template')
+})
+
+test('用自定义模板提交时，阶段参数来自 YAML 文件', async () => {
+  const saved = await call('POST', '/autoeval-api/templates', {
+    id: 'fast-template',
+    name: '快检模板',
+    stages: {
+      scraping: { template: 'websearch', config: { maxResults: 2, queryField: 'query', intervalMs: 0 } },
+      annotation: { template: 'coverage-keyword', config: { pointsField: 'infoPoints', minCoverage: 1 } },
+      metrics: { template: 'standard', config: { latencyField: 'latencyMs' } },
+      reporting: { template: 'markdown', config: { sections: ['summary'] } },
+    },
+  })
+  assert.equal(saved.ok, true, saved.error)
+
+  const before = searches.length
+  const started = await call('POST', '/autoeval-api/run', { name: '按 YAML 模板跑', templateId: 'fast-template', cases: cases.slice(0, 1) })
+  assert.equal(started.ok, true, started.error)
+  const state = await waitForIdle()
+  const run = state.runs.find((item) => item.id === started.runId)
+  assert.equal(run.status, 'done', JSON.stringify(run.error || run.log))
+  assert.equal(run.stages.scraping.config.maxResults, 2, '运行记录里的参数不是模板里的')
+  assert.equal(run.stages.scraping.config.intervalMs, 0)
+  assert.deepEqual(run.stages.reporting.config.sections, ['summary'])
+  const used = searches.slice(before)
+  assert.ok(used.length > 0 && used.every((item) => item.maxResults === 2), `检索没用模板里的条数：${JSON.stringify(used)}`)
+  await call('DELETE', '/autoeval-api/templates?id=fast-template')
+})
+
+test('老 state.json 里的模板启动时迁成 YAML 文件', async () => {
+  const home = await fsp.mkdtemp(path.join(os.tmpdir(), 'autoeval-migrate-'))
+  const dir = path.join(home, 'storages', 'autoeval')
+  await fsp.mkdir(dir, { recursive: true })
+  await fsp.writeFile(path.join(dir, 'state.json'), JSON.stringify({
+    version: 1,
+    templates: [{
+      id: 'legacy-template',
+      name: '老的模板',
+      description: '迁移前存在 json 里',
+      stages: {
+        scraping: { template: 'websearch', config: { maxResults: 4 } },
+        annotation: { template: 'coverage-keyword', config: {} },
+        metrics: { template: 'standard', config: {} },
+        reporting: { template: 'markdown', config: {} },
+      },
+    }],
+    runs: [],
+  }), 'utf8')
+
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const migrateRoutes = []
+  const migrateCtx = {
+    web: { async search() { return { content: '', sources: [] } } },
+    get: () => undefined,
+    effect(fn) { fn() },
+    webServer: { register(route) { migrateRoutes.push(route); return () => {} } },
+  }
+  apply(migrateCtx, {})
+  // 迁移是异步的，等它落盘
+  for (let index = 0; index < 40; index += 1) {
+    try {
+      await fsp.access(path.join(dir, 'templates', 'legacy-template.yaml'))
+      break
+    } catch {
+      await sleep(50)
+    }
+  }
+  const yaml = await fsp.readFile(path.join(dir, 'templates', 'legacy-template.yaml'), 'utf8')
+  assert.ok(yaml.includes('id: legacy-template'), yaml)
+  assert.ok(yaml.includes('maxResults: 4'), yaml)
+  const state = JSON.parse(await fsp.readFile(path.join(dir, 'state.json'), 'utf8'))
+  assert.deepEqual(state.templates, [], 'state.json 里的模板应该清空')
+  process.env.DSH_HOME = previousHome
+})
+
+test('坏配置会被挡住：字段越界、阶段缺失、YAML 语法错', async () => {
+  const bad = async (body) => {
+    const result = await call('POST', '/autoeval-api/templates', body)
+    assert.equal(result.ok, false, '本该被拒绝')
+    return result.error
+  }
+  const base = {
+    scraping: { template: 'websearch', config: {} },
+    annotation: { template: 'coverage-keyword', config: {} },
+    metrics: { template: 'standard', config: {} },
+    reporting: { template: 'markdown', config: {} },
+  }
+  assert.match(await bad({
+    id: 'bad-1', name: 'x', stages: { ...base, scraping: { template: 'websearch', config: { maxResults: 999 } } },
+  }), /不能大于 20/)
+  assert.match(await bad({
+    id: 'bad-2', name: 'x', stages: { ...base, annotation: { template: 'coverage-keyword', config: { minCoverage: 2 } } },
+  }), /不能大于 1/)
+  assert.match(await bad({
+    id: 'bad-3', name: 'x', stages: { ...base, reporting: { template: 'markdown', config: { sections: ['nope'] } } },
+  }), /不认识的取值/)
+  assert.match(await bad({
+    id: 'bad-4', name: 'x', stages: { ...base, scraping: { template: 'custom', config: {} } },
+  }), /缺少 command/)
+  assert.match(await bad({ id: 'bad-5', name: 'x', stages: { scraping: base.scraping } }), /缺少阶段 annotation/)
+  assert.match(await bad({ id: 'Bad Id', name: 'x', stages: base }), /模板 id 只能用/)
+  const raw = await call('POST', '/autoeval-api/templates/raw', { yaml: 'id: x\n  bad: indent' })
+  assert.equal(raw.ok, false)
+  assert.match(raw.error, /YAML 解析失败/)
+})
+
+test('手写坏的 YAML 文件不会被吞掉，列表里带 broken 标记', async () => {
+  const dir = path.join(process.env.DSH_HOME, 'storages', 'autoeval', 'templates')
+  await fsp.mkdir(dir, { recursive: true })
+  await fsp.writeFile(path.join(dir, 'broken.yaml'), 'id: broken\nname: 坏的\nstages: [\n', 'utf8')
+  const state = await call('GET', '/autoeval-api/state')
+  const broken = state.templates.find((item) => item.id === 'broken')
+  assert.ok(broken, '坏文件也要出现在列表里')
+  assert.ok(broken.broken && broken.broken.length > 0, '应带解析错误')
+  await fsp.unlink(path.join(dir, 'broken.yaml'))
 })

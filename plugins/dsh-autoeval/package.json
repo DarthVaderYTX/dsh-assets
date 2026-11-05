@@ -1,6 +1,6 @@
 {
   "name": "dsh-autoeval",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "AutoEval: a four-stage evaluation pipeline (Scraping, Annotation, Metrics, Reporting) with preset and custom execution for every stage, reachable from a left-sidebar panel.",
   "type": "module",
@@ -12,6 +12,7 @@
   },
   "files": [
     "index.js",
+    "yaml.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",

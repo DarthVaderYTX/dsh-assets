@@ -7,6 +7,7 @@ import { promises as fsp } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { parseYaml, stringifyYaml } from './yaml.js'
 
 const API_PREFIX = '/autoeval-api'
 const MAX_RUNS = 30
@@ -21,12 +22,77 @@ function statePath() {
   return path.join(dataDir(), 'state.json')
 }
 
+function templatesDir() {
+  return path.join(dataDir(), 'templates')
+}
+
+function templateFile(id) {
+  return path.join(templatesDir(), `${id}.yaml`)
+}
+
 // ---------------------------------------------------------------- 阶段模板
 
 /**
  * 四个阶段 × 各自的执行模板。`config` 是该模板的默认参数，面板上可改，
  * 也可以整体换成 `custom`（自定义命令）。
  */
+/**
+ * 每个阶段执行模板能配哪些字段。面板按这份 schema 生成表单（类型、范围、枚举都从这来），
+ * 宿主保存时用同一份校验；用户直接改 YAML 也按它检查。
+ */
+const FIELDS = {
+  'scraping.websearch': [
+    { key: 'queryField', type: 'string', label: '检索词字段', default: 'query', hint: '用例里存检索词的字段名' },
+    { key: 'maxResults', type: 'number', label: '每条结果数', default: 5, min: 1, max: 20, step: 1 },
+    { key: 'intervalMs', type: 'number', label: '条目间隔', default: 250, min: 0, max: 5000, step: 50, unit: 'ms' },
+  ],
+  'scraping.inline': [],
+  'scraping.custom': [
+    { key: 'command', type: 'command', label: '自定义命令', default: '', hint: 'stdin 收 JSON，stdout 吐 JSON' },
+  ],
+  'annotation.coverage-keyword': [
+    { key: 'pointsField', type: 'string', label: '信息点字段', default: 'infoPoints' },
+    { key: 'minCoverage', type: 'number', label: '判通过所需覆盖', default: 1, min: 0, max: 1, step: 0.1 },
+  ],
+  'annotation.coverage-rubric': [
+    { key: 'rubricField', type: 'string', label: 'Rubric 字段', default: 'rubric' },
+    { key: 'minCoverage', type: 'number', label: '判通过所需覆盖', default: 1, min: 0, max: 1, step: 0.1 },
+  ],
+  'annotation.custom': [
+    { key: 'command', type: 'command', label: '自定义命令', default: '', hint: 'stdin 收 JSON，stdout 吐 JSON' },
+  ],
+  'metrics.standard': [
+    { key: 'latencyField', type: 'string', label: '耗时字段', default: 'latencyMs', hint: '用例里存耗时的字段名' },
+  ],
+  'metrics.grouped': [
+    { key: 'groupBy', type: 'string', label: '分组字段', default: 'bucket' },
+    { key: 'latencyField', type: 'string', label: '耗时字段', default: 'latencyMs' },
+  ],
+  'metrics.custom': [
+    { key: 'command', type: 'command', label: '自定义命令', default: '', hint: 'stdin 收 JSON，stdout 吐 JSON' },
+  ],
+  'reporting.markdown': [
+    {
+      key: 'sections', type: 'list', label: '报告包含哪些小节', default: ['summary', 'stages', 'cases', 'failures'],
+      options: [
+        { value: 'summary', label: '总览' },
+        { value: 'stages', label: '阶段' },
+        { value: 'cases', label: '逐条' },
+        { value: 'failures', label: '未通过' },
+      ],
+    },
+  ],
+  'reporting.json': [],
+  'reporting.custom': [
+    { key: 'command', type: 'command', label: '自定义命令', default: '', hint: 'stdin 收 JSON，stdout 吐 JSON' },
+  ],
+}
+
+/** 某个阶段某个执行模板的可配字段（面板用它生成表单）。 */
+export function fieldsOf(stageId, presetId) {
+  return FIELDS[`${stageId}.${presetId}`] || []
+}
+
 export const STAGES = [
   {
     id: 'scraping',
@@ -89,6 +155,18 @@ const BUILTIN_TEMPLATES = [
     },
   },
 ]
+
+/** 阶段目录对外的一份，带 schema：面板不用自己维护字段表。 */
+export function stageCatalog() {
+  return STAGES.map((stage) => ({
+    id: stage.id,
+    presets: stage.presets.map((preset) => ({
+      id: preset.id,
+      config: preset.config,
+      fields: fieldsOf(stage.id, preset.id),
+    })),
+  }))
+}
 
 function presetOf(stage, template) {
   const entry = STAGES.find((item) => item.id === stage)
@@ -490,6 +568,171 @@ async function writeState(state) {
   await fsp.rename(tmp, statePath())
 }
 
+// ---------------------------------------------------------------- 模板文件（YAML）
+
+function fieldComment(field) {
+  const bits = []
+  if (field.type === 'number') {
+    const range = field.min != null && field.max != null ? `${field.min}~${field.max}` : ''
+    bits.push(range ? `数字 ${range}` : '数字')
+    if (field.unit) bits.push(field.unit)
+  } else if (field.type === 'list') {
+    bits.push(`列表，可选：${(field.options || []).map((item) => item.value).join(' / ')}`)
+  } else if (field.type === 'command') {
+    bits.push('命令，stdin 收 JSON / stdout 吐 JSON')
+  } else {
+    bits.push('字符串')
+  }
+  if (field.default !== undefined && field.default !== '') bits.push(`默认 ${JSON.stringify(field.default)}`)
+  if (field.hint) bits.push(field.hint)
+  return bits.join('，')
+}
+
+/** 一个模板写成 YAML 的样子，带字段说明注释，方便直接手改。 */
+export function templateToYaml(template) {
+  const comments = {}
+  for (const stage of STAGES) {
+    const entry = (template.stages || {})[stage.id]
+    if (!entry) continue
+    for (const field of fieldsOf(stage.id, entry.template)) {
+      comments[`stages.${stage.id}.config.${field.key}`] = fieldComment(field)
+    }
+  }
+  const head = [
+    `# AutoEval 任务模板：${template.name || template.id}`,
+    `# 文件：templates/${template.id}.yaml（文件名就是模板 id）`,
+    '# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。',
+    '',
+  ].join('\n')
+  return `${head}${stringifyYaml(
+    {
+      id: template.id,
+      name: template.name || template.id,
+      description: template.description || '',
+      stages: template.stages || {},
+    },
+    { comments },
+  )}`
+}
+
+/** 校验并归一化一个模板，返回能落盘的结构。 */
+export function normalizeTemplate(input) {
+  const id = String(input && input.id ? input.id : '').trim()
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
+    throw new Error('模板 id 只能用小写字母、数字和「-」，且不超过 64 个字符')
+  }
+  const name = String((input && input.name) || id).trim() || id
+  const stages = {}
+  for (const stage of STAGES) {
+    const raw = input && input.stages ? input.stages[stage.id] : undefined
+    if (!raw) throw new Error(`模板缺少阶段 ${stage.id}`)
+    const presetId = String(raw.template || '')
+    const preset = stage.presets.find((item) => item.id === presetId)
+    if (!preset) throw new Error(`阶段 ${stage.id} 没有执行模板 ${presetId}`)
+    stages[stage.id] = {
+      template: presetId,
+      config: validateConfig(stage.id, presetId, raw.config || {}),
+    }
+  }
+  return { id, name, description: String((input && input.description) || ''), stages }
+}
+
+function validateConfig(stageId, presetId, config) {
+  const cleaned = {}
+  const fields = fieldsOf(stageId, presetId)
+  const byKey = new Map(fields.map((field) => [field.key, field]))
+  for (const [key, value] of Object.entries(config)) {
+    const field = byKey.get(key)
+    if (!field) {
+      cleaned[key] = value
+      continue
+    }
+    cleaned[key] = validateField(stageId, presetId, field, value)
+  }
+  // 必填的补默认值：自定义命令没填就直接报，免得跑起来才炸
+  for (const field of fields) {
+    if (cleaned[field.key] !== undefined) continue
+    if (field.type === 'command') throw new Error(`${stageId}.${presetId} 缺少 command，自定义执行必须给命令`)
+    if (field.default !== undefined) cleaned[field.key] = field.default
+  }
+  return cleaned
+}
+
+function validateField(stageId, presetId, field, value) {
+  const where = `${stageId}.${presetId}.${field.key}`
+  if (field.type === 'number') {
+    const number = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+    if (typeof number !== 'number' || !Number.isFinite(number)) throw new Error(`${where} 要是数字`)
+    if (field.min != null && number < field.min) throw new Error(`${where} 不能小于 ${field.min}`)
+    if (field.max != null && number > field.max) throw new Error(`${where} 不能大于 ${field.max}`)
+    return number
+  }
+  if (field.type === 'boolean') {
+    if (typeof value !== 'boolean') throw new Error(`${where} 要是 true / false`)
+    return value
+  }
+  if (field.type === 'list') {
+    const list = Array.isArray(value) ? value : []
+    const allowed = field.options ? field.options.map((item) => item.value) : null
+    for (const item of list) {
+      if (allowed && !allowed.includes(item)) throw new Error(`${where} 里有不认识的取值 ${item}`)
+    }
+    return list
+  }
+  if (field.type === 'command' || field.type === 'string') {
+    if (typeof value !== 'string') throw new Error(`${where} 要是字符串`)
+    if (field.type === 'command' && !value.trim()) throw new Error(`${where} 不能为空`)
+    return value
+  }
+  return value
+}
+
+async function readTemplates() {
+  const dir = templatesDir()
+  let names = []
+  try {
+    names = await fsp.readdir(dir)
+  } catch {
+    return []
+  }
+  const out = []
+  for (const name of names.sort()) {
+    if (!/\.ya?ml$/i.test(name)) continue
+    const file = path.join(dir, name)
+    const base = name.replace(/\.ya?ml$/i, '')
+    let text = ''
+    try {
+      text = await fsp.readFile(file, 'utf8')
+    } catch (error) {
+      out.push({ id: base, name: base, description: '', builtin: false, broken: String(error.message), file, stages: {} })
+      continue
+    }
+    let doc = null
+    let broken = null
+    try {
+      doc = parseYaml(text)
+      doc = normalizeTemplate({ ...doc, id: (doc && doc.id) || base })
+    } catch (error) {
+      broken = String(error && error.message ? error.message : error)
+    }
+    out.push({
+      id: base,
+      name: (doc && doc.name) || base,
+      description: (doc && doc.description) || '',
+      builtin: false,
+      broken,
+      file,
+      stages: (doc && doc.stages) || {},
+    })
+  }
+  return out
+}
+
+async function writeTemplateFile(template) {
+  await fsp.mkdir(templatesDir(), { recursive: true })
+  await fsp.writeFile(templateFile(template.id), templateToYaml(template), 'utf8')
+}
+
 // ---------------------------------------------------------------- 运行编排
 
 class AutoEvalService {
@@ -501,8 +744,10 @@ class AutoEvalService {
 
   async list() {
     const state = await readState()
+    const files = await readTemplates()
     return {
-      templates: [...BUILTIN_TEMPLATES, ...state.templates],
+      stages: stageCatalog(),
+      templates: [...BUILTIN_TEMPLATES, ...files],
       runs: state.runs,
       active: this.active ? this.snapshot() : null,
     }
@@ -523,9 +768,8 @@ class AutoEvalService {
     if (this.active) throw new Error('已有一次运行在进行中，等它结束或者先取消')
     const cases = Array.isArray(input.cases) ? input.cases : []
     if (cases.length === 0) throw new Error('用例为空：至少给一条用例')
-    const saved = await readState()
     // 只给 templateId 时按模板里的阶段配置补全，没给模板就各自用第一个内置模板
-    const chosen = [...BUILTIN_TEMPLATES, ...saved.templates].find((item) => item.id === input.templateId)
+    const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
     // 面板提交一律按模板跑：带了已知模板就忽略外面塞进来的阶段配置，
     // 免得任务和模板悄悄漂移。重跑走 stageSource: 'record'，保留当次记录。
     const supplied = input.stageSource === 'record' || !chosen ? input.stages : undefined
@@ -720,31 +964,51 @@ class AutoEvalService {
   }
 
   async saveTemplate(input) {
-    const id = String(input.id || '').trim()
-    if (!id) throw new Error('模板 id 不能为空')
-    if (BUILTIN_TEMPLATES.some((item) => item.id === id)) throw new Error('不能覆盖内置模板')
-    const state = await readState()
-    const record = {
-      id,
-      name: String(input.name || id),
-      description: String(input.description || ''),
-      builtin: false,
-      stages: input.stages || {},
-      updatedAt: nowIso(),
+    const template = normalizeTemplate(input)
+    if (BUILTIN_TEMPLATES.some((item) => item.id === template.id)) throw new Error('不能覆盖内置模板')
+    await writeTemplateFile(template)
+    return { ...template, builtin: false, file: templateFile(template.id) }
+  }
+
+  /** 直接存一段 YAML：用户在面板里改文件，或者干脆用编辑器改完贴进来。 */
+  async saveTemplateYaml(text) {
+    let doc = null
+    try {
+      doc = parseYaml(text)
+    } catch (error) {
+      throw new Error(`YAML 解析失败：${error.message}`)
     }
-    const index = state.templates.findIndex((item) => item.id === id)
-    if (index >= 0) state.templates[index] = record
-    else state.templates.push(record)
-    await writeState(state)
-    return record
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('YAML 顶层应该是一个映射（id / name / stages）')
+    return this.saveTemplate(doc)
+  }
+
+  async templateYaml(id) {
+    const builtin = BUILTIN_TEMPLATES.find((item) => item.id === id)
+    if (builtin) return { id, yaml: templateToYaml(builtin), file: null, builtin: true }
+    const file = templateFile(id)
+    let text = null
+    try {
+      text = await fsp.readFile(file, 'utf8')
+    } catch {
+      throw new Error(`找不到模板 ${id}`)
+    }
+    return { id, yaml: text, file, builtin: false }
+  }
+
+  /** 只渲染不落盘：新建模板时 YAML 页签也要有东西可看。 */
+  async previewTemplate(input) {
+    return { yaml: templateToYaml(normalizeTemplate(input)) }
   }
 
   async deleteTemplate(id) {
-    const state = await readState()
-    const before = state.templates.length
-    state.templates = state.templates.filter((item) => item.id !== id)
-    await writeState(state)
-    return { removed: before - state.templates.length }
+    if (BUILTIN_TEMPLATES.some((item) => item.id === id)) throw new Error('内置模板不能删')
+    const file = templateFile(id)
+    try {
+      await fsp.unlink(file)
+      return { removed: 1 }
+    } catch {
+      return { removed: 0 }
+    }
   }
 }
 
@@ -785,7 +1049,7 @@ export function apply(ctx, config = {}) {
             const data = await service.list()
             sendJson(res, 200, {
               ok: true,
-              stages: STAGES,
+              stages: data.stages || stageCatalog(),
               ...data,
               lastRun: service.lastRun || null,
             })
@@ -832,6 +1096,22 @@ export function apply(ctx, config = {}) {
             sendJson(res, 200, { ok: true, template: record })
             return
           }
+          if (req.method === 'POST' && routePath === '/templates/preview') {
+            const result = await service.previewTemplate(await readBody(req))
+            sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+          if (req.method === 'GET' && routePath === '/templates/raw') {
+            const result = await service.templateYaml(url.searchParams.get('id') || '')
+            sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+          if (req.method === 'POST' && routePath === '/templates/raw') {
+            const body = await readBody(req)
+            const record = await service.saveTemplateYaml(String((body && body.yaml) || ''))
+            sendJson(res, 200, { ok: true, template: record })
+            return
+          }
           if (req.method === 'DELETE' && routePath === '/templates') {
             const result = await service.deleteTemplate(url.searchParams.get('id') || '')
             sendJson(res, 200, { ok: true, ...result })
@@ -845,6 +1125,34 @@ export function apply(ctx, config = {}) {
     })
     return () => route()
   }, 'autoeval: http routes')
+
+  // 老版本把模板存在 state.json 里，这里搬成 templates/<id>.yaml，搬完清空
+  ctx.effect(() => {
+    void (async () => {
+      try {
+        const state = await readState()
+        if (!Array.isArray(state.templates) || state.templates.length === 0) return
+        await fsp.mkdir(templatesDir(), { recursive: true })
+        for (const template of state.templates) {
+          if (!template || !template.id) continue
+          try {
+            await fsp.access(templateFile(template.id))
+          } catch {
+            try {
+              await writeTemplateFile(normalizeTemplate(template))
+            } catch (error) {
+              ctx.logger?.warn?.(`autoeval: 迁移模板 ${template.id} 失败：${error.message}`)
+            }
+          }
+        }
+        state.templates = []
+        await writeState(state)
+      } catch (error) {
+        ctx.logger?.warn?.(`autoeval: 迁移模板失败：${error.message}`)
+      }
+    })()
+  }, 'autoeval: migrate templates')
+  return () => route()
 
   const tools = ctx.get('tools')
   if (tools) {

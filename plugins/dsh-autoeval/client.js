@@ -95,6 +95,13 @@ window.__ModuleLoader__.load({
       'tpl.copySuffix': '副本',
       'tpl.confirmDelete': '删除模板',
       'tpl.config': '各阶段配置',
+      'tpl.tab.form': '表单',
+      'tpl.tab.yaml': 'YAML',
+      'tpl.yaml': '模板配置文件',
+      'tpl.yamlHint': '也可以直接用编辑器改 templates/<id>.yaml',
+      'tpl.yamlSync': 'YAML 是模板的真实来源；表单保存会重写成 YAML，两边不会各改各的。',
+      'tpl.saved': '模板已保存。',
+      'tpl.broken': '配置有问题',
       'tpl.usedBy': '用在',
 
       'submit.title': '提交评测任务',
@@ -239,6 +246,13 @@ window.__ModuleLoader__.load({
       'tpl.copySuffix': 'copy',
       'tpl.confirmDelete': 'Delete template',
       'tpl.config': 'Stage config',
+      'tpl.tab.form': 'Form',
+      'tpl.tab.yaml': 'YAML',
+      'tpl.yaml': 'Template file',
+      'tpl.yamlHint': 'You can also edit templates/<id>.yaml directly',
+      'tpl.yamlSync': 'The YAML file is the source of truth; saving the form rewrites it, so the two never drift.',
+      'tpl.saved': 'Template saved.',
+      'tpl.broken': 'Broken config',
       'tpl.usedBy': 'used by',
 
       'submit.title': 'Submit evaluation task',
@@ -479,6 +493,9 @@ window.__ModuleLoader__.load({
       const [taskQuery, setTaskQuery] = React.useState('')
       const [taskStatus, setTaskStatus] = React.useState('all')
       const [openStages, setOpenStages] = React.useState({})
+      const [templateTab, setTemplateTab] = React.useState('form')
+      const [templateYaml, setTemplateYaml] = React.useState('')
+      const [yamlBusy, setYamlBusy] = React.useState(false)
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -663,7 +680,7 @@ window.__ModuleLoader__.load({
       }
 
       function openTemplate(template) {
-        setError('')
+        setError(template.broken || '')
         setNotice('')
         setView('templates')
         setTemplateDraft({
@@ -674,6 +691,72 @@ window.__ModuleLoader__.load({
           description: template.description || '',
           stages: cloneStages(template.stages, state.stages),
         })
+        setTemplateTab(template.broken ? 'yaml' : 'form')
+        setTemplateYaml('')
+        if (template.broken) void loadTemplateYaml(template.id)
+      }
+
+      /** YAML 页签：已存模板读文件，新建模板让宿主渲染一份预览。 */
+      async function loadTemplateYaml(explicitId) {
+        const id = explicitId || (templateDraft && templateDraft.id)
+        if (!id) return
+        setYamlBusy(true)
+        try {
+          const saved = templates.find((item) => item.id === id && !item.builtin)
+          const result = saved
+            ? await api(`/templates/raw?id=${encodeURIComponent(id)}`)
+            : await api('/templates/preview', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                id,
+                name: (templateDraft && templateDraft.name) || id,
+                description: (templateDraft && templateDraft.description) || '',
+                stages: Object.fromEntries(
+                  Object.entries((templateDraft && templateDraft.stages) || {}).map(([key, value]) => [
+                    key,
+                    { template: value.template, config: value.config },
+                  ]),
+                ),
+              }),
+            })
+          setTemplateYaml(result.yaml || '')
+        } catch (error) {
+          setError(String(error && error.message ? error.message : error))
+        } finally {
+          setYamlBusy(false)
+        }
+      }
+
+      async function saveTemplateYaml() {
+        setError('')
+        setNotice('')
+        setYamlBusy(true)
+        try {
+          const result = await api('/templates/raw', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ yaml: templateYaml }),
+          })
+          await load()
+          const saved = result.template
+          if (saved) {
+            setTemplateDraft({
+              mode: 'edit',
+              readonly: false,
+              id: saved.id,
+              name: saved.name,
+              description: saved.description || '',
+              stages: cloneStages(saved.stages, state.stages),
+            })
+            setNotice(t('tpl.saved'))
+            await loadTemplateYaml(saved.id)
+          }
+        } catch (error) {
+          setError(String(error && error.message ? error.message : error))
+        } finally {
+          setYamlBusy(false)
+        }
       }
 
       function newTemplate() {
@@ -1219,6 +1302,9 @@ window.__ModuleLoader__.load({
                 },
               },
               h('div', { className: 'ae-template-name' }, template.name,
+                template.broken
+                  ? h('span', { className: 'ae-badge', 'data-kind': 'broken' }, t('tpl.broken'))
+                  : null,
                 h('span', {
                   className: 'ae-badge',
                   'data-kind': template.builtin ? 'builtin' : 'custom',
@@ -1229,9 +1315,127 @@ window.__ModuleLoader__.load({
       }
 
       // ---------------------------------------------------------- 模板详情
+      // 按 schema 生成一个字段的控件：类型、范围、枚举都来自宿主给的 fields
+      function renderFieldInput(stageId, entry, field, readonly) {
+        const value = entry.config && entry.config[field.key] !== undefined
+          ? entry.config[field.key]
+          : field.default
+        const patch = (next) => setTemplateStage(stageId, {
+          config: { ...(entry.config || {}), [field.key]: next },
+        })
+        const label = h('label', { className: 'ae-label' },
+          `${field.label || field.key}${field.unit ? `（${field.unit}）` : ''}`)
+        const note = field.hint ? h('div', { className: 'ae-card-note' }, field.hint) : null
+
+        if (field.type === 'number') {
+          return h('div', { className: 'ae-field', key: field.key },
+            label,
+            h('input', {
+              className: 'ae-input', type: 'number', disabled: readonly,
+              min: field.min, max: field.max, step: field.step,
+              value: value === undefined || value === null ? '' : String(value),
+              onChange: (event) => patch(event.target.value === '' ? null : Number(event.target.value)),
+            }),
+            field.min != null && field.max != null
+              ? h('div', { className: 'ae-card-note' }, `范围 ${field.min} ~ ${field.max}`)
+              : null,
+            note)
+        }
+        if (field.type === 'boolean') {
+          return h('div', { className: 'ae-field', key: field.key },
+            h('label', { className: 'ae-label' },
+              h('input', {
+                type: 'checkbox', disabled: readonly, checked: Boolean(value),
+                onChange: (event) => patch(event.target.checked),
+              }),
+              ` ${field.label || field.key}`),
+            note)
+        }
+        if (field.type === 'list') {
+          const list = Array.isArray(value) ? value : []
+          return h('div', { className: 'ae-field', key: field.key },
+            label,
+            h('div', { className: 'ae-chips' },
+              ...(field.options || []).map((option) => h('button', {
+                key: option.value, type: 'button', className: 'ae-chip', disabled: readonly,
+                'data-active': String(list.includes(option.value)),
+                onClick: () => patch(list.includes(option.value)
+                  ? list.filter((item) => item !== option.value)
+                  : [...list, option.value]),
+              }, option.label || option.value))),
+            note)
+        }
+        if (field.type === 'command') {
+          return h('div', { className: 'ae-field', key: field.key },
+            label,
+            h('input', {
+              className: 'ae-input ae-mono', type: 'text', spellCheck: false, disabled: readonly,
+              placeholder: 'python3 ./my-judge.py', value: value || '',
+              onChange: (event) => patch(event.target.value),
+            }),
+            note)
+        }
+        return h('div', { className: 'ae-field', key: field.key },
+          label,
+          h('input', {
+            className: 'ae-input', type: 'text', spellCheck: false, disabled: readonly,
+            value: value === undefined || value === null ? '' : String(value),
+            onChange: (event) => patch(event.target.value),
+          }),
+          note)
+      }
+
       function renderTemplateDetail() {
         const current = templateDraft
         const readonly = current.readonly
+        const subtabs = h('div', { className: 'ae-subtabs' },
+          ...['form', 'yaml'].map((tab) => h('button', {
+            key: tab, type: 'button', className: 'ae-subtab',
+            'data-active': String(templateTab === tab),
+            onClick: () => {
+              setTemplateTab(tab)
+              if (tab === 'yaml' && !templateYaml) void loadTemplateYaml()
+            },
+          }, t(`tpl.tab.${tab}`))))
+
+        const form = h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-title' }, t('tpl.config')),
+          ...(state.stages || []).map((stage) => {
+            const entry = current.stages[stage.id] || {}
+            const preset = stage.presets.find((item) => item.id === entry.template)
+            return h('div', { className: 'ae-stage-edit', key: stage.id },
+              h('div', { className: 'ae-card-head' },
+                h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
+                h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
+              stageChips(stage, entry, readonly),
+              ...((preset && preset.fields) || []).map((field) => renderFieldInput(stage.id, entry, field, readonly)))
+          }))
+
+        const yamlPane = h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, t('tpl.yaml')),
+            h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('tpl.yamlHint'))),
+          readonly
+            ? h('div', { className: 'ae-card-note' }, t('tpl.readonly'))
+            : null,
+          h('textarea', {
+            className: 'ae-textarea ae-mono', rows: 26, spellCheck: false,
+            disabled: readonly || yamlBusy,
+            value: templateYaml,
+            onChange: (event) => setTemplateYaml(event.target.value),
+          }),
+          readonly
+            ? null
+            : h('div', { className: 'ae-actions' },
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary', disabled: yamlBusy,
+                onClick: () => { void saveTemplateYaml() },
+              }, t('action.save')),
+              h('button', {
+                type: 'button', className: 'ae-btn', disabled: yamlBusy,
+                onClick: () => { void loadTemplateYaml() },
+              }, t('action.reload'))))
+
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
           head, tabs, messages,
@@ -1244,10 +1448,12 @@ window.__ModuleLoader__.load({
               h('span', {
                 className: 'ae-badge', 'data-kind': readonly ? 'builtin' : 'custom',
               }, readonly ? t('tpl.builtin') : t('tpl.custom')),
-              readonly ? null : h('div', { className: 'ae-card-note' }, t('tpl.edit')),
+              current.mode === 'new' ? null : h('div', { className: 'ae-card-note' }, t('tpl.edit')),
               readonly
                 ? h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('tpl.readonly'))
                 : null),
+            subtabs,
+            templateTab === 'form' ? null : h('div', { className: 'ae-card-note' }, t('tpl.yamlSync')),
             h('div', { className: 'ae-field' },
               h('label', { className: 'ae-label' }, t('tpl.id')),
               h('input', {
@@ -1268,18 +1474,16 @@ window.__ModuleLoader__.load({
                 className: 'ae-input', type: 'text', disabled: readonly, value: current.description,
                 onChange: (event) => setTemplateDraft({ ...current, description: event.target.value }),
               }))),
-          h('div', { className: 'ae-card' },
-            h('div', { className: 'ae-card-title' }, t('tpl.config')),
-            ...(state.stages || []).map((stage) => stageEditor(stage, current.stages[stage.id], readonly))),
+          templateTab === 'form' ? form : yamlPane,
           h('div', { className: 'ae-actions' },
-            readonly
+            readonly || templateTab === 'yaml'
               ? null
               : h('button', {
                 type: 'button', className: 'ae-btn ae-btn-primary',
                 onClick: () => { void saveTemplateDraft() },
               }, t('action.save')),
             h('button', { type: 'button', className: 'ae-btn', onClick: () => copyTemplate(current) }, t('action.copyTemplate')),
-            readonly
+            readonly || templateTab === 'yaml'
               ? null
               : h('button', {
                 type: 'button', className: 'ae-btn ae-danger',
