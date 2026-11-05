@@ -442,6 +442,103 @@ test('工作区：路径、计数、配置读写', async () => {
   await call('DELETE', '/autoeval-api/templates?id=workspace-probe')
 })
 
+test('Query 集：导入 CSV / JSONL / XLSX，增删改查', async () => {
+  // CSV
+  const csv = await call('POST', '/autoeval-api/querysets/import', {
+    kind: 'csv',
+    text: 'query,expect,备注\n"DSH 是什么","本地运行时","含,逗号"\nAutoEval 四个阶段,抓取/标注/指标/报告,\n,空行要丢掉,\n',
+  })
+  assert.equal(csv.ok, true, csv.error)
+  assert.equal(csv.total, 2, '空 query 的行应该被丢掉')
+  assert.equal(csv.skipped, 1)
+  assert.equal(csv.queryField, 'query')
+  assert.deepEqual(csv.fields, ['query', 'expect', '备注'])
+  assert.equal(csv.cases[0].expect, '本地运行时')
+
+  // JSONL
+  const jsonl = await call('POST', '/autoeval-api/querysets/import', {
+    kind: 'jsonl',
+    text: '{"question":"怎么装插件","expect":"看 README"}\n{"question":"","expect":"丢掉"}\n',
+  })
+  assert.equal(jsonl.ok, true, jsonl.error)
+  assert.equal(jsonl.total, 1)
+  assert.equal(jsonl.queryField, 'question', '应该认出 question 是 query 列')
+
+  // XLSX（openpyxl 生成的夹具，第一行是表头）
+  const xlsxBase64 = (await fsp.readFile(new URL('./fixtures/queries.xlsx', import.meta.url))).toString('base64')
+  const xlsx = await call('POST', '/autoeval-api/querysets/import', { kind: 'xlsx', base64: xlsxBase64 })
+  assert.equal(xlsx.ok, true, xlsx.error)
+  assert.equal(xlsx.total, 3)
+  assert.equal(xlsx.cases[1].query, 'AutoEval 支持哪些阶段')
+  assert.equal(xlsx.cases[1]['备注'], '含,逗号', 'xlsx 里的逗号不该被拆开')
+
+  // 存下来
+  const saved = await call('POST', '/autoeval-api/querysets', {
+    id: 'qs-small', name: '小测试集', description: '六条',
+    fields: csv.fields, queryField: 'query', source: { kind: 'csv' }, cases: csv.cases,
+  })
+  assert.equal(saved.ok, true, saved.error)
+  assert.equal(saved.queryset.count, 2)
+
+  const list = await call('GET', '/autoeval-api/querysets')
+  assert.ok(list.querysets.some((item) => item.id === 'qs-small'))
+
+  const detail = await call('GET', '/autoeval-api/querysets?id=qs-small')
+  assert.equal(detail.queryset.cases.length, 2)
+  assert.equal(detail.queryset.queryField, 'query')
+
+  // 文件真的落在工作区里
+  const file = path.join(process.env.DSH_HOME, 'storages', 'autoeval', 'querysets', 'qs-small.json')
+  const onDisk = JSON.parse(await fsp.readFile(file, 'utf8'))
+  assert.equal(onDisk.cases.length, 2)
+
+  // 改
+  const updated = await call('POST', '/autoeval-api/querysets', {
+    id: 'qs-small', name: '小测试集 v2', fields: csv.fields, cases: [csv.cases[0]],
+  })
+  assert.equal(updated.queryset.name, '小测试集 v2')
+  assert.equal(updated.queryset.count, 1)
+
+  // 用 Query 集跑一次
+  const run = await call('POST', '/autoeval-api/run', { name: '按集跑', templateId: 'websearch-tool', querysetId: 'qs-small' })
+  assert.equal(run.ok, true, run.error)
+  const state = await waitForIdle()
+  const record = state.runs.find((item) => item.id === run.runId)
+  assert.equal(record.caseCount, 1, '应该按 Query 集的用例数跑')
+  assert.equal(record.querysetId, 'qs-small')
+
+  // 删
+  const removed = await call('DELETE', '/autoeval-api/querysets?id=qs-small')
+  assert.equal(removed.ok, true)
+  assert.equal((await call('GET', '/autoeval-api/querysets')).querysets.some((item) => item.id === 'qs-small'), false)
+})
+
+test('Query 集：坏输入被挡住', async () => {
+  const badId = await call('POST', '/autoeval-api/querysets', { id: 'Bad Id', cases: [{ query: 'x' }] })
+  assert.equal(badId.ok, false)
+  assert.match(badId.error, /id 只能用/)
+
+  const noCases = await call('POST', '/autoeval-api/querysets', { id: 'qs-empty', cases: [] })
+  assert.equal(noCases.ok, false)
+  assert.match(noCases.error, /没有用例/)
+
+  const noQuery = await call('POST', '/autoeval-api/querysets', { id: 'qs-noquery', cases: [{ expect: 'x' }] })
+  assert.equal(noQuery.ok, false)
+  assert.match(noQuery.error, /缺 query/)
+
+  const badKind = await call('POST', '/autoeval-api/querysets/import', { kind: 'pdf', text: '' })
+  assert.equal(badKind.ok, false)
+  assert.match(badKind.error, /不支持的导入来源/)
+
+  const badJsonl = await call('POST', '/autoeval-api/querysets/import', { kind: 'jsonl', text: '{"a":1}\nnot json\n' })
+  assert.equal(badJsonl.ok, false)
+  assert.match(badJsonl.error, /第 2 行/)
+
+  const missing = await call('GET', '/autoeval-api/querysets?id=nope')
+  assert.equal(missing.ok, false)
+  assert.match(missing.error, /没有这个 Query 集/)
+})
+
 test('保留次数按工作区配置裁剪', async () => {
   await call('POST', '/autoeval-api/workspace/config', { maxRuns: 1, defaultTemplate: 'websearch-tool', commandTimeoutMs: 120000 })
   const started = await call('POST', '/autoeval-api/run', { name: '只留一条', templateId: 'websearch-tool', cases: cases.slice(0, 1) })

@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import { parseYaml, stringifyYaml } from './yaml.js'
+import { importQueries } from './importers.js'
 
 const API_PREFIX = '/autoeval-api'
 const DATA_VERSION = 1
@@ -104,6 +105,89 @@ function configPath() {
   return path.join(dataDir(), 'config.yaml')
 }
 
+// ---------------------------------------------------------------- Query 集
+
+function querysetsDir() {
+  return path.join(dataDir(), 'querysets')
+}
+
+function querysetFile(id) {
+  return path.join(querysetsDir(), `${id}.json`)
+}
+
+function normalizeQueryset(input) {
+  if (!input || typeof input !== 'object') throw new Error('缺少 Query 集内容')
+  const id = String(input.id || '').trim()
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new Error('id 只能用 a-z、0-9、-，且以字母或数字开头')
+  const name = String(input.name || '').trim() || id
+  const description = String(input.description || '').trim()
+  const cases = Array.isArray(input.cases) ? input.cases : []
+  if (cases.length === 0) throw new Error('Query 集里没有用例')
+  const clean = cases.map((item, index) => {
+    const record = item && typeof item === 'object' ? item : {}
+    const query = String(record.query === undefined || record.query === null ? '' : record.query).trim()
+    if (!query) throw new Error(`第 ${index + 1} 条缺 query`)
+    return { ...record, query }
+  })
+  const fields = Array.isArray(input.fields) && input.fields.length > 0
+    ? input.fields.map((field) => String(field))
+    : Object.keys(clean[0])
+  const queryField = String(input.queryField || (fields.includes('query') ? 'query' : fields[0] || 'query'))
+  const source = input.source && typeof input.source === 'object' ? input.source : {}
+  return {
+    id,
+    name,
+    description,
+    fields,
+    queryField,
+    cases: clean,
+    source,
+    updatedAt: nowIso(),
+    createdAt: String(input.createdAt || nowIso()),
+  }
+}
+
+async function readQuerysets() {
+  let names = []
+  try {
+    names = await fsp.readdir(querysetsDir())
+  } catch {
+    return []
+  }
+  const list = []
+  for (const name of names.filter((item) => item.endsWith('.json')).sort()) {
+    try {
+      const text = await fsp.readFile(path.join(querysetsDir(), name), 'utf8')
+      const parsed = JSON.parse(text)
+      list.push(parsed)
+    } catch {
+      list.push({ id: name.replace(/\.json$/, ''), name: name, broken: '文件读不出来', cases: [], fields: [] })
+    }
+  }
+  return list.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+}
+
+async function writeQuerysetFile(queryset) {
+  await fsp.mkdir(querysetsDir(), { recursive: true })
+  await fsp.writeFile(querysetFile(queryset.id), `${JSON.stringify(queryset, null, 2)}\n`, 'utf8')
+  return queryset
+}
+
+/** 列表里只带摘要，用例留到详情再取。 */
+function summarizeQueryset(queryset) {
+  return {
+    id: queryset.id,
+    name: queryset.name,
+    description: queryset.description || '',
+    count: (queryset.cases || []).length,
+    fields: queryset.fields || [],
+    queryField: queryset.queryField || '',
+    source: queryset.source || {},
+    updatedAt: queryset.updatedAt || '',
+    broken: queryset.broken || null,
+  }
+}
+
 /** 工作区概况：面板顶部显示路径、各类文件数量与占用。 */
 async function workspaceInfo() {
   const dir = dataDir()
@@ -143,10 +227,17 @@ async function workspaceInfo() {
   } catch {
     runs = 0
   }
+  let querysets = 0
+  try {
+    querysets = (await fsp.readdir(path.join(dir, 'querysets'))).filter((name) => name.endsWith('.json')).length
+  } catch {
+    querysets = 0
+  }
   return {
     dir,
     templates,
     runs,
+    querysets,
     bytes,
     configPath: configPath(),
     templatesDir: path.join(dir, 'templates'),
@@ -867,6 +958,7 @@ class AutoEvalService {
     return {
       stages: stageCatalog(),
       templates: [...BUILTIN_TEMPLATES, ...files],
+      querysets: (await readQuerysets()).map(summarizeQueryset),
       runs: state.runs,
       active: this.active ? this.snapshot() : null,
       workspace: {
@@ -890,7 +982,15 @@ class AutoEvalService {
 
   async start(input) {
     if (this.active) throw new Error('已有一次运行在进行中，等它结束或者先取消')
-    const cases = Array.isArray(input.cases) ? input.cases : []
+    let cases = Array.isArray(input.cases) ? input.cases : []
+    if (input.querysetId) {
+      const queryset = (await readQuerysets()).find((item) => item.id === input.querysetId)
+      if (!queryset) throw new Error(`没有这个 Query 集：${input.querysetId}`)
+      if (!Array.isArray(queryset.cases) || queryset.cases.length === 0) {
+        throw new Error(`Query 集「${queryset.name || queryset.id}」里没有用例`)
+      }
+      cases = queryset.cases
+    }
     if (cases.length === 0) throw new Error('用例为空：至少给一条用例')
     // 只给 templateId 时按模板里的阶段配置补全，没给模板就各自用第一个内置模板
     const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
@@ -908,6 +1008,7 @@ class AutoEvalService {
       id,
       name: String(input.name || `AutoEval ${id}`),
       templateId: String(input.templateId || 'custom'),
+      querysetId: input.querysetId ? String(input.querysetId) : null,
       startedAt: nowIso(),
       finishedAt: null,
       status: 'running',
@@ -1120,6 +1221,46 @@ class AutoEvalService {
     return { id, yaml: text, file, builtin: false }
   }
 
+  async listQuerysets() {
+    return (await readQuerysets()).map(summarizeQueryset)
+  }
+
+  async querysetDetail(id) {
+    const queryset = (await readQuerysets()).find((item) => item.id === id)
+    if (!queryset) throw new Error(`没有这个 Query 集：${id}`)
+    return queryset
+  }
+
+  async saveQueryset(input) {
+    const existing = (await readQuerysets()).find((item) => item.id === String((input && input.id) || '').trim())
+    const queryset = normalizeQueryset({ ...input, createdAt: existing ? existing.createdAt : undefined })
+    await writeQuerysetFile(queryset)
+    return summarizeQueryset(queryset)
+  }
+
+  async deleteQueryset(id) {
+    try {
+      await fsp.unlink(querysetFile(id))
+    } catch (error) {
+      if (error && error.code === 'ENOENT') throw new Error(`没有这个 Query 集：${id}`)
+      throw error
+    }
+    return { id }
+  }
+
+  /** 只解析不落盘：面板里先给用户看预览，确认再存。 */
+  async importQueryset(input) {
+    const result = await importQueries(input)
+    return {
+      fields: result.fields,
+      cases: result.cases,
+      queryField: result.queryField,
+      skipped: result.skipped,
+      total: result.cases.length,
+      title: result.title || '',
+    }
+  }
+
   async saveConfig(input) {
     return writeWorkspaceConfig(input)
   }
@@ -1248,6 +1389,31 @@ export function apply(ctx, config = {}) {
           }
           if (req.method === 'POST' && routePath === '/workspace/open') {
             const result = await service.openWorkspace()
+            sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+          if (req.method === 'GET' && routePath === '/querysets') {
+            const id = url.searchParams.get('id') || ''
+            if (id) {
+              const queryset = await service.querysetDetail(id)
+              sendJson(res, 200, { ok: true, queryset })
+            } else {
+              sendJson(res, 200, { ok: true, querysets: await service.listQuerysets() })
+            }
+            return
+          }
+          if (req.method === 'POST' && routePath === '/querysets') {
+            const saved = await service.saveQueryset(await readBody(req))
+            sendJson(res, 200, { ok: true, queryset: saved })
+            return
+          }
+          if (req.method === 'DELETE' && routePath === '/querysets') {
+            const result = await service.deleteQueryset(url.searchParams.get('id') || '')
+            sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+          if (req.method === 'POST' && routePath === '/querysets/import') {
+            const result = await service.importQueryset(await readBody(req))
             sendJson(res, 200, { ok: true, ...result })
             return
           }

@@ -16,6 +16,51 @@ window.__ModuleLoader__.load({
       'panel.subtitle': '四阶段评测流水线：抓取、标注、指标、报告',
       'tab.tasks': '评测任务',
       'tab.templates': '任务模板',
+      'tab.querysets': 'Query 集',
+      'qs.unit': '个 Query 集',
+      'qs.cases': '条用例',
+      'qs.hint': '从 JSONL / CSV / XLSX 或飞书表格、智能表格导入，也可以直接编辑用例',
+      'qs.empty': '还没有 Query 集，点右上角「导入 Query 集」。',
+      'qs.import': '导入 Query 集',
+      'qs.broken': '文件坏了',
+      'qs.id': 'id',
+      'qs.name': '名称',
+      'qs.desc': '说明',
+      'qs.queryField': 'query 列',
+      'qs.fields': '字段',
+      'qs.source': '来源',
+      'qs.casesHint': '只读预览，点「编辑」可以改名称、说明和用例',
+      'qs.more': '……还有更多条，编辑状态能看到全部。共多出 ',
+      'qs.replaceCases': '重新导入',
+      'qs.replaceTitle': '重新导入用例（会覆盖现有用例）',
+      'qs.importTitle': '导入 Query 集',
+      'qs.paste': '粘贴内容',
+      'qs.orFile': '或者选文件',
+      'qs.pickFile': '选一个 xlsx（第一行是表头）',
+      'qs.link': '飞书链接或 token',
+      'qs.sheetId': '工作表 id',
+      'qs.tableId': '数据表 id',
+      'qs.optional': '可留空，默认第一张表',
+      'qs.parsed': '解析结果',
+      'qs.skipped': '跳过空行',
+      'qs.parse': '解析',
+      'qs.applyNew': '存成 Query 集',
+      'qs.applyReplace': '替换用例',
+      'qs.imported': 'Query 集已保存。',
+      'qs.noCases': '用例是空的，至少留一条。',
+      'qs.confirmDelete': '删掉 Query 集',
+      'qs.needText': '先粘贴内容或者选个文件。',
+      'qs.needFile': '先选一个 xlsx 文件。',
+      'qs.needLink': '先贴飞书链接或 token。',
+      'qs.kind.jsonl': 'JSONL',
+      'qs.kind.csv': 'CSV',
+      'qs.kind.xlsx': 'XLSX',
+      'qs.kind.sheet': '飞书表格',
+      'qs.kind.bitable': '飞书智能表格',
+      'qs.kind.manual': '手工维护',
+      'confirm.querysetTitle': '确认保存这个 Query 集？',
+      'confirm.querysetNote': '保存会重写工作区里的 querysets/<id>.json。',
+
 
       'action.submit': '提交任务',
       'action.run': '开始运行',
@@ -137,6 +182,13 @@ window.__ModuleLoader__.load({
       'submit.pickTemplate': '先选一个任务模板。',
       'submit.searchTemplate': '按名称或 id 过滤模板…',
       'submit.noMatch': '没有匹配的模板。',
+      'submit.sourceText': '粘贴 JSON',
+      'submit.sourceQueryset': '选 Query 集',
+      'submit.queryset': '用哪个 Query 集',
+      'submit.pickQueryset': '先选一个 Query 集。',
+      'submit.searchQueryset': '按名称或 id 过滤 Query 集…',
+      'submit.noQueryset': '没有匹配的 Query 集。',
+
       'submit.progress': '运行中',
 
       'field.template': '执行模板',
@@ -193,6 +245,51 @@ window.__ModuleLoader__.load({
       'panel.subtitle': 'Four-stage evaluation pipeline: scraping, annotation, metrics, reporting',
       'tab.tasks': 'Tasks',
       'tab.templates': 'Templates',
+      'tab.querysets': 'Querysets',
+      'qs.unit': 'querysets',
+      'qs.cases': 'cases',
+      'qs.hint': 'Import from JSONL / CSV / XLSX, Feishu Sheets or Bitable; cases stay editable',
+      'qs.empty': 'No queryset yet — hit “Import queryset”.',
+      'qs.import': 'Import queryset',
+      'qs.broken': 'Broken file',
+      'qs.id': 'id',
+      'qs.name': 'Name',
+      'qs.desc': 'Description',
+      'qs.queryField': 'Query column',
+      'qs.fields': 'Fields',
+      'qs.source': 'Source',
+      'qs.casesHint': 'Read-only preview; hit Edit to change name, description and cases',
+      'qs.more': '…more cases, open Edit to see all. Extra: ',
+      'qs.replaceCases': 'Re-import',
+      'qs.replaceTitle': 'Re-import cases (replaces the current ones)',
+      'qs.importTitle': 'Import queryset',
+      'qs.paste': 'Paste content',
+      'qs.orFile': 'Or pick a file',
+      'qs.pickFile': 'Pick an xlsx (first row is the header)',
+      'qs.link': 'Feishu link or token',
+      'qs.sheetId': 'Sheet id',
+      'qs.tableId': 'Table id',
+      'qs.optional': 'Optional — first sheet is used by default',
+      'qs.parsed': 'Parsed',
+      'qs.skipped': 'blank rows skipped',
+      'qs.parse': 'Parse',
+      'qs.applyNew': 'Save as queryset',
+      'qs.applyReplace': 'Replace cases',
+      'qs.imported': 'Queryset saved.',
+      'qs.noCases': 'No cases left — keep at least one.',
+      'qs.confirmDelete': 'Delete queryset',
+      'qs.needText': 'Paste something or pick a file first.',
+      'qs.needFile': 'Pick an xlsx file first.',
+      'qs.needLink': 'Paste a Feishu link or token first.',
+      'qs.kind.jsonl': 'JSONL',
+      'qs.kind.csv': 'CSV',
+      'qs.kind.xlsx': 'XLSX',
+      'qs.kind.sheet': 'Feishu Sheets',
+      'qs.kind.bitable': 'Feishu Bitable',
+      'qs.kind.manual': 'Hand-maintained',
+      'confirm.querysetTitle': 'Save this queryset?',
+      'confirm.querysetNote': 'Saving rewrites querysets/<id>.json in the workspace.',
+
 
       'action.submit': 'Submit task',
       'action.run': 'Run',
@@ -314,6 +411,13 @@ window.__ModuleLoader__.load({
       'submit.pickTemplate': 'Pick a template first.',
       'submit.searchTemplate': 'Filter templates by name or id…',
       'submit.noMatch': 'No template matches.',
+      'submit.sourceText': 'Paste JSON',
+      'submit.sourceQueryset': 'Pick a queryset',
+      'submit.queryset': 'Queryset',
+      'submit.pickQueryset': 'Pick a queryset first.',
+      'submit.searchQueryset': 'Filter querysets by name or id…',
+      'submit.noQueryset': 'No queryset matches.',
+
       'submit.progress': 'Running',
 
       'field.template': 'Stage template',
@@ -454,6 +558,15 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-qs-card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: pointer;
+  border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
+.ae-qs-card:hover { border-color: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-qs-card[data-broken="true"] { border-color: var(--dsw-alias-state-error-primary, #c0392b); }
+.ae-qs-table { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.ae-import-preview { margin: 8px 0; padding: 8px 10px; border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); }
+.ae-import-sample { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .ae-select { position: relative; }
 .ae-select-button { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
   padding: 7px 10px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px; text-align: left;
@@ -588,7 +701,13 @@ window.__ModuleLoader__.load({
       const [workspaceEditing, setWorkspaceEditing] = React.useState(false)
       const [editingDraft, setEditingDraft] = React.useState(false)
       const [confirmDialog, setConfirmDialog] = React.useState(null)
-      const [pickerOpen, setPickerOpen] = React.useState(false)
+      const [qsDraft, setQsDraft] = React.useState(null)
+      const [qsCasesText, setQsCasesText] = React.useState('')
+      const [qsBusy, setQsBusy] = React.useState(false)
+      const [importer, setImporter] = React.useState(null)
+      const [casesSource, setCasesSource] = React.useState('text')
+      const [casesQuerysetId, setCasesQuerysetId] = React.useState('')
+      const [pickerKey, setPickerKey] = React.useState('')
       const [pickerQuery, setPickerQuery] = React.useState('')
       const [workspaceDraft, setWorkspaceDraft] = React.useState(null)
       const [error, setError] = React.useState('')
@@ -694,20 +813,35 @@ window.__ModuleLoader__.load({
       function submit() {
         setError('')
         setNotice('')
-        const cases = readJson(casesText)
-        if (!cases.ok || !Array.isArray(cases.value) || cases.value.length === 0) {
-          setError(`${t('error.cases')}${cases.ok ? '' : `：${cases.error}`}`)
-          return
-        }
         const template = templates.find((item) => item.id === draft.templateId)
         if (!template) {
           setError(t('submit.pickTemplate'))
           return
         }
+        let payload
+        let caseRows
+        if (casesSource === 'queryset') {
+          const queryset = querysets.find((item) => item.id === casesQuerysetId)
+          if (!queryset) {
+            setError(t('submit.pickQueryset'))
+            return
+          }
+          payload = { name: draft.name, templateId: template.id, querysetId: queryset.id }
+          caseRows = [[t('submit.queryset'), `${queryset.name}（${queryset.id}）`],
+            [t('submit.cases'), String(queryset.count)]]
+        } else {
+          const cases = readJson(casesText)
+          if (!cases.ok || !Array.isArray(cases.value) || cases.value.length === 0) {
+            setError(`${t('error.cases')}${cases.ok ? '' : `：${cases.error}`}`)
+            return
+          }
+          payload = { name: draft.name, templateId: template.id, cases: cases.value }
+          caseRows = [[t('submit.cases'), String(cases.value.length)]]
+        }
         const rows = [
           [t('submit.name'), draft.name || '-'],
           [t('submit.template'), `${template.name}（${template.id}）`],
-          [t('submit.cases'), String(cases.value.length)],
+          ...caseRows,
         ]
         const stageRows = (state.stages || []).map((stage) => {
           const entry = (template.stages && template.stages[stage.id]) || {}
@@ -722,7 +856,7 @@ window.__ModuleLoader__.load({
           note: t('confirm.runNote'),
           rows,
           stages: stageRows,
-          payload: { name: draft.name, templateId: template.id, cases: cases.value },
+          payload,
         })
       }
 
@@ -1092,7 +1226,7 @@ window.__ModuleLoader__.load({
             : status === 'failed' ? t('label.failed') : t('label.idle')))
 
       const tabs = h('div', { className: 'ae-tabs' },
-        ...['tasks', 'templates'].map((key) => h('button', {
+        ...['tasks', 'querysets', 'templates'].map((key) => h('button', {
           key, type: 'button', className: 'ae-tab', 'data-active': String(view === key),
           onClick: () => {
             setView(key)
@@ -1100,6 +1234,8 @@ window.__ModuleLoader__.load({
             setTaskId('')
             setDetail(null)
             setTemplateDraft(null)
+            setQsDraft(null)
+            setImporter(null)
             setError('')
             setNotice('')
           },
@@ -1183,6 +1319,10 @@ window.__ModuleLoader__.load({
         }
         if (dialog.kind === 'yaml') {
           void saveTemplateYamlConfirmed()
+          return
+        }
+        if (dialog.kind === 'queryset') {
+          void saveQuerysetConfirmed(dialog.payload)
         }
       }
 
@@ -1579,60 +1719,82 @@ window.__ModuleLoader__.load({
       }
 
       // ---------------------------------------------------------- 提交任务
-      const matchesTemplate = (template) => {
+      const pickerMatches = (item) => {
         const query = pickerQuery.trim().toLowerCase()
         if (!query) return true
-        return [template.id, template.name, template.description]
+        return [item.id, item.name, item.detail]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query))
       }
 
-      /** 选模板：下拉列表 + 关键词过滤（匹配名称、id、说明）。 */
-      function renderTemplatePicker(selected) {
-        const matched = templates.filter(matchesTemplate)
-        return h('div', { className: 'ae-select', 'data-open': String(pickerOpen) },
+      /** 通用下拉：按钮 + 搜索框 + 列表，模板和 Query 集共用。 */
+      function renderPicker(key, options) {
+        const open = pickerKey === key
+        const items = options.items || []
+        const selected = items.find((item) => item.id === options.selectedId)
+        const matched = items.filter(pickerMatches)
+        return h('div', { className: 'ae-select', 'data-open': String(open) },
           h('button', {
             type: 'button', className: 'ae-select-button',
-            'aria-expanded': String(pickerOpen),
+            'aria-expanded': String(open),
             onClick: () => {
-              setPickerOpen(!pickerOpen)
-              if (pickerOpen) setPickerQuery('')
+              setPickerKey(open ? '' : key)
+              if (open) setPickerQuery('')
             },
           },
           h('span', { className: 'ae-select-value' },
-            selected ? `${selected.name}（${selected.id}）` : t('submit.pickTemplate')),
-          h('span', { className: 'ae-caret' }, pickerOpen ? '▴' : '▾')),
-          pickerOpen
+            selected ? `${selected.name}（${selected.id}）` : options.placeholder),
+          h('span', { className: 'ae-caret' }, open ? '▴' : '▾')),
+          open
             ? h('div', { className: 'ae-select-menu' },
               h('input', {
                 className: 'ae-input ae-select-search', type: 'search', spellCheck: false,
-                placeholder: t('submit.searchTemplate'), value: pickerQuery,
+                placeholder: options.searchPlaceholder, value: pickerQuery,
                 onChange: (event) => setPickerQuery(event.target.value),
                 onKeyDown: (event) => {
                   if (event.key === 'Escape') {
-                    setPickerOpen(false)
+                    setPickerKey('')
                     setPickerQuery('')
                   }
                 },
               }),
               matched.length === 0
-                ? h('div', { className: 'ae-select-empty' }, t('submit.noMatch'))
+                ? h('div', { className: 'ae-select-empty' }, options.emptyText)
                 : h('div', { className: 'ae-select-list' },
-                  ...matched.map((template) => h('button', {
-                    key: template.id, type: 'button', className: 'ae-select-item',
-                    'data-active': String(template.id === draft.templateId),
+                  ...matched.map((item) => h('button', {
+                    key: item.id, type: 'button', className: 'ae-select-item',
+                    'data-active': String(item.id === options.selectedId),
                     onClick: () => {
-                      applyTemplateToDraft(template)
-                      setPickerOpen(false)
+                      options.onPick(item)
+                      setPickerKey('')
                       setPickerQuery('')
                     },
                   },
-                  h('span', { className: 'ae-select-name' }, template.name),
-                  h('span', { className: 'ae-select-id ae-mono' }, template.id),
-                  template.builtin
-                    ? h('span', { className: 'ae-badge', 'data-kind': 'builtin' }, t('tpl.builtin'))
+                  h('span', { className: 'ae-select-name' }, item.name),
+                  h('span', { className: 'ae-select-id ae-mono' }, item.detail || item.id),
+                  item.badge
+                    ? h('span', { className: 'ae-badge', 'data-kind': 'builtin' }, item.badge)
                     : null))))
             : null)
+      }
+
+      function renderTemplatePicker() {
+        return renderPicker('template', {
+          items: templates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            detail: template.id,
+            badge: template.builtin ? t('tpl.builtin') : '',
+          })),
+          selectedId: draft.templateId,
+          placeholder: t('submit.pickTemplate'),
+          searchPlaceholder: t('submit.searchTemplate'),
+          emptyText: t('submit.noMatch'),
+          onPick: (item) => {
+            const template = templates.find((entry) => entry.id === item.id)
+            if (template) applyTemplateToDraft(template)
+          },
+        })
       }
 
       function renderSubmit() {
@@ -1666,7 +1828,7 @@ window.__ModuleLoader__.load({
               })),
             h('div', { className: 'ae-field' },
               h('label', { className: 'ae-label' }, t('submit.template')),
-              renderTemplatePicker(selected),
+              renderTemplatePicker(),
               h('div', { className: 'ae-card-note' }, t('submit.templateHint'))),
             h('div', { className: 'ae-label', style: { marginTop: '4px' } }, t('tpl.config')),
             preview || h('div', { className: 'ae-empty' }, t('submit.pickTemplate'))),
@@ -1674,10 +1836,38 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ae-card-head' },
               h('div', { className: 'ae-card-title' }, t('submit.cases')),
               h('div', { className: 'ae-card-note' }, t('submit.casesHint'))),
-            h('textarea', {
-              className: 'ae-textarea', rows: 12, spellCheck: false, value: casesText,
-              onChange: (event) => setCasesText(event.target.value),
-            })),
+            h('div', { className: 'ae-chips' },
+              h('button', {
+                type: 'button', className: 'ae-chip', 'data-active': String(casesSource === 'text'),
+                onClick: () => setCasesSource('text'),
+              }, t('submit.sourceText')),
+              h('button', {
+                type: 'button', className: 'ae-chip', 'data-active': String(casesSource === 'queryset'),
+                onClick: () => setCasesSource('queryset'),
+              }, t('submit.sourceQueryset'))),
+            casesSource === 'text'
+              ? h('textarea', {
+                className: 'ae-textarea', rows: 12, spellCheck: false, value: casesText,
+                onChange: (event) => setCasesText(event.target.value),
+              })
+              : h('div', null,
+                renderPicker('queryset', {
+                  items: querysets.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    detail: `${item.count} ${t('qs.cases')}`,
+                    badge: '',
+                  })),
+                  selectedId: casesQuerysetId,
+                  placeholder: t('submit.pickQueryset'),
+                  searchPlaceholder: t('submit.searchQueryset'),
+                  emptyText: t('submit.noQueryset'),
+                  onPick: (item) => setCasesQuerysetId(item.id),
+                }),
+                casesQuerysetId
+                  ? h('div', { className: 'ae-card-note' },
+                    `${querysets.find((item) => item.id === casesQuerysetId)?.count || 0} ${t('qs.cases')}`)
+                  : null)),
           progress
             ? h('div', { className: 'ae-card' },
               h('div', { className: 'ae-progress' },
@@ -1946,11 +2136,549 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'ae-btn', onClick: () => setTemplateDraft(null) }, t('action.back'))))
       }
 
+      // ---------------------------------------------------------- Query 集
+      const querysets = state.querysets || []
+
+      function casesToText(cases) {
+        return (cases || []).map((item) => JSON.stringify(item)).join('\n')
+      }
+
+      function parseCasesText(text) {
+        const cases = []
+        const lines = String(text || '').split(/\r?\n/)
+        for (const [index, line] of lines.entries()) {
+          if (!line.trim()) continue
+          let value
+          try {
+            value = JSON.parse(line)
+          } catch (failure) {
+            return { ok: false, error: `第 ${index + 1} 行：${failure.message}` }
+          }
+          if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            return { ok: false, error: `第 ${index + 1} 行：每行应该是一个对象` }
+          }
+          if (!String(value.query || '').trim()) {
+            return { ok: false, error: `第 ${index + 1} 行：缺 query` }
+          }
+          cases.push(value)
+        }
+        return { ok: true, cases }
+      }
+
+      async function openQueryset(item) {
+        setError('')
+        setNotice('')
+        setQsBusy(true)
+        try {
+          const data = await api(`/querysets?id=${encodeURIComponent(item.id)}`)
+          const queryset = data.queryset
+          setQsCasesText(casesToText(queryset.cases))
+          setQsDraft({
+            mode: 'edit',
+            editing: false,
+            id: queryset.id,
+            name: queryset.name,
+            description: queryset.description || '',
+            fields: queryset.fields || [],
+            queryField: queryset.queryField || 'query',
+            source: queryset.source || {},
+            cases: queryset.cases || [],
+            original: {
+              name: queryset.name,
+              description: queryset.description || '',
+              cases: queryset.cases || [],
+              fields: queryset.fields || [],
+              queryField: queryset.queryField || 'query',
+            },
+          })
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        } finally {
+          setQsBusy(false)
+        }
+      }
+
+      function cancelQuerysetEdit() {
+        const original = qsDraft && qsDraft.original
+        if (original) {
+          setQsDraft({
+            ...qsDraft,
+            name: original.name,
+            description: original.description,
+            fields: original.fields,
+            queryField: original.queryField,
+            cases: original.cases,
+          })
+          setQsCasesText(casesToText(original.cases))
+        }
+        setError('')
+        setNotice('')
+      }
+
+      function saveQueryset() {
+        if (!qsDraft) return
+        const parsed = parseCasesText(qsCasesText)
+        if (!parsed.ok) {
+          setError(parsed.error)
+          return
+        }
+        if (parsed.cases.length === 0) {
+          setError(t('qs.noCases'))
+          return
+        }
+        const fields = []
+        for (const item of parsed.cases) {
+          for (const key of Object.keys(item)) if (!fields.includes(key)) fields.push(key)
+        }
+        setError('')
+        setConfirmDialog({
+          kind: 'queryset',
+          title: t('confirm.querysetTitle'),
+          note: t('confirm.querysetNote'),
+          rows: [
+            [t('qs.id'), qsDraft.id],
+            [t('qs.name'), qsDraft.name || qsDraft.id],
+            [t('qs.cases'), String(parsed.cases.length)],
+            [t('qs.fields'), fields.join(', ')],
+          ],
+          payload: {
+            id: qsDraft.id,
+            name: qsDraft.name || qsDraft.id,
+            description: qsDraft.description || '',
+            fields,
+            queryField: qsDraft.queryField || fields[0] || 'query',
+            cases: parsed.cases,
+            source: qsDraft.source || {},
+          },
+        })
+      }
+
+      async function saveQuerysetConfirmed(payload) {
+        setConfirmDialog(null)
+        setQsBusy(true)
+        setError('')
+        try {
+          await api('/querysets', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          setQsDraft({
+            ...qsDraft,
+            ...payload,
+            editing: false,
+            original: {
+              name: payload.name,
+              description: payload.description,
+              cases: payload.cases,
+              fields: payload.fields,
+              queryField: payload.queryField,
+            },
+          })
+          setQsCasesText(casesToText(payload.cases))
+          setNotice(t('label.saved'))
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        } finally {
+          setQsBusy(false)
+        }
+      }
+
+      async function deleteQueryset(item) {
+        if (!window.confirm(`${t('qs.confirmDelete')}「${item.name}」？`)) return
+        setError('')
+        try {
+          await api(`/querysets?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' })
+          setQsDraft(null)
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        }
+      }
+
+      // ---- 导入 ----
+      function toBase64(buffer) {
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        const chunk = 0x8000
+        for (let index = 0; index < bytes.length; index += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(index, index + chunk))
+        }
+        if (typeof btoa !== 'function') throw new Error('这个环境不支持 base64 编码')
+        return btoa(binary)
+      }
+
+      function openImporter(mode, target) {
+        setError('')
+        setNotice('')
+        setImporter({
+          mode,
+          kind: 'jsonl',
+          id: target ? target.id : `qs-${Date.now().toString(36)}`,
+          name: target ? target.name : '',
+          description: target ? target.description || '' : '',
+          text: '',
+          base64: '',
+          fileName: '',
+          link: '',
+          sheetId: '',
+          tableId: '',
+          queryField: '',
+          busy: false,
+          result: null,
+          error: '',
+        })
+      }
+
+      function updateImporter(patch) {
+        setImporter({ ...importer, ...patch })
+      }
+
+      async function runImport() {
+        const current = importer
+        if (!current) return
+        const payload = { kind: current.kind, queryField: current.queryField || undefined, name: current.fileName || current.name }
+        if (current.kind === 'jsonl' || current.kind === 'csv') {
+          if (!current.text.trim()) {
+            updateImporter({ error: t('qs.needText') })
+            return
+          }
+          payload.text = current.text
+        } else if (current.kind === 'xlsx') {
+          if (!current.base64) {
+            updateImporter({ error: t('qs.needFile') })
+            return
+          }
+          payload.base64 = current.base64
+        } else {
+          if (!current.link.trim()) {
+            updateImporter({ error: t('qs.needLink') })
+            return
+          }
+          payload.link = current.link.trim()
+          if (current.sheetId.trim()) payload.sheetId = current.sheetId.trim()
+          if (current.tableId.trim()) payload.tableId = current.tableId.trim()
+        }
+        updateImporter({ busy: true, error: '', result: null })
+        try {
+          const result = await api('/querysets/import', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          updateImporter({
+            busy: false,
+            result,
+            queryField: result.queryField,
+            name: current.name || result.title || '',
+          })
+        } catch (failure) {
+          updateImporter({ busy: false, error: String(failure.message || failure) })
+        }
+      }
+
+      async function applyImport() {
+        const current = importer
+        if (!current || !current.result) return
+        const result = current.result
+        const body = {
+          id: current.id,
+          name: current.name || current.id,
+          description: current.description || '',
+          fields: result.fields,
+          queryField: current.queryField || result.queryField,
+          cases: result.cases,
+          source: { kind: current.kind, link: current.link || '', fileName: current.fileName || '' },
+        }
+        setQsBusy(true)
+        try {
+          await api('/querysets', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          setImporter(null)
+          setNotice(t('qs.imported'))
+          await load()
+          if (current.mode === 'replace') {
+            await openQueryset(body)
+          } else {
+            setQsDraft(null)
+          }
+        } catch (failure) {
+          updateImporter({ error: String(failure.message || failure) })
+        } finally {
+          setQsBusy(false)
+        }
+      }
+
+      function renderQuerysetList() {
+        return h('div', { className: 'ae-page' },
+          h('style', null, STYLE),
+          head, renderWorkspace(), tabs, messages, renderConfirm(), renderImporter(),
+          h('div', { className: 'ae-toolbar' },
+            h('div', { className: 'ae-toolbar-left' },
+              h('span', { className: 'ae-toolbar-count' }, `${querysets.length} ${t('qs.unit')}`),
+              h('span', { className: 'ae-card-note' }, t('qs.hint'))),
+            h('div', { className: 'ae-toolbar-right' },
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary',
+                onClick: () => openImporter('new'),
+              }, t('qs.import')))),
+          querysets.length === 0
+            ? h('div', { className: 'ae-empty' }, t('qs.empty'))
+            : h('div', { className: 'ae-cards' },
+              ...querysets.map((item) => h('div', {
+                key: item.id, className: 'ae-qs-card', role: 'button', tabIndex: 0,
+                'data-broken': String(Boolean(item.broken)),
+                onClick: () => { void openQueryset(item) },
+              },
+              h('div', { className: 'ae-card-head' },
+                h('div', { className: 'ae-card-title' }, item.name),
+                h('span', { className: 'ae-badge', 'data-kind': 'custom' }, `${item.count} ${t('qs.cases')}`),
+                item.broken ? h('span', { className: 'ae-badge', 'data-kind': 'broken' }, t('qs.broken')) : null),
+              h('div', { className: 'ae-card-note' }, item.description || '—'),
+              h('div', { className: 'ae-card-meta' },
+                h('span', { className: 'ae-mono' }, item.id),
+                h('span', null, item.source && item.source.kind ? t(`qs.kind.${item.source.kind}`) : t('qs.kind.manual')),
+                h('span', null, item.updatedAt ? item.updatedAt.slice(0, 16).replace('T', ' ') : ''))))))
+      }
+
+      function renderQuerysetDetail() {
+        const current = qsDraft
+        const editing = Boolean(current.editing)
+        const parsed = editing ? null : null
+        return h('div', { className: 'ae-page' },
+          h('style', null, STYLE),
+          head, renderWorkspace(), tabs, messages, renderConfirm(), renderImporter(),
+          h('button', { type: 'button', className: 'ae-back', onClick: () => setQsDraft(null) },
+            `← ${t('action.back')}`),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-head' },
+              h('div', { className: 'ae-card-title' }, current.name || current.id),
+              h('span', { className: 'ae-badge', 'data-kind': 'custom' }, `${current.cases.length} ${t('qs.cases')}`),
+              editing
+                ? h('div', { className: 'ae-card-note' }, t('tpl.editing'))
+                : h('div', { className: 'ae-card-note' }, t('tpl.viewing'))),
+            editing
+              ? h('div', null,
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.name')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', value: current.name,
+                    onChange: (event) => setQsDraft({ ...current, name: event.target.value }),
+                  })),
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.desc')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', value: current.description,
+                    onChange: (event) => setQsDraft({ ...current, description: event.target.value }),
+                  })))
+              : h('div', null,
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.id')),
+                  h('span', { className: 'ae-mono' }, current.id)),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.name')),
+                  h('span', null, current.name || '-')),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.desc')),
+                  h('span', null, current.description || '-')),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.queryField')),
+                  h('span', { className: 'ae-mono' }, current.queryField || 'query')),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.fields')),
+                  h('span', { className: 'ae-mono' }, (current.fields || []).join(', ') || '-')),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.source')),
+                  h('span', null, current.source && current.source.kind
+                    ? t(`qs.kind.${current.source.kind}`)
+                    : t('qs.kind.manual'))))),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-head' },
+              h('div', { className: 'ae-card-title' }, t('qs.cases')),
+              h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('qs.casesHint'))),
+            editing
+              ? h('textarea', {
+                className: 'ae-textarea ae-mono', rows: 18, spellCheck: false,
+                value: qsCasesText,
+                onChange: (event) => setQsCasesText(event.target.value),
+              })
+              : h('div', { className: 'ae-qs-table' },
+                ...previewCases(current.cases).map((item, index) => h('div', {
+                  className: 'ae-detail-row', key: `case-${index}`,
+                },
+                h('span', { className: 'ae-detail-key' }, `${index + 1}`),
+                h('span', { className: 'ae-mono' }, item.query)))),
+            !editing && current.cases.length > 30
+              ? h('div', { className: 'ae-card-note' }, `${t('qs.more')}${current.cases.length - 30}`)
+              : null),
+          h('div', { className: 'ae-actions' },
+            editing
+              ? h('button', { type: 'button', className: 'ae-btn ae-btn-primary', disabled: qsBusy, onClick: () => saveQueryset() }, t('action.save'))
+              : h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => setQsDraft({ ...current, editing: true }) }, t('action.edit')),
+            editing
+              ? h('button', { type: 'button', className: 'ae-btn', onClick: cancelQuerysetEdit }, t('action.cancel'))
+              : null,
+            h('button', {
+              type: 'button', className: 'ae-btn', disabled: qsBusy,
+              onClick: () => openImporter('replace', { id: current.id, name: current.name, description: current.description }),
+            }, t('qs.replaceCases')),
+            h('button', {
+              type: 'button', className: 'ae-btn ae-danger', disabled: qsBusy,
+              onClick: () => { void deleteQueryset({ id: current.id, name: current.name || current.id }) },
+            }, t('action.delete')),
+            h('button', { type: 'button', className: 'ae-btn', onClick: () => setQsDraft(null) }, t('action.back'))))
+      }
+
+      function previewCases(cases) {
+        return (cases || []).slice(0, 30)
+      }
+
+      function renderImporter() {
+        const current = importer
+        if (!current) return null
+        const kinds = ['jsonl', 'csv', 'xlsx', 'sheet', 'bitable']
+        const result = current.result
+        return h('div', { className: 'ae-modal-mask' },
+          h('div', { className: 'ae-modal', style: { width: 'min(720px, 94vw)' } },
+            h('div', { className: 'ae-modal-title' },
+              current.mode === 'replace' ? t('qs.replaceTitle') : t('qs.importTitle')),
+            h('div', { className: 'ae-chips' },
+              ...kinds.map((kind) => h('button', {
+                key: kind, type: 'button', className: 'ae-chip',
+                'data-active': String(current.kind === kind),
+                onClick: () => updateImporter({ kind, result: null, error: '' }),
+              }, t(`qs.kind.${kind}`)))),
+            current.kind === 'jsonl' || current.kind === 'csv'
+              ? h('div', null,
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.paste')),
+                  h('textarea', {
+                    className: 'ae-textarea ae-mono', rows: 8, spellCheck: false,
+                    placeholder: current.kind === 'csv' ? 'query,expect\nDSH 是什么,本地运行时' : '{"query":"DSH 是什么","expect":"本地运行时"}',
+                    value: current.text,
+                    onChange: (event) => updateImporter({ text: event.target.value, result: null }),
+                  })),
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.orFile')),
+                  h('input', {
+                    className: 'ae-input', type: 'file',
+                    accept: current.kind === 'csv' ? '.csv,.tsv,text/csv' : '.jsonl,.json,text/plain',
+                    onChange: (event) => {
+                      const file = event.target.files && event.target.files[0]
+                      if (!file) return
+                      Promise.resolve(file.text()).then((text) => {
+                        updateImporter({ text, fileName: file.name, result: null })
+                      }).catch((failure) => updateImporter({ error: String(failure.message || failure) }))
+                    },
+                  })))
+              : null,
+            current.kind === 'xlsx'
+              ? h('div', { className: 'ae-field' },
+                h('label', { className: 'ae-label' }, t('qs.pickFile')),
+                h('input', {
+                  className: 'ae-input', type: 'file', accept: '.xlsx',
+                  onChange: (event) => {
+                    const file = event.target.files && event.target.files[0]
+                    if (!file) return
+                    Promise.resolve(file.arrayBuffer()).then((buffer) => {
+                      updateImporter({ base64: toBase64(buffer), fileName: file.name, result: null })
+                    }).catch((failure) => updateImporter({ error: String(failure.message || failure) }))
+                  },
+                }),
+                current.fileName ? h('div', { className: 'ae-card-note' }, current.fileName) : null)
+              : null,
+            current.kind === 'sheet' || current.kind === 'bitable'
+              ? h('div', null,
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.link')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', spellCheck: false,
+                    placeholder: current.kind === 'sheet'
+                      ? 'https://xxx.feishu.cn/sheets/xxxxx?sheet=xxxxx'
+                      : 'https://xxx.feishu.cn/base/xxxxx?table=tblxxxx',
+                    value: current.link,
+                    onChange: (event) => updateImporter({ link: event.target.value, result: null }),
+                  })),
+                current.kind === 'sheet'
+                  ? h('div', { className: 'ae-field' },
+                    h('label', { className: 'ae-label' }, t('qs.sheetId')),
+                    h('input', {
+                      className: 'ae-input ae-mono', type: 'text', spellCheck: false,
+                      placeholder: t('qs.optional'), value: current.sheetId,
+                      onChange: (event) => updateImporter({ sheetId: event.target.value, result: null }),
+                    }))
+                  : h('div', { className: 'ae-field' },
+                    h('label', { className: 'ae-label' }, t('qs.tableId')),
+                    h('input', {
+                      className: 'ae-input ae-mono', type: 'text', spellCheck: false,
+                      placeholder: t('qs.optional'), value: current.tableId,
+                      onChange: (event) => updateImporter({ tableId: event.target.value, result: null }),
+                    })))
+              : null,
+            result
+              ? h('div', { className: 'ae-import-preview' },
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('qs.parsed')),
+                  h('span', null, `${result.total} ${t('qs.cases')}${result.skipped ? ` · ${t('qs.skipped')} ${result.skipped}` : ''}`)),
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('qs.queryField')),
+                  h('select', {
+                    className: 'ae-input',
+                    value: current.queryField,
+                    onChange: (event) => updateImporter({ queryField: event.target.value }),
+                  },
+                  ...(result.fields || []).map((field) => h('option', { key: field, value: field }, field)))),
+                h('div', { className: 'ae-import-sample' },
+                  ...result.cases.slice(0, 5).map((item, index) => h('div', {
+                    className: 'ae-detail-row', key: `sample-${index}`,
+                  },
+                  h('span', { className: 'ae-detail-key' }, `${index + 1}`),
+                  h('span', { className: 'ae-mono' }, String(item[current.queryField || result.queryField] || ''))))))
+              : null,
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('qs.name')),
+              h('input', {
+                className: 'ae-input', type: 'text', value: current.name,
+                onChange: (event) => updateImporter({ name: event.target.value }),
+              })),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('qs.id')),
+              h('input', {
+                className: 'ae-input ae-mono', type: 'text', spellCheck: false,
+                disabled: current.mode === 'replace',
+                value: current.id,
+                onChange: (event) => updateImporter({ id: event.target.value }),
+              })),
+            current.error ? h('div', { className: 'ae-error' }, current.error) : null,
+            h('div', { className: 'ae-actions' },
+              h('button', {
+                type: 'button', className: 'ae-btn', disabled: current.busy,
+                onClick: () => { void runImport() },
+              }, t('qs.parse')),
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary',
+                disabled: current.busy || !result,
+                onClick: () => { void applyImport() },
+              }, current.mode === 'replace' ? t('qs.applyReplace') : t('qs.applyNew')),
+              h('button', {
+                type: 'button', className: 'ae-btn',
+                onClick: () => setImporter(null),
+              }, t('action.cancel')))))
+      }
+
       // ---------------------------------------------------------- 路由
       if (view === 'tasks') {
         if (submitting) return renderSubmit()
         if (taskId) return renderTaskDetail()
         return renderTaskList()
+      }
+      if (view === 'querysets') {
+        if (qsDraft) return renderQuerysetDetail()
+        return renderQuerysetList()
       }
       if (templateDraft) return renderTemplateDetail()
       return renderTemplateList()
