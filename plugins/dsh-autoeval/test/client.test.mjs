@@ -935,7 +935,7 @@ test('模板编辑：预置阶段不能互换，自定义阶段可以插入再�
   assert.equal(upButtons[0].props.disabled, true, '预置阶段不该能跟上一个预置阶段换')
 
   // 加一个自定义阶段
-  findAll(view, clickable('新增阶段'))[0].props.onClick()
+  findAll(view, clickable('+ 自定义阶段'))[0].props.onClick()
   view = render(mainComponent(), {})
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 5, '没加上自定义阶段')
   assert.ok(texts(view).includes('自定义阶段 1'), '自定义阶段没露面')
@@ -954,6 +954,32 @@ test('模板编辑：预置阶段不能互换，自定义阶段可以插入再�
     .find((node) => texts(node) === '删除').props.onClick()
   view = render(mainComponent(), {})
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '没删掉自定义阶段')
+})
+
+test('模板编辑：预置阶段可以删掉，也能从新增区加回来', async () => {
+  let view = ensureTaskList()
+  view = openTab(view, '任务模板')
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(!findAll(view, clickable('+ Annotation · 标注')).length, 'Annotation 还在，不该出现在新增区')
+
+  // 删掉 Annotation
+  const cards = findAll(view, byClass('ae-stage-edit'))
+  findAll(cards[1], (node) => String(node.props.className || '').startsWith('ae-btn ae-btn-xs'))
+    .find((node) => texts(node) === '删除').props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 3, '预置阶段没删掉')
+
+  // 新增区里应该出现它，点一下加回来，且回到原来的位置
+  const addButton = findAll(view, clickable('+ Annotation · 标注'))[0]
+  assert.ok(addButton, '删掉的预置阶段没出现在新增区')
+  addButton.props.onClick()
+  view = render(mainComponent(), {})
+  const titles = findAll(view, byClass('ae-card-title')).map((node) => texts(node))
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '没加回来')
+  assert.ok(titles.some((text) => text === '2. Annotation · 标注'), '加回来的位置不对')
 })
 
 test('模板编辑：可以加 Treatment 组并覆盖阶段参数', async () => {

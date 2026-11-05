@@ -455,11 +455,12 @@ test('阶段顺序：预置阶段不能调换，自定义阶段可以插在中�
   assert.equal(swapped.ok, false)
   assert.match(swapped.error, /先后不能改/)
 
-  const missing = await call('POST', '/autoeval-api/templates', {
-    id: 'missing-stage', name: 'x', stages: [base[0], base[1], base[2]],
+  // 预置阶段可以删：只留前三个也能存
+  const subset = await call('POST', '/autoeval-api/templates', {
+    id: 'subset-stage', name: 'x', stages: [base[0], base[1], base[2]],
   })
-  assert.equal(missing.ok, false)
-  assert.match(missing.error, /预置阶段不能删/)
+  assert.equal(subset.ok, true, subset.error)
+  assert.deepEqual(subset.template.stages.map((stage) => stage.id), ['scraping', 'annotation', 'metrics'])
 
   const command = `node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const p=JSON.parse(d);process.stdout.write(JSON.stringify({cases:p.cases.map(c=>Object.assign({},c,{reranked:p.stage}))}))})"`
   const saved = await call('POST', '/autoeval-api/templates', {
@@ -487,6 +488,44 @@ test('阶段顺序：预置阶段不能调换，自定义阶段可以插在中�
   const rows = await call('GET', `/autoeval-api/rows?run=${run.id}`)
   const first = JSON.parse(rows.text.trim().split('\n')[0])
   assert.equal(first.reranked, 'rerank', '自定义阶段没跑起来')
+})
+
+test('阶段可以删到只剩抓取和自定义：没有 metrics/reporting 也能跑完', async () => {
+  const command = `node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const p=JSON.parse(d);process.stdout.write(JSON.stringify({cases:p.cases.map(c=>Object.assign({},c,{tag:p.stage}))}))})"`
+  const saved = await call('POST', '/autoeval-api/templates', {
+    id: 'slim-template',
+    name: '精简模板',
+    stages: [
+      { id: 'scraping', module: 'inline', config: {} },
+      { id: 'annotation', module: 'coverage-keyword', config: { minCoverage: 1 } },
+      { id: 'tag', name: '打标', module: 'custom', config: { command } },
+    ],
+  })
+  assert.equal(saved.ok, true, saved.error)
+
+  const started = await call('POST', '/autoeval-api/run', {
+    templateId: 'slim-template',
+    cases: [{ id: 's1', query: '一', material: '苹果', infoPoints: ['苹果'] }],
+  })
+  assert.equal(started.ok, true, started.error)
+  const state = await waitForIdle()
+  const run = state.runs[0]
+  assert.equal(run.status, 'done', JSON.stringify(run.error))
+  assert.deepEqual(Object.keys(run.groups[0].stages), ['scraping', 'annotation', 'tag'])
+  assert.equal(run.metrics.derived, true, '没有 metrics 阶段时应补一份兜底指标')
+  assert.equal(run.metrics.passRate, 1, '兜底通过率算错了')
+  assert.equal(run.metrics.scored, 1)
+  assert.equal(run.comparison, null, '单组不需要对比')
+
+  const report = await call('GET', `/autoeval-api/report?run=${run.id}`)
+  assert.ok(report.text.includes('没有 Reporting 阶段'), '缺少降级说明')
+  assert.ok(report.text.includes('Control'), '降级报告里没有组名')
+  assert.ok(report.text.includes('100.0%'), '降级报告里应该补上通过率')
+  assert.ok(!report.text.includes('通过率：-'), '降级报告不该全是空值')
+
+  const rows = await call('GET', `/autoeval-api/rows?run=${run.id}`)
+  const first = JSON.parse(rows.text.trim().split('\n')[0])
+  assert.equal(first.tag, 'tag', '自定义阶段的结果没传下去')
 })
 
 test('分组：Control + Treatment 各自覆盖参数，报告里有组间对比', async () => {
@@ -744,7 +783,7 @@ test('坏配置会被挡住：字段越界、阶段缺失、YAML 语法错', asy
   assert.match(await bad({
     id: 'bad-4', name: 'x', stages: { ...base, scraping: { template: 'custom', config: {} } },
   }), /缺少 command/)
-  assert.match(await bad({ id: 'bad-5', name: 'x', stages: { scraping: base.scraping } }), /预置阶段不能删/)
+  assert.match(await bad({ id: 'bad-5', name: 'x', stages: {} }), /至少要有一个阶段/)
   assert.match(await bad({ id: 'Bad Id', name: 'x', stages: base }), /模板 id 只能用/)
   const raw = await call('POST', '/autoeval-api/templates/raw', { yaml: 'id: x\n  bad: indent' })
   assert.equal(raw.ok, false)

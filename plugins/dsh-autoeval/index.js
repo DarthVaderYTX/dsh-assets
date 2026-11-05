@@ -287,7 +287,7 @@ async function writeWorkspaceConfig(input) {
 }
 
 /** 某个阶段某个执行模板的可配字段（面板用它生成表单）。 */
-/** 四个预置阶段：可以删掉自定义阶段、可以在它们之间插，但这四个之间的先后固定。 */
+/** 四个预置阶段：可删可加，都在时相互先后固定；自定义阶段可插在任意位置。 */
 export const PRESET_STAGE_IDS = ['scraping', 'annotation', 'metrics', 'reporting']
 
 /** 自定义阶段目前只有一种执行模块：自定义命令。 */
@@ -761,6 +761,19 @@ async function stageReporting(ctx, payload, config, signal) {
 function combineReports(run, reports) {
   if (reports.length === 1) return reports[0].text
   const lines = [`# AutoEval 报告 · ${run.name}`, '']
+  if (reports.length === 0) {
+    // 模板里没有 Reporting 阶段：只把指标落下来，别写空文件
+    lines.push('> 这个模板没有 Reporting 阶段，以下是各组的指标快照。', '')
+    for (const group of run.groups || []) {
+      lines.push(`## ${group.name}（${group.kind}）`, '')
+      const metrics = group.metrics || {}
+      lines.push(`- 通过率：${formatMetric(metrics.passRate, true)}`)
+      lines.push(`- 平均覆盖：${formatMetric(metrics.avgCoverage, true)}`)
+      lines.push(`- 有分数的行：${formatMetric(metrics.scored, false)} / ${formatMetric(metrics.total, false)}`)
+      lines.push('')
+    }
+    return lines.join('\n')
+  }
   const comparison = run.comparison
   if (comparison && comparison.treatments.length > 0) {
     lines.push('## 组间对比')
@@ -781,6 +794,23 @@ function combineReports(run, reports) {
     lines.push('')
   }
   return lines.join('\n')
+}
+
+/** 没有 Metrics 阶段时的兜底：只算通过率和平均覆盖，口径跟内置标注一致。 */
+function deriveMetrics(cases) {
+  const list = Array.isArray(cases) ? cases : []
+  const scored = list.filter((item) => typeof item.score === 'number')
+  const passed = scored.filter((item) => item.score > 0)
+  const coverage = list.map((item) => item.coverage).filter((value) => typeof value === 'number')
+  return {
+    total: list.length,
+    scored: scored.length,
+    passed: passed.length,
+    passRate: scored.length === 0 ? null : passed.length / scored.length,
+    avgCoverage: coverage.length === 0 ? null : coverage.reduce((sum, value) => sum + value, 0) / coverage.length,
+    scrapeErrors: 0,
+    derived: true,
+  }
 }
 
 /** 组间对比：Control 打底，每个 Treatment 算差值。 */
@@ -952,8 +982,8 @@ export function templateToYaml(template) {
   const head = [
     `# AutoEval 任务模板：${template.name || template.id}`,
     `# 文件：templates/${template.id}.yaml（文件名就是模板 id）`,
-    '# 阶段按 stages 里的顺序执行；四个预置阶段（scraping / annotation / metrics / reporting）',
-    '# 之间的先后不能改，可以在它们之间插自定义阶段。groups 里必须有且只有一个 control。',
+    '# 阶段按 stages 里的顺序执行：预置阶段（scraping / annotation / metrics / reporting）可以删、可以加回来，',
+    '# 但都在的时候相对先后固定；自定义阶段可以插在任意位置。groups 里必须有且只有一个 control。',
     '# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。',
     '',
   ].join('\n')
@@ -1024,11 +1054,14 @@ function validateStageOrder(stages) {
   const ids = stages.map((stage) => stage.id)
   const dupes = ids.filter((id, index) => ids.indexOf(id) !== index)
   if (dupes.length > 0) throw new Error(`阶段 ${dupes[0]} 重复了`)
+  if (stages.length === 0) throw new Error('模板至少要有一个阶段')
+  // 预置阶段可以删、可以加回来，但都在的时候相对顺序不能变
   const presets = stages.filter((stage) => stage.kind === 'preset').map((stage) => stage.id)
-  const missing = PRESET_STAGE_IDS.filter((id) => !presets.includes(id))
-  if (missing.length > 0) throw new Error(`预置阶段不能删：${missing.join(' / ')}`)
-  if (presets.join('>') !== PRESET_STAGE_IDS.join('>')) {
-    throw new Error(`预置阶段之间的先后不能改，只能是 ${PRESET_STAGE_IDS.join(' → ')}`)
+  const order = presets.map((id) => PRESET_STAGE_IDS.indexOf(id))
+  for (let index = 1; index < order.length; index += 1) {
+    if (order[index] < order[index - 1]) {
+      throw new Error(`预置阶段之间的先后不能改，只能是 ${PRESET_STAGE_IDS.join(' → ')}（可以少，但不能换位）`)
+    }
   }
 }
 
@@ -1403,6 +1436,11 @@ class AutoEvalService {
   async writeArtifacts(run, cases, reports) {
     const dir = path.join(dataDir(), 'runs', run.id)
     await fsp.mkdir(dir, { recursive: true })
+    // 没有 Metrics 阶段时补一份最基本的指标，让降级报告别全是「-」
+    for (const group of run.groups || []) {
+      if (!group.metrics) group.metrics = deriveMetrics(group._cases)
+    }
+    if (!run.metrics && run.groups && run.groups[0]) run.metrics = run.groups[0].metrics
     const format = (reports[0] && reports[0].format) || 'markdown'
     const name = format === 'json' ? 'report.json' : 'report.md'
     const text = format === 'json'

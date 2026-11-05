@@ -1216,6 +1216,30 @@ window.__ModuleLoader__.load({
         })
       }
 
+      /** 把某个预置阶段加回模板：插在它该在的位置上。 */
+      function addPresetStage(stageId) {
+        updateStages((list) => {
+          if (list.some((item) => item.id === stageId)) return list
+          const def = catalogStage(stageId)
+          const preset = def && def.presets[0]
+          const entry = {
+            id: stageId,
+            kind: 'preset',
+            name: stageId,
+            module: preset ? preset.id : 'custom',
+            config: { ...(preset ? preset.config : {}) },
+            configText: JSON.stringify(preset ? preset.config : {}, null, 2),
+          }
+          const rank = (id) => {
+            const found = (state.stages || []).findIndex((item) => item.id === id)
+            return found < 0 ? 99 : found
+          }
+          const at = list.findIndex((item) => item.kind === 'preset' && rank(item.id) > rank(stageId))
+          if (at < 0) return [...list, entry]
+          return [...list.slice(0, at), entry, ...list.slice(at)]
+        })
+      }
+
       function addCustomStage() {
         const used = new Set((templateDraft.stages || []).map((item) => item.id))
         let index = 1
@@ -1231,9 +1255,15 @@ window.__ModuleLoader__.load({
         }])
       }
 
+      /** 还能加的预置阶段（已删掉的那些）。 */
+      function missingPresets() {
+        const used = new Set((templateDraft.stages || []).map((item) => item.id))
+        return (state.stages || []).filter((stage) => !used.has(stage.id))
+      }
+
       function removeStageAt(index) {
         const stage = (templateDraft.stages || [])[index]
-        if (!stage || stage.kind === 'preset') return
+        if (!stage || (templateDraft.stages || []).length <= 1) return
         updateStages((list) => list.filter((item, at) => at !== index))
         setTemplateDraft((current) => {
           if (!current) return current
@@ -1531,12 +1561,11 @@ window.__ModuleLoader__.load({
                   title: t('action.moveDown'), disabled: !canSwap(index, 1),
                   onClick: () => moveStageAt(index, 1),
                 }, '↓'),
-                stage.kind === 'custom'
-                  ? h('button', {
-                    type: 'button', className: 'ae-btn ae-btn-xs',
-                    onClick: () => removeStageAt(index),
-                  }, t('action.delete'))
-                  : null)
+                h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-xs',
+                  disabled: (templateDraft.stages || []).length <= 1,
+                  onClick: () => removeStageAt(index),
+                }, t('action.delete')))
               : null),
           editing && stage.kind === 'custom'
             ? h('div', { className: 'ae-field' },
@@ -2411,8 +2440,13 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
           ...stageList.map((stage, index) => renderStageRow(stage, index, editing)),
           editing
-            ? h('div', { className: 'ae-actions' },
-              h('button', { type: 'button', className: 'ae-btn', onClick: addCustomStage }, t('tpl.addStage')))
+            ? h('div', { className: 'ae-actions', style: { flexWrap: 'wrap' } },
+              h('span', { className: 'ae-label' }, `${t('tpl.addStage')}：`),
+              ...missingPresets().map((stage) => h('button', {
+                key: `add-${stage.id}`, type: 'button', className: 'ae-btn',
+                onClick: () => addPresetStage(stage.id),
+              }, `+ ${t(`stage.${stage.id}`)}`)),
+              h('button', { type: 'button', className: 'ae-btn', onClick: addCustomStage }, `+ ${t('stage.custom')}`))
             : null,
           h('div', { className: 'ae-card-title', style: { marginTop: '10px' } }, t('tpl.groups')),
           h('div', { className: 'ae-card-note' }, t('tpl.groupHint')),
