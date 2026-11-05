@@ -1,4 +1,4 @@
-// Query 集的导入：CSV / JSONL / XLSX 本地解析，飞书表格与智能表格走 lark-cli。
+// Queryset的导入：CSV / JSONL / XLSX 本地解析，飞书表格与智能表格走 lark-cli。
 import { spawn } from 'node:child_process'
 import { readXlsx } from './xlsx.js'
 

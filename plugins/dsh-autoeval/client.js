@@ -16,12 +16,12 @@ window.__ModuleLoader__.load({
       'panel.subtitle': '四阶段评测流水线：抓取、标注、指标、报告',
       'tab.tasks': '评测任务',
       'tab.templates': '任务模板',
-      'tab.querysets': 'Query 集',
-      'qs.unit': '个 Query 集',
+      'tab.querysets': 'Queryset',
+      'qs.unit': '个 Queryset',
       'qs.cases': '条用例',
       'qs.hint': '从 JSONL / CSV / XLSX 或飞书表格、智能表格导入，也可以直接编辑用例',
-      'qs.empty': '还没有 Query 集，点右上角「导入 Query 集」。',
-      'qs.import': '导入 Query 集',
+      'qs.empty': '还没有 Queryset，点右上角「导入 Queryset」。',
+      'qs.import': '导入 Queryset',
       'qs.broken': '文件坏了',
       'qs.id': 'id',
       'qs.name': '名称',
@@ -33,7 +33,7 @@ window.__ModuleLoader__.load({
       'qs.more': '……还有更多条，编辑状态能看到全部。共多出 ',
       'qs.replaceCases': '重新导入',
       'qs.replaceTitle': '重新导入用例（会覆盖现有用例）',
-      'qs.importTitle': '导入 Query 集',
+      'qs.importTitle': '导入 Queryset',
       'qs.paste': '粘贴内容',
       'qs.orFile': '或者选文件',
       'qs.pickFile': '选一个 xlsx（第一行是表头）',
@@ -44,11 +44,11 @@ window.__ModuleLoader__.load({
       'qs.parsed': '解析结果',
       'qs.skipped': '跳过空行',
       'qs.parse': '解析',
-      'qs.applyNew': '存成 Query 集',
+      'qs.applyNew': '存成 Queryset',
       'qs.applyReplace': '替换用例',
-      'qs.imported': 'Query 集已保存。',
+      'qs.imported': 'Queryset已保存。',
       'qs.noCases': '用例是空的，至少留一条。',
-      'qs.confirmDelete': '删掉 Query 集',
+      'qs.confirmDelete': '删掉 Queryset',
       'qs.needText': '先粘贴内容或者选个文件。',
       'qs.needFile': '先选一个 xlsx 文件。',
       'qs.needLink': '先贴飞书链接或 token。',
@@ -58,7 +58,7 @@ window.__ModuleLoader__.load({
       'qs.kind.sheet': '飞书表格',
       'qs.kind.bitable': '飞书智能表格',
       'qs.kind.manual': '手工维护',
-      'confirm.querysetTitle': '确认保存这个 Query 集？',
+      'confirm.querysetTitle': '确认保存这个 Queryset？',
       'confirm.querysetNote': '保存会重写工作区里的 querysets/<id>.json。',
 
 
@@ -183,11 +183,11 @@ window.__ModuleLoader__.load({
       'submit.searchTemplate': '按名称或 id 过滤模板…',
       'submit.noMatch': '没有匹配的模板。',
       'submit.sourceText': '粘贴 JSON',
-      'submit.sourceQueryset': '选 Query 集',
-      'submit.queryset': '用哪个 Query 集',
-      'submit.pickQueryset': '先选一个 Query 集。',
-      'submit.searchQueryset': '按名称或 id 过滤 Query 集…',
-      'submit.noQueryset': '没有匹配的 Query 集。',
+      'submit.sourceQueryset': '选 Queryset',
+      'submit.queryset': '用哪个 Queryset',
+      'submit.pickQueryset': '先选一个 Queryset。',
+      'submit.searchQueryset': '按名称或 id 过滤 Queryset…',
+      'submit.noQueryset': '没有匹配的 Queryset。',
 
       'submit.progress': '运行中',
 
@@ -245,7 +245,7 @@ window.__ModuleLoader__.load({
       'panel.subtitle': 'Four-stage evaluation pipeline: scraping, annotation, metrics, reporting',
       'tab.tasks': 'Tasks',
       'tab.templates': 'Templates',
-      'tab.querysets': 'Querysets',
+      'tab.querysets': 'Queryset',
       'qs.unit': 'querysets',
       'qs.cases': 'cases',
       'qs.hint': 'Import from JSONL / CSV / XLSX, Feishu Sheets or Bitable; cases stay editable',
@@ -1727,7 +1727,7 @@ window.__ModuleLoader__.load({
           .some((value) => String(value).toLowerCase().includes(query))
       }
 
-      /** 通用下拉：按钮 + 搜索框 + 列表，模板和 Query 集共用。 */
+      /** 通用下拉：按钮 + 搜索框 + 列表，模板和 Queryset共用。 */
       function renderPicker(key, options) {
         const open = pickerKey === key
         const items = options.items || []
@@ -2136,7 +2136,7 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'ae-btn', onClick: () => setTemplateDraft(null) }, t('action.back'))))
       }
 
-      // ---------------------------------------------------------- Query 集
+      // ---------------------------------------------------------- Queryset
       const querysets = state.querysets || []
 
       function casesToText(cases) {

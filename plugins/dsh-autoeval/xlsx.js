@@ -1,4 +1,4 @@
-// 最小 XLSX 读取器：只依赖 node:zlib，读第一个工作表，够 Query 集导入用。
+// 最小 XLSX 读取器：只依赖 node:zlib，读第一个工作表，够 Queryset 导入用。
 import zlib from 'node:zlib'
 
 const EOCD = 0x06054b50

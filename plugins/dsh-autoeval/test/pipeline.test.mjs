@@ -442,7 +442,7 @@ test('工作区：路径、计数、配置读写', async () => {
   await call('DELETE', '/autoeval-api/templates?id=workspace-probe')
 })
 
-test('Query 集：导入 CSV / JSONL / XLSX，增删改查', async () => {
+test('Queryset：导入 CSV / JSONL / XLSX，增删改查', async () => {
   // CSV
   const csv = await call('POST', '/autoeval-api/querysets/import', {
     kind: 'csv',
@@ -499,12 +499,12 @@ test('Query 集：导入 CSV / JSONL / XLSX，增删改查', async () => {
   assert.equal(updated.queryset.name, '小测试集 v2')
   assert.equal(updated.queryset.count, 1)
 
-  // 用 Query 集跑一次
+  // 用 Queryset跑一次
   const run = await call('POST', '/autoeval-api/run', { name: '按集跑', templateId: 'websearch-tool', querysetId: 'qs-small' })
   assert.equal(run.ok, true, run.error)
   const state = await waitForIdle()
   const record = state.runs.find((item) => item.id === run.runId)
-  assert.equal(record.caseCount, 1, '应该按 Query 集的用例数跑')
+  assert.equal(record.caseCount, 1, '应该按 Queryset的用例数跑')
   assert.equal(record.querysetId, 'qs-small')
 
   // 删
@@ -513,7 +513,7 @@ test('Query 集：导入 CSV / JSONL / XLSX，增删改查', async () => {
   assert.equal((await call('GET', '/autoeval-api/querysets')).querysets.some((item) => item.id === 'qs-small'), false)
 })
 
-test('Query 集：坏输入被挡住', async () => {
+test('Queryset：坏输入被挡住', async () => {
   const badId = await call('POST', '/autoeval-api/querysets', { id: 'Bad Id', cases: [{ query: 'x' }] })
   assert.equal(badId.ok, false)
   assert.match(badId.error, /id 只能用/)
@@ -536,7 +536,7 @@ test('Query 集：坏输入被挡住', async () => {
 
   const missing = await call('GET', '/autoeval-api/querysets?id=nope')
   assert.equal(missing.ok, false)
-  assert.match(missing.error, /没有这个 Query 集/)
+  assert.match(missing.error, /没有这个 Queryset/)
 })
 
 test('保留次数按工作区配置裁剪', async () => {

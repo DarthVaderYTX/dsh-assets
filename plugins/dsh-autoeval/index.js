@@ -105,7 +105,7 @@ function configPath() {
   return path.join(dataDir(), 'config.yaml')
 }
 
-// ---------------------------------------------------------------- Query 集
+// ---------------------------------------------------------------- Queryset
 
 function querysetsDir() {
   return path.join(dataDir(), 'querysets')
@@ -116,13 +116,13 @@ function querysetFile(id) {
 }
 
 function normalizeQueryset(input) {
-  if (!input || typeof input !== 'object') throw new Error('缺少 Query 集内容')
+  if (!input || typeof input !== 'object') throw new Error('缺少 Queryset内容')
   const id = String(input.id || '').trim()
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new Error('id 只能用 a-z、0-9、-，且以字母或数字开头')
   const name = String(input.name || '').trim() || id
   const description = String(input.description || '').trim()
   const cases = Array.isArray(input.cases) ? input.cases : []
-  if (cases.length === 0) throw new Error('Query 集里没有用例')
+  if (cases.length === 0) throw new Error('Queryset里没有用例')
   const clean = cases.map((item, index) => {
     const record = item && typeof item === 'object' ? item : {}
     const query = String(record.query === undefined || record.query === null ? '' : record.query).trim()
@@ -985,9 +985,9 @@ class AutoEvalService {
     let cases = Array.isArray(input.cases) ? input.cases : []
     if (input.querysetId) {
       const queryset = (await readQuerysets()).find((item) => item.id === input.querysetId)
-      if (!queryset) throw new Error(`没有这个 Query 集：${input.querysetId}`)
+      if (!queryset) throw new Error(`没有这个 Queryset：${input.querysetId}`)
       if (!Array.isArray(queryset.cases) || queryset.cases.length === 0) {
-        throw new Error(`Query 集「${queryset.name || queryset.id}」里没有用例`)
+        throw new Error(`Queryset「${queryset.name || queryset.id}」里没有用例`)
       }
       cases = queryset.cases
     }
@@ -1227,7 +1227,7 @@ class AutoEvalService {
 
   async querysetDetail(id) {
     const queryset = (await readQuerysets()).find((item) => item.id === id)
-    if (!queryset) throw new Error(`没有这个 Query 集：${id}`)
+    if (!queryset) throw new Error(`没有这个 Queryset：${id}`)
     return queryset
   }
 
@@ -1242,7 +1242,7 @@ class AutoEvalService {
     try {
       await fsp.unlink(querysetFile(id))
     } catch (error) {
-      if (error && error.code === 'ENOENT') throw new Error(`没有这个 Query 集：${id}`)
+      if (error && error.code === 'ENOENT') throw new Error(`没有这个 Queryset：${id}`)
       throw error
     }
     return { id }

@@ -382,11 +382,11 @@ test('侧栏图标跟随 size / active', () => {
   assert.equal(icon.props.width, 22)
 })
 
-test('三个页签：评测任务 / Query 集 / 任务模板', async () => {
+test('三个页签：评测任务 / Queryset / 任务模板', async () => {
   const view = await boot()
   const tabs = findAll(view, byClass('ae-tab'))
   assert.equal(tabs.length, 3, '页签不是三个')
-  assert.deepEqual(tabs.map((node) => texts(node)), ['评测任务', 'Query 集', '任务模板'])
+  assert.deepEqual(tabs.map((node) => texts(node)), ['评测任务', 'Queryset', '任务模板'])
   assert.equal(tabs[0].props['data-active'], 'true')
   assert.match(texts(view), /AutoEval/)
 })
@@ -594,18 +594,18 @@ test('提交任务：换模板只换引用，预览跟着变', async () => {
   assert.ok(texts(findAll(view, hasClass('ae-select-value'))[0]).includes('我的覆盖模板'), '没回填选中的模板')
 })
 
-test('提交任务：可以直接选 Query 集', async () => {
+test('提交任务：可以直接选 Queryset', async () => {
   let view = ensureTaskList()
   findAll(view, clickable('提交任务'))[0].props.onClick()
   view = render(mainComponent(), {})
-  findAll(view, clickable('选 Query 集'))[0].props.onClick()
+  findAll(view, clickable('选 Queryset'))[0].props.onClick()
   view = render(mainComponent(), {})
   // 粘贴框换成了下拉
-  assert.equal(findAll(view, hasClass('ae-textarea')).length, 0, '选 Query 集时不该还显示粘贴框')
+  assert.equal(findAll(view, hasClass('ae-textarea')).length, 0, '选 Queryset时不该还显示粘贴框')
   findAll(view, hasClass('ae-select-button'))[1].props.onClick()
   view = render(mainComponent(), {})
   const items = findAll(view, hasClass('ae-select-item'))
-  assert.ok(items.some((node) => texts(node).includes('小测试集')), '下拉里没有 Query 集')
+  assert.ok(items.some((node) => texts(node).includes('小测试集')), '下拉里没有 Queryset')
   items.find((node) => texts(node).includes('小测试集')).props.onClick()
   view = render(mainComponent(), {})
 
@@ -613,7 +613,7 @@ test('提交任务：可以直接选 Query 集', async () => {
   findAll(view, clickable('粘贴 JSON'))[0].props.onClick()
   view = render(mainComponent(), {})
   assert.equal(findAll(view, hasClass('ae-textarea')).length, 1, '切回来应该还有粘贴框')
-  findAll(view, clickable('选 Query 集'))[0].props.onClick()
+  findAll(view, clickable('选 Queryset'))[0].props.onClick()
   view = render(mainComponent(), {})
   assert.equal(findAll(view, hasClass('ae-textarea')).length, 0, '再切回去应该没有粘贴框')
 
@@ -621,14 +621,14 @@ test('提交任务：可以直接选 Query 集', async () => {
   findAll(view, byClass('ae-btn ae-btn-primary'))[0].props.onClick()
   view = render(mainComponent(), {})
   const modal = findAll(view, byClass('ae-modal'))[0]
-  assert.ok(texts(modal).includes('小测试集'), '确认框没列出 Query 集')
+  assert.ok(texts(modal).includes('小测试集'), '确认框没列出 Queryset')
   await findAll(view, clickable('确认'))[0].props.onClick()
   await settle()
   const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/run'))
   assert.ok(posted, '没有 POST /run')
   const body = JSON.parse(posted.body)
   assert.equal(body.querysetId, 'qs-small')
-  assert.equal(body.cases, undefined, '用 Query 集时不该再带用例')
+  assert.equal(body.cases, undefined, '用 Queryset时不该再带用例')
 
 })
 
@@ -667,10 +667,10 @@ test('二次确认可以取消：不发请求、不改文件', async () => {
   assert.equal(calls.slice(saveBefore).filter((call) => call.method === 'POST').length, 0, '取消后还是保存了')
 })
 
-test('Query 集：列表、只看、编辑后保存', async () => {
+test('Queryset：列表、只看、编辑后保存', async () => {
   let view = ensureTaskList()
-  view = openTab(view, 'Query 集')
-  assert.ok(texts(view).includes('小测试集'), '列表里没有 Query 集')
+  view = openTab(view, 'Queryset')
+  assert.ok(texts(view).includes('小测试集'), '列表里没有 Queryset')
   assert.ok(texts(view).includes('2 条用例'), '没显示用例数')
 
   findAll(view, hasClass('ae-qs-card'))[0].props.onClick()
@@ -701,10 +701,10 @@ test('Query 集：列表、只看、编辑后保存', async () => {
   assert.deepEqual(body.cases.map((item) => item.query), ['第一条', '第二条'])
 })
 
-test('Query 集：从 CSV 导入并保存', async () => {
+test('Queryset：从 CSV 导入并保存', async () => {
   let view = ensureTaskList()
-  view = openTab(view, 'Query 集')
-  findAll(view, clickable('导入 Query 集'))[0].props.onClick()
+  view = openTab(view, 'Queryset')
+  findAll(view, clickable('导入 Queryset'))[0].props.onClick()
   view = render(mainComponent(), {})
   assert.ok(findAll(view, byClass('ae-modal'))[0], '没打开导入框')
 
@@ -731,7 +731,7 @@ test('Query 集：从 CSV 导入并保存', async () => {
   assert.ok(idInput, '没有 id 输入框')
 
   const saveBefore = calls.length
-  findAll(view, clickable('存成 Query 集'))[0].props.onClick()
+  findAll(view, clickable('存成 Queryset'))[0].props.onClick()
   await settle()
   const saved = calls.slice(saveBefore).find((call) => call.method === 'POST' && call.url.endsWith('/querysets'))
   assert.ok(saved, '没有保存')
@@ -740,9 +740,9 @@ test('Query 集：从 CSV 导入并保存', async () => {
   assert.equal(body.source.kind, 'csv')
 })
 
-test('Query 集：可以删除', async () => {
+test('Queryset：可以删除', async () => {
   let view = ensureTaskList()
-  view = openTab(view, 'Query 集')
+  view = openTab(view, 'Queryset')
   findAll(view, hasClass('ae-qs-card'))[0].props.onClick()
   await settle()
   view = render(mainComponent(), {})

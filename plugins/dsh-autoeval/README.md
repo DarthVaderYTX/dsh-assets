@@ -15,7 +15,7 @@ Markdown 报告。
 | 页签 | 列表 | 点进去 |
 | --- | --- | --- |
 | **评测任务** | 已提交的评测任务：搜索（名称 / id / 模板）、按状态筛（全部 / 运行中 / 完成 / 失败 / 已取消）；右上角「提交任务」进提交表单；每行可重跑、删除，运行中的可取消 | 任务详情：概览（指标卡 + **四个阶段的可折叠列表** + 产物目录 + 日志）+ 逐条结果（每条用例的分数 / 覆盖 / 缺失信息点 / 来源数，可展开看材料）+ 报告（落盘的 Markdown）；顶部可重跑或删除 |
-| **Query 集** | 管理评测用的 query 集合：卡片显示名称、条数、来源、更新时间；点进去看用例列表（只读），点「编辑」可改名称、说明和用例（一行一条 JSON） | 支持从 **JSONL / CSV / XLSX（含表头）/ 飞书表格 / 飞书智能表格** 导入：选来源 → 贴内容或选文件（飞书贴链接）→「解析」看预览与 `query` 列 → 存成 Query 集；已有的集可以「重新导入」覆盖用例。提交任务时可以直接选一个 Query 集，不用再粘 JSON |
+| **Queryset** | 管理评测用的 query 集合：卡片显示名称、条数、来源、更新时间；点进去看用例列表（只读），点「编辑」可改名称、说明和用例（一行一条 JSON） | 支持从 **JSONL / CSV / XLSX（含表头）/ 飞书表格 / 飞书智能表格** 导入：选来源 → 贴内容或选文件（飞书贴链接）→「解析」看预览与 `query` 列 → 存成 Queryset；已有的集可以「重新导入」覆盖用例。提交任务时可以直接选一个 Queryset，不用再粘 JSON |
 | **任务模板** | 当前支持的评测模板，卡片式列出并标出内置 / 自定义；配置坏掉的模板带红标 | 模板详情：默认**只读查看**（id、名称、说明、四个阶段的执行模板与参数值），点「编辑」才可改；编辑态有两个子页签——**表单**（字段按 schema 生成控件：数字带范围、枚举多选、命令输入框）和 **YAML**（直接改配置文件）；「保存」落盘，「取消」或直接返回会把未保存的修改丢掉，回到打开时的样子。内置模板没有「编辑」，只能复制 |
 
 阶段的可折叠列表：每条一行，表头给阶段名、状态、该阶段耗时，跑着的时候还带 `已完成/总数` 与进度条；展开看这一阶段用的执行模板、参数、跑完的摘要（抓取的用例数/带材料/来源数/失败数、标注的计分行与通过数、指标的通过率与 P50/P95、报告的字数与结果行数）以及该阶段的日志。运行中或失败的阶段默认展开，其余收起。
@@ -40,7 +40,7 @@ Markdown 报告。
 ~/.dsh/storages/autoeval/
 ├── config.yaml          工作区配置：保留多少运行、默认模板、自定义命令超时
 ├── templates/<id>.yaml  评测模板，一个模板一个文件
-├── querysets/<id>.json   Query 集（字段、query 列、用例）
+├── querysets/<id>.json   Queryset（字段、query 列、用例）
 ├── runs/<id>/           每次运行的用例快照、报告、逐条结果
 └── state.json           运行索引（内部用，别手改）
 ```
@@ -68,7 +68,7 @@ commandTimeoutMs: 90000  # ms，自定义命令超时
 
 改坏了不影响跑：读不出来的字段回退默认值，面板顶部会把错误原文显示出来。
 
-## Query 集
+## Queryset
 
 - 存储：一个集一个文件 `querysets/<id>.json`，内容是 `{id, name, description, fields, queryField, cases, source}`，`cases` 每条至少有 `query`
 - 三种来源都能用：
@@ -80,7 +80,7 @@ commandTimeoutMs: 90000  # ms，自定义命令超时
 - 飞书读取走本机的 `lark-cli`（用户身份，token 自动刷新），所以面板要在装了 `lark-cli` 的机器上跑；读不到会直接把飞书的错误原文带回来
 - `query` 列识别：先按候选词精确匹配，再按包含匹配，都不中就取第一列；导入预览里可以手动改
 
-提交任务时可以选「选 Query 集」，此时 `POST /run` 只带 `templateId` + `querysetId`，宿主从文件里读用例。
+提交任务时可以选「选 Queryset」，此时 `POST /run` 只带 `templateId` + `querysetId`，宿主从文件里读用例。
 
 ## 任务模板：YAML 配置文件
 
@@ -208,9 +208,9 @@ python3 ./llm-judge.py     # 自己读 stdin、算分，把带 score 的数组�
 | POST | `/templates/raw` | `{ yaml }` 直接把一段 YAML 存成模板 |
 | POST | `/templates/preview` | `{ id, name, stages }` → 只渲染 YAML 不落盘（新建模板时预览用） |
 | DELETE | `/templates?id=<id>` | 删掉自定义模板（删文件） |
-| GET | `/querysets` | 列出 Query 集摘要；带 `?id=` 时返回完整用例 |
-| POST | `/querysets` | 新建或覆盖一个 Query 集（写 `querysets/<id>.json`） |
-| DELETE | `/querysets?id=<id>` | 删掉一个 Query 集 |
+| GET | `/querysets` | 列出 Queryset摘要；带 `?id=` 时返回完整用例 |
+| POST | `/querysets` | 新建或覆盖一个 Queryset（写 `querysets/<id>.json`） |
+| DELETE | `/querysets?id=<id>` | 删掉一个 Queryset |
 | POST | `/querysets/import` | 只解析不落盘：`{kind: jsonl|csv|xlsx|sheet|bitable, text|base64|link, queryField?, sheetId?, tableId?}` → `{fields, cases, queryField, total, skipped}` |
 | POST | `/workspace/config` | 存工作区配置（`maxRuns` / `defaultTemplate` / `commandTimeoutMs`） |
 | POST | `/workspace/open` | 在系统文件管理器里打开工作区目录 |
@@ -266,8 +266,8 @@ cd plugins/dsh-autoeval
 node --test          # 60 个用例：宿主流水线 24 + 浏览器面板 25 + 导入解析 11
 ```
 
-- `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、模板优先级、模板 YAML 落盘与回读、老 state.json 模板迁移、工作区配置与裁剪、Query 集的导入/增删改/按集跑、坏配置拦截、任务详情/重跑/删除；数据写在临时 `DSH_HOME` 里。
-- `test/client.test.mjs`：用迷你 React 渲染面板，检查侧栏/主面板注册、只有两个页签、任务列表与详情（指标 / 逐条 / 报告）、阶段折叠列表、提交表单只发模板、模板默认只读与编辑/取消、表单按 schema 生成控件、YAML 页签读改存、提交流程的二次确认与取消、模板下拉的关键词过滤、Query 集列表/编辑/导入/删除、按 Query 集提交、工作区条与配置、重跑与删除。
+- `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、模板优先级、模板 YAML 落盘与回读、老 state.json 模板迁移、工作区配置与裁剪、Queryset的导入/增删改/按集跑、坏配置拦截、任务详情/重跑/删除；数据写在临时 `DSH_HOME` 里。
+- `test/client.test.mjs`：用迷你 React 渲染面板，检查侧栏/主面板注册、只有两个页签、任务列表与详情（指标 / 逐条 / 报告）、阶段折叠列表、提交表单只发模板、模板默认只读与编辑/取消、表单按 schema 生成控件、YAML 页签读改存、提交流程的二次确认与取消、模板下拉的关键词过滤、Queryset列表/编辑/导入/删除、按 Queryset提交、工作区条与配置、重跑与删除。
 
 ## 已知限制
 
