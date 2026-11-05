@@ -18,17 +18,12 @@ window.__ModuleLoader__.load({
       'tab.templates': '任务模板',
       'tab.querysets': 'Queryset',
       'qs.unit': '个 Queryset',
-      'tpl.defaultsHint': '这里是每个阶段的默认模块与参数，提交任务时再按 Control / Treatment 各组调整',
+      'tpl.defaultsHint': '模板只定阶段与顺序；每个阶段用哪个执行模块、参数多少，提交任务时为每个组各自决定',
       'tpl.dragHint': '按住拖动调整顺序',
       'tpl.orderLocked': '预置阶段之间的先后固定，不能把其中一个拖到另一个后面',
       'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
-      'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
-      'tpl.defaultsHint': '这里是每个阶段的默认模块与参数，提交任务时再按 Control / Treatment 各组调整',
-      'tpl.dragHint': '按住拖动调整顺序',
-      'tpl.orderLocked': '预置阶段之间的先后固定，不能把其中一个拖到另一个后面',
-      'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
-      'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
-      'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
+      'submit.orderOnly': '模板只给阶段与顺序，下面为每个组挑具体的执行模块与参数',
+      'submit.groupHint': 'Control 固定一个；Treatment 可以加多个。每组都要为每个阶段挑模块、填参数',
       'tpl.addStage': '新增阶段',
       'tpl.addTreatment': '新增 Treatment 组',
       'tpl.presetStage': '预置',
@@ -523,14 +518,15 @@ window.__ModuleLoader__.load({
 
       'error.cases': 'Cases are not a valid JSON array',
       'error.params': 'Stage params are not valid JSON',
-      'tpl.defaultsHint': 'Defaults for each stage; adjust them per Control / Treatment group when you submit a run',
+      'tpl.defaultsHint': 'A template only fixes the stages and their order; each stage module and its parameters are decided per group when you submit a run',
       'tpl.dragHint': 'Drag to reorder',
       'tpl.expand': 'Expand',
       'tpl.collapse': 'Collapse',
       'tpl.expandAll': 'Expand all',
       'tpl.collapseAll': 'Collapse all',
       'tpl.orderLocked': 'Preset stages keep their relative order: you cannot drag one past another',
-      'submit.groupHint': 'One Control is fixed; add as many Treatments as you like, each with its own stage modules and parameters',
+      'submit.orderOnly': 'The template only fixes the stage order; pick each stage module and its parameters per group below',
+      'submit.groupHint': 'One Control is fixed; add as many Treatments as you like. Every group picks a module and params for every stage',
     }
 
     // ------------------------------------------------------------ 演示用例
@@ -830,30 +826,26 @@ window.__ModuleLoader__.load({
         return list.find((item) => item.id === moduleId) || list[0]
       }
 
-      /** 模板里的阶段：数组，顺序就是执行顺序；v1 的对象形式也认。 */
+      /** 模板只是一张编排清单：数组顺序就是执行顺序，v1 的对象形式也认。
+       *  具体实现（模块 + 参数）由提交时每组自己定，这里只给一个默认起点。 */
       function stagesFromTemplate(template) {
         const raw = template && template.stages
         const list = Array.isArray(raw)
           ? raw
           : (state.stages || [])
             .filter((stage) => raw && raw[stage.id])
-            .map((stage) => ({
-              id: stage.id,
-              module: raw[stage.id].module || raw[stage.id].template,
-              config: raw[stage.id].config,
-            }))
+            .map((stage) => ({ id: stage.id }))
         return list.map((item) => {
           const stageId = String(item.id)
-          const moduleId = String(item.module || 'custom')
-          const preset = moduleOf(stageId, moduleId)
-          const config = { ...(preset ? preset.config : {}), ...(item.config || {}) }
+          const custom = !catalogStage(stageId)
+          const preset = moduleOf(stageId, custom ? 'custom' : moduleList(stageId)[0].id)
           return {
             id: stageId,
-            kind: catalogStage(stageId) ? 'preset' : 'custom',
+            kind: custom ? 'custom' : 'preset',
             name: item.name || stageId,
-            module: moduleId,
-            config,
-            configText: JSON.stringify(config, null, 2),
+            module: preset ? preset.id : 'custom',
+            config: { ...(preset ? preset.config : {}) },
+            fields: (preset && preset.fields) || [],
           }
         })
       }
@@ -1242,16 +1234,6 @@ window.__ModuleLoader__.load({
           return { ...current, groups }
         })
       }
-
-      function pickStageModule(index, moduleId) {
-        const stage = (templateDraft.stages || [])[index]
-        if (!stage) return
-        const preset = moduleOf(stage.id, moduleId)
-        const config = { ...(preset ? preset.config : {}) }
-        setStageAt(index, { module: moduleId, config, configText: JSON.stringify(config, null, 2) })
-      }
-
-
       function canSwap(index, delta) {
         const list = templateDraft.stages || []
         const a = list[index]
@@ -1518,9 +1500,7 @@ window.__ModuleLoader__.load({
         const stages = (current.stages || []).map((stage) => ({
           id: stage.id,
           kind: stage.kind,
-          name: stage.name,
-          module: stage.module,
-          config: { ...(stage.config || {}) },
+          ...(stage.kind === 'custom' ? { name: stage.name } : {}),
         }))
         setError('')
         const stageRows = stages.map((stage, index) => {
@@ -1644,6 +1624,10 @@ window.__ModuleLoader__.load({
             setNotice('')
           },
         }, t(`tab.${key}`))))
+      function stageLabel(stage) {
+        return stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
+      }
+
 
       function moduleLabel(stageId, moduleId) {
         if (!catalogStage(stageId)) return t('tpl.customModule')
@@ -1651,6 +1635,7 @@ window.__ModuleLoader__.load({
         const label = t(key)
         return label === key ? moduleId : label
       }
+
 
       function moduleChips(stageId, moduleId, disabled, onPick) {
         return h('div', { className: 'ae-chips' },
@@ -1663,43 +1648,8 @@ window.__ModuleLoader__.load({
             onClick: () => { if (!disabled) onPick(preset.id) },
           }, moduleLabel(stageId, preset.id))))
       }
-
-      function stageLabel(stage) {
-        return stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
-      }
-
-      function patchStageConfig(index, stage, key, next) {
-        const config = { ...(stage.config || {}), [key]: next }
-        setStageAt(index, { config, configText: JSON.stringify(config, null, 2) })
-      }
-
-      function fieldText(field, config) {
-        const value = config && config[field.key] !== undefined ? config[field.key] : field.default
-        if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '-'
-        if (value === undefined || value === null || value === '') return '-'
-        return String(value)
-      }
-
       function renderStageRow(stage, index, editing) {
-        const fields = (moduleOf(stage.id, stage.module) || {}).fields || []
-        const body = editing
-          ? [
-            moduleChips(stage.id, stage.module, false, (moduleId) => pickStageModule(index, moduleId)),
-            ...fields.map((field) => renderFieldInput(
-              field,
-              (stage.config || {})[field.key],
-              (next) => patchStageConfig(index, stage, field.key, next),
-              false,
-            )),
-          ]
-          : [
-            h('div', { className: 'ae-detail-row' },
-              h('span', { className: 'ae-detail-key' }, t('tpl.module')),
-              h('span', { className: 'ae-mono' }, moduleLabel(stage.id, stage.module))),
-            ...fields.map((field) => h('div', { className: 'ae-detail-row', key: field.key },
-              h('span', { className: 'ae-detail-key' }, field.label || field.key),
-              h('span', { className: 'ae-mono' }, fieldText(field, stage.config)))),
-          ]
+        const body = []
         const dragging = dragStage === index
         const dropping = dragOverStage === index && dragStage >= 0 && dragStage !== index
         return h('div', {
@@ -2344,12 +2294,10 @@ window.__ModuleLoader__.load({
         const templateStages = selected ? stagesFromTemplate(selected) : []
         const preview = selected
           ? h('div', null,
-            ...templateStages.map((stage) => {
-              const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
-              return h('div', { className: 'ae-detail-row', key: stage.id },
-                h('span', { className: 'ae-detail-key' }, stageLabel(stage)),
-                h('span', { className: 'ae-mono' }, `${stage.module}${config ? `  ${config}` : ''}`))
-            }))
+            h('div', { className: 'ae-card-note' }, t('submit.orderOnly')),
+            ...templateStages.map((stage, index) => h('div', { className: 'ae-detail-row', key: stage.id },
+              h('span', { className: 'ae-detail-key' }, `${index + 1}. ${stageLabel(stage)}`),
+              h('span', { className: 'ae-mono' }, stage.kind === 'custom' ? t('tpl.customStage') : t('tpl.presetStage')))))
           : null
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),

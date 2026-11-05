@@ -831,12 +831,9 @@ test('模板编辑：取消就回到打开时的样子', async () => {
   assert.ok(!texts(view).includes('临时改的名字'), '未保存的修改应该丢掉')
 })
 
-test('模板表单按 schema 生成控件：数字带范围、列表是 chips、命令是输入框', async () => {
+test('提交页按 schema 生成控件：数字带范围、列表是 chips、命令是输入框', async () => {
   let view = ensureTaskList()
-  view = openTab(view, '任务模板')
-  findAll(view, byClass('ae-template-card'))[1].props.onClick()
-  view = render(mainComponent(), {})
-  findAll(view, clickable('编辑'))[0].props.onClick()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
   view = render(mainComponent(), {})
 
   const numbers = findAll(view, (node) => node.type === 'input' && node.props.type === 'number')

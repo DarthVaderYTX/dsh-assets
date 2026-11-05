@@ -363,12 +363,12 @@ const BUILTIN_TEMPLATES = [
     name: 'WebSearchTool 检索覆盖',
     description: '抓取 WebSearch 结果 → 按信息点判覆盖 → 聚合指标 → 出 Markdown 报告',
     builtin: true,
-    stages: {
-      scraping: { template: 'websearch', config: { maxResults: 5, queryField: 'query', intervalMs: 250 } },
-      annotation: { template: 'coverage-keyword', config: { pointsField: 'infoPoints', minCoverage: 1 } },
-      metrics: { template: 'standard', config: { latencyField: 'latencyMs' } },
-      reporting: { template: 'markdown', config: { sections: ['summary', 'stages', 'cases', 'failures'] } },
-    },
+    stages: [
+      { id: 'scraping' },
+      { id: 'annotation' },
+      { id: 'metrics' },
+      { id: 'reporting' },
+    ],
   },
 ]
 
@@ -958,24 +958,17 @@ function fieldComment(field) {
 
 /** 一个模板写成 YAML 的样子，带字段说明注释，方便直接手改。 */
 export function templateToYaml(template) {
-  const comments = {}
-  const stages = (template.stages || []).map((stage, index) => {
-    const moduleId = stage.module || 'custom'
-    const fieldStage = stage.kind === 'custom' ? 'custom' : stage.id
-    for (const field of fieldsOf(fieldStage, moduleId)) {
-      comments[`stages.${index}.config.${field.key}`] = fieldComment(field)
-    }
-    const entry = { id: stage.id, module: moduleId }
+  const stages = (template.stages || []).map((stage) => {
+    const entry = { id: stage.id, kind: stage.kind }
     if (stage.kind === 'custom' && stage.name) entry.name = stage.name
-    entry.config = stage.config || {}
     return entry
   })
   const head = [
     `# AutoEval 任务模板：${template.name || template.id}`,
     `# 文件：templates/${template.id}.yaml（文件名就是模板 id）`,
-    '# 阶段按 stages 里的顺序执行：预置阶段（scraping / annotation / metrics / reporting）可以删、可以加回来，',
-    '# 但都在的时候相对先后固定；自定义阶段可以插在任意位置。',
-    '# 这里是每个阶段的默认模块与参数，提交任务时再按组（Control / Treatment）各自调整。',
+    '# 模板只定顺序：阶段按 stages 里的顺序执行。预置阶段（scraping / annotation / metrics / reporting）',
+    '# 可以删、可以加回来，但都在的时候相对先后固定；自定义阶段可以插在任意位置。',
+    '# 每个阶段具体用哪个执行模块、参数填什么，在提交任务时为每个组（Control / Treatment）各自决定。',
     '# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。',
     '',
   ].join('\n')
@@ -986,12 +979,12 @@ export function templateToYaml(template) {
       description: template.description || '',
       stages,
     },
-    { comments },
   )}`
 }
 
 /** 校验并归一化一个模板，返回能落盘的结构。
- *  v2 的 stages 是数组（顺序即执行顺序），也接受 v1 的 {scraping: {template, config}} 对象。 */
+ *  模板只是一张编排清单：有哪些阶段、什么顺序；每个阶段用哪个模块、参数多少，
+ *  在提交任务时按组决定。v1/v2 里遗留的 module / config 一律忽略。 */
 export function normalizeTemplate(input) {
   const id = String(input && input.id ? input.id : '').trim()
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
@@ -1000,7 +993,6 @@ export function normalizeTemplate(input) {
   const name = String((input && input.name) || id).trim() || id
   const stages = stageListOf(input).map(normalizeStageEntry)
   validateStageOrder(stages)
-  // 模板只定「有哪些阶段 + 每个阶段的默认模块与参数」，分组在提交任务时定
   return { id, name, description: String((input && input.description) || ''), stages }
 }
 
@@ -1019,25 +1011,14 @@ function stageListOf(input) {
 function normalizeStageEntry(raw) {
   const stageId = String((raw && raw.id) || '').trim()
   if (!stageId) throw new Error('阶段要有 id')
-  if (PRESET_STAGE_IDS.includes(stageId)) {
-    const def = STAGES.find((item) => item.id === stageId)
-    const moduleId = String((raw && (raw.module || raw.template)) || def.presets[0].id)
-    if (!def.presets.some((item) => item.id === moduleId)) {
-      throw new Error(`阶段 ${stageId} 没有执行模块 ${moduleId}`)
-    }
-    return { id: stageId, kind: 'preset', module: moduleId, config: validateConfig(stageId, moduleId, (raw && raw.config) || {}) }
-  }
+  if (PRESET_STAGE_IDS.includes(stageId)) return { id: stageId, kind: 'preset' }
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(stageId)) {
     throw new Error(`自定义阶段 id 只能用小写字母、数字和「-」：${stageId}`)
   }
-  const moduleId = String((raw && raw.module) || 'custom')
-  if (moduleId !== 'custom') throw new Error(`自定义阶段 ${stageId} 目前只能用「自定义命令」模块`)
   return {
     id: stageId,
     kind: 'custom',
-    name: String((raw && raw.name) || stageId),
-    module: moduleId,
-    config: validateConfig('custom', 'custom', (raw && raw.config) || {}),
+    name: String((raw && raw.name) || stageId).trim() || stageId,
   }
 }
 
@@ -1057,8 +1038,17 @@ function validateStageOrder(stages) {
 }
 
 /** 提交时定的分组：必须正好一个 Control，后面可以跟任意多个 Treatment。 */
+/** 组里没写某个阶段时用什么：模板不再兜底，只有「完全没给 groups」这种简写才自动选首个内置模块。 */
+function defaultStageChoice(stage) {
+  if (stage.kind === 'custom') return { module: 'custom', config: { command: '' } }
+  const def = STAGES.find((entry) => entry.id === stage.id)
+  const preset = def.presets[0]
+  return { module: preset.id, config: { ...preset.config } }
+}
+
 export function normalizeRunGroups(input, stages) {
-  const raw = Array.isArray(input) && input.length > 0 ? input : [{ id: 'control', kind: 'control' }]
+  const implicit = !(Array.isArray(input) && input.length > 0)
+  const raw = implicit ? [{ id: 'control', kind: 'control', name: 'Control' }] : input
   const byId = new Map(stages.map((stage) => [stage.id, stage]))
   const out = []
   const seen = new Set()
@@ -1071,22 +1061,27 @@ export function normalizeRunGroups(input, stages) {
     if (seen.has(groupId)) throw new Error(`组 ${groupId} 重复了`)
     seen.add(groupId)
     const chosen = (item && item.stages) || (item && item.overrides) || {}
+    for (const stageId of Object.keys(chosen)) {
+      if (!byId.has(stageId)) throw new Error(`组 ${groupId} 配了模板里没有的阶段 ${stageId}`)
+    }
     const stageConfig = {}
-    for (const [stageId, patch] of Object.entries(chosen)) {
-      const stage = byId.get(stageId)
-      if (!stage) throw new Error(`组 ${groupId} 配了模板里没有的阶段 ${stageId}`)
-      const moduleId = String((patch && (patch.module || patch.template)) || stage.module)
+    // 模板里的每个阶段都要有实现：显式给组时必须逐阶段选定，只有整体省略 groups 才自动兜底
+    for (const stage of stages) {
+      const patch = chosen[stage.id] || (implicit ? defaultStageChoice(stage) : null)
+      const label = stage.name || stage.id
+      if (!patch || !(patch.module || patch.template)) throw new Error(`组 ${groupId} 的 ${label} 还没有选执行模块`)
+      const moduleId = String(patch.module || patch.template)
       if (stage.kind === 'preset') {
-        const def = STAGES.find((entry) => entry.id === stageId)
+        const def = STAGES.find((entry) => entry.id === stage.id)
         if (!def.presets.some((entry) => entry.id === moduleId)) {
-          throw new Error(`组 ${groupId} 的 ${stageId} 没有执行模块 ${moduleId}`)
+          throw new Error(`组 ${groupId} 的 ${label} 没有执行模块 ${moduleId}`)
         }
       } else if (moduleId !== 'custom') {
-        throw new Error(`组 ${groupId} 的自定义阶段 ${stageId} 只能用「自定义命令」模块`)
+        throw new Error(`组 ${groupId} 的自定义阶段 ${label} 只能用「自定义命令」模块`)
       }
-      stageConfig[stageId] = {
+      stageConfig[stage.id] = {
         module: moduleId,
-        config: validateConfig(stage.kind === 'custom' ? 'custom' : stageId, moduleId, (patch && patch.config) || {}),
+        config: validateConfig(stage.kind === 'custom' ? 'custom' : stage.id, moduleId, patch.config || {}),
       }
     }
     out.push({
@@ -1101,13 +1096,15 @@ export function normalizeRunGroups(input, stages) {
   return [controls[0], ...out.filter((group) => group.kind !== 'control')]
 }
 
-/** 某个组实际要跑的阶段：模板阶段 + 该组的覆盖。 */
+/** 某个组实际要跑的阶段：模板阶段 + 该组为每个阶段选定的实现。 */
 export function effectiveStages(template, group) {
+  const chosen = (group && (group.stages || group.overrides)) || {}
   return template.stages.map((stage) => {
-    const chosen = group && (group.stages || group.overrides)
-    const patch = chosen ? chosen[stage.id] : null
-    if (!patch) return stage
-    return { ...stage, module: patch.module || stage.module, config: patch.config || stage.config }
+    const patch = chosen[stage.id]
+    if (!patch || !patch.module) {
+      throw new Error(`组 ${group ? group.name || group.id : '-'} 的 ${stage.name || stage.id} 还没有选执行模块`)
+    }
+    return { ...stage, module: patch.module, config: patch.config || {} }
   })
 }
 
@@ -1269,9 +1266,9 @@ class AutoEvalService {
       cases = queryset.cases
     }
     if (cases.length === 0) throw new Error('用例为空：至少给一条用例')
-    const template = await this.templateFor(input)
-    // 分组是提交时定的：没给就跑一个用模板默认值的 Control
-    const groups = normalizeRunGroups(input.groups || template.groups, template.stages)
+    const { template, groups: groupsInput } = await this.templateFor(input)
+    // 分组是提交时定的；没给就自动按每个阶段的首个内置模块跑一个 Control
+    const groups = normalizeRunGroups(groupsInput, template.stages)
     const plan = { ...template, groups }
     const id = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const run = {
@@ -1487,18 +1484,37 @@ class AutoEvalService {
 
   /** 按原样再跑一次：用例来自 cases.json，阶段模板与参数来自运行记录。 */
   /** 这次运行要用哪个模板：显式快照 > 模板文件 > 提交时塞进来的阶段配置。 */
+  /** 返回 { template, groups }：模板只给编排，分组（含各阶段实现）是提交时定的。 */
   async templateFor(input) {
     if (input.stageSource === 'record' && input.templateSnapshot) {
       const snapshot = input.templateSnapshot
-      return { ...normalizeTemplate(snapshot), groups: snapshot.groups }
+      return {
+        template: normalizeTemplate(snapshot),
+        groups: input.groups || snapshot.groups,
+      }
     }
     const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
     if (chosen) {
-      const template = normalizeTemplate(chosen)
-      return input.groups ? { ...template, groups: input.groups } : template
+      // 给了模板 id 就只认模板本身：外面塞进来的 stages 一律忽略
+      return { template: normalizeTemplate(chosen), groups: input.groups }
     }
     if (input.stages) {
-      return normalizeTemplate({ id: String(input.templateId || 'custom'), stages: input.stages })
+      // 平铺写法：阶段顺序按预置顺序摊开，具体实现由调用方在这份 stages 里带
+      const ids = PRESET_STAGE_IDS.filter((stageId) => input.stages[stageId])
+      const custom = Object.keys(input.stages).filter((stageId) => !PRESET_STAGE_IDS.includes(stageId))
+      const stages = [...ids, ...custom]
+      if (stages.length === 0) throw new Error('stages 里没有阶段')
+      return {
+        template: normalizeTemplate({
+          id: String(input.templateId || 'custom'),
+          stages: stages.map((stageId) => ({
+            id: stageId,
+            name: input.stages[stageId] && input.stages[stageId].name,
+          })),
+        }),
+        // 平铺写法 == 只有一组 Control
+        groups: [{ id: 'control', kind: 'control', name: 'Control', stages: input.stages }],
+      }
     }
     throw new Error(`没有这个模板：${input.templateId || '(空)'}`)
   }

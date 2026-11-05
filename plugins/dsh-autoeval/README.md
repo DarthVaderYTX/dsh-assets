@@ -16,13 +16,13 @@ Markdown 报告。
 | --- | --- | --- |
 | **评测任务** | 已提交的评测任务：搜索（名称 / id / 模板）、按状态筛（全部 / 运行中 / 完成 / 失败 / 已取消）；右上角「提交任务」进提交表单；每行可重跑、删除，运行中的可取消 | 任务详情：概览（指标卡 + **按组切换的阶段可折叠列表** + 组间对比 + 产物目录 + 日志）+ 逐条结果（每条用例的分数 / 覆盖 / 缺失信息点 / 来源数，可展开看材料）+ 报告（落盘的 Markdown）；顶部可重跑或删除 |
 | **Queryset** | 管理评测用的 query 集合：卡片显示名称、条数、来源、更新时间；点进去看用例列表（只读），点「编辑」可改名称、说明和用例（一行一条 JSON） | 支持从 **JSONL / CSV / XLSX（含表头）/ 飞书表格 / 飞书智能表格** 导入：选来源 → 贴内容或选文件（飞书贴链接）→「解析」看预览与 `query` 列 → 存成 Queryset；已有的集可以「重新导入」覆盖用例。提交任务时可以直接选一个 Queryset，不用再粘 JSON |
-| **任务模板** | 当前支持的评测模板，卡片式列出并标出内置 / 自定义；配置坏掉的模板带红标 | 模板详情：默认**只读查看**（id、名称、说明、**阶段列表（顺序即执行顺序）**与每阶段模块/参数、Control 与 Treatment 组），点「编辑」才可改；编辑态能加/删/上下移阶段、改每个阶段的默认模块与参数；编辑态有两个子页签——**表单**（字段按 schema 生成控件：数字带范围、枚举多选、命令输入框）和 **YAML**（直接改配置文件）；「保存」落盘，「取消」或直接返回会把未保存的修改丢掉，回到打开时的样子。内置模板没有「编辑」，只能复制 |
+| **任务模板** | 当前支持的评测模板，卡片式列出并标出内置 / 自定义；配置坏掉的模板带红标 | 模板详情：默认**只读查看**（id、名称、说明、**阶段列表（顺序即执行顺序）**），点「编辑」才可改；编辑态只有阶段编排——**拖动排序**、加/删阶段（预置的可以删也可以加回来，自定义阶段填个名字）、改名称与说明，不在这里选执行模块；编辑态有两个子页签——**表单**和 **YAML**（直接改配置文件）；「保存」落盘，「取消」或直接返回会把未保存的修改丢掉，回到打开时的样子。内置模板没有「编辑」，只能复制 |
 
 阶段的可折叠列表：每条一行，表头给阶段名、状态、该阶段耗时，跑着的时候还带 `已完成/总数` 与进度条；展开看这一阶段用的执行模板、参数、跑完的摘要（抓取的用例数/带材料/来源数/失败数、标注的计分行与通过数、指标的通过率与 P50/P95、报告的字数与结果行数）以及该阶段的日志。运行中或失败的阶段默认展开，其余收起。
 
 「提交任务」和「保存模板」都会先弹一层确认，确认了才真的动：
 
-- **提交任务**：点「运行」先出确认框，列出任务名、模板（名称 + id）、用例数，以及逐组的各阶段模块与参数（Control + 每个 Treatment 各一行），点「确认」才开跑
+- **提交任务**：点「运行」先出确认框，列出任务名、模板（名称 + id）、用例数，以及逐组（Control + 每个 Treatment）为每个阶段挑的执行模块与参数，点「确认」才开跑
 - **保存模板**：点「保存」先出确认框，列出模板 id / 名称 / 描述、阶段顺序与各阶段默认配置，点「确认」才重写 `templates/<id>.yaml`
 - **保存 YAML**：同样先确认，顺带说明会按这段 YAML 重写文件
 
@@ -89,40 +89,24 @@ commandTimeoutMs: 90000  # ms，自定义命令超时
 ```yaml
 # AutoEval 任务模板：检索覆盖（快检）
 # 文件：templates/websearch-fast.yaml（文件名就是模板 id）
-# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。
+# 模板只定顺序：阶段按 stages 里的顺序执行。
+# 每个阶段具体用哪个执行模块、参数填什么，在提交任务时为每个组（Control / Treatment）各自决定。
 id: websearch-fast
 name: 检索覆盖（快检）
-description: 每条只取 3 条结果，间隔 0
+description: 抓取 → 标注 → 指标 → 报告，中间插一个重排
 stages:
-  - id: scraping
-    module: websearch
-    config:
-      maxResults: 3  # 数字 1~20，默认 5
-      queryField: query  # 字符串，默认 "query"，用例里存检索词的字段名
-      intervalMs: 0  # 数字 0~5000，ms，默认 250
-  - id: rerank  # 自定义阶段：插在抓取之后、标注之前，只跑自定义命令
-    name: 重排
-    module: custom
-    config:
-      command: python3 ./rerank.py
-  - id: annotation
-    module: coverage-keyword
-    config:
-      pointsField: infoPoints  # 字符串，默认 "infoPoints"
-      minCoverage: 1  # 数字 0~1，默认 1
-  - id: metrics
-    module: standard
-    config:
-      latencyField: latencyMs  # 字符串，默认 "latencyMs"
-  - id: reporting
-    module: markdown
-    config:
-      sections: [summary, cases]  # 列表，可选：summary / stages / cases / failures
+  - { id: scraping, kind: preset }
+  - { id: rerank, kind: custom, name: 重排 }   # 自定义阶段：插在抓取之后、标注之前
+  - { id: annotation, kind: preset }
+  - { id: metrics, kind: preset }
+  - { id: reporting, kind: preset }
 ```
 
-注释里的类型和范围不是手写的——保存时按字段 schema 生成，改字段表注释会跟着变。
+老版本模板文件里的 `module` / `config` 会被忽略，模板只保留阶段与顺序；实现改到提交任务时的 `groups` 里给（见下文）。
 
-### 每个阶段能配什么
+### 每个阶段能配什么（提交任务时配）
+
+下面这些模块与字段是**提交任务时**为每个组挑的，不在模板里：
 
 | 阶段 | 执行模板 | 可配字段 |
 | --- | --- | --- |
@@ -163,26 +147,28 @@ node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{
 
 ## 阶段编排与提交时的分组
 
-模板只定两件事：**有哪些阶段、按什么顺序跑**，以及**每个阶段的默认模块与参数**。真正决定一次实验怎么跑的，是提交任务时配的组（Control / Treatment）。
+分工很干脆：**模板只排阶段，提交任务时才定每个阶段怎么跑。**
 
-### 模板：阶段清单 + 默认值
+### 模板 = 阶段清单
 
 四个预置阶段（Scraping / Annotation / Metrics / Reporting）只是现成的可选阶段，不是必须的：
 
 - **删**：任何阶段都能删，包括预置阶段（至少留一个）
-- **加**：编辑区底部「新增阶段」列出还没用上的预置阶段和一个「自定义阶段」；自定义阶段是个 `custom` 模块，填名字和命令即可
+- **加**：编辑区底部「新增阶段」列出还没用上的预置阶段和一个「自定义阶段」；自定义阶段只是个名字，具体跑什么在提交时选「自定义命令」并填命令
 - **排**：阶段是一张排序列表，按住左侧 `⠿` 直接拖动即可；也可以用卡片右侧的 ↑ / ↓（键盘/无障碍兜底）。都在的预置阶段之间拖不过去，因为它们有固定先后：`scraping → annotation → metrics → reporting`；预置和自定义之间、自定义和自定义之间随便拖
-- **默认值**：每个阶段用哪个模块、参数填什么，模板里存一份，提交任务时拿来预填
+
+模板里不存执行模块，也不存参数——同一个模板可以被不同人用不同的实现去跑。
 
 删到只剩一部分也能跑：没有 Metrics 就没有指标卡，没有 Reporting 时报告会退化成一份各组指标快照，不会写空文件。
 
-### 提交任务时：Control 与 Treatment
+### 提交任务时：每个组为每个阶段选实现
 
-提交页在模板预览下面就是分组配置：
+提交页在模板预览（只有阶段顺序）下面就是分组配置：
 
-- **Control**：固定一个，不能删也不能改名。每个阶段都从模板的默认值起头，可以逐个换模块、改参数
-- **Treatment**：点「新增 Treatment 组」加，可以加多个、可以删、可以改名。新组默认抄一份当前的 Control，之后每个阶段独立配置——**换的是哪一组、哪一阶段的实现都不影响别的组**
-- 每组里把模板的每个阶段列出来（模块 chips + 按 schema 生成的参数控件），组多的时候点标题行可以**折叠**成一行摘要（`Scraping:websearch · Annotation:coverage-keyword …`），表头还有「全部展开 / 全部折叠」
+- **Control**：固定一个。模板里的每个阶段各占一张卡片，卡片上是一排模块 chips + 该模块按 schema 生成的参数控件；默认选该阶段的首个内置模块，提交前自己确认或改掉
+- **Treatment**：点「新增 Treatment 组」加，可以加多个、可以删、可以改名。新组默认抄一份当前的 Control，之后每组每阶段独立配置，互不影响
+- 自定义阶段只能选「自定义命令」，命令必填
+- 组多的时候点卡片标题行可以折叠成一行摘要（`Scraping:websearch · Annotation:coverage-keyword …`），表头还有「全部展开 / 全部折叠」
 
 点「运行」先出确认框，逐组列出「阶段：模块 + 参数」，确认后才真的发 `POST /run`：
 
@@ -193,14 +179,24 @@ node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{
   "cases": [ /* ... */ ],
   "groups": [
     { "id": "control", "kind": "control", "name": "对照组",
-      "stages": { "scraping": { "module": "websearch", "config": { "maxResults": 3 } } } },
+      "stages": {
+        "scraping": { "module": "websearch", "config": { "maxResults": 3 } },
+        "annotation": { "module": "coverage-keyword", "config": { "minCoverage": 1 } },
+        "metrics": { "module": "standard" },
+        "reporting": { "module": "markdown", "config": { "sections": ["summary", "cases"] } }
+      } },
     { "id": "treatment-1", "kind": "treatment", "name": "多取两条结果",
-      "stages": { "scraping": { "module": "websearch", "config": { "maxResults": 5 } } } }
+      "stages": {
+        "scraping": { "module": "websearch", "config": { "maxResults": 5 } },
+        "annotation": { "module": "coverage-keyword", "config": { "minCoverage": 1 } },
+        "metrics": { "module": "standard" },
+        "reporting": { "module": "markdown", "config": { "sections": ["summary", "cases"] } }
+      } }
   ]
 }
 ```
 
-没给 `groups` 就按模板默认值跑一个 Control。组里没写的阶段也走模板默认值，所以只写想改的那几个阶段就够。
+给了 `groups` 就必须把模板里的每个阶段都配齐，少一个直接报错（不会偷偷用默认模块）；只有整个 `groups` 都不给，才按每个阶段的首个内置模块跑一个 Control。
 
 跑一次任务时：先跑 Control 的全部阶段，再依次跑每个 Treatment 的全部阶段（用例是同一批）。产物里：
 
@@ -262,14 +258,14 @@ python3 ./llm-judge.py     # 自己读 stdin、算分，把带 score 的数组�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/state` | 阶段目录 + 模板 + 历史运行 + 当前运行进度 |
-| POST | `/run` | `{ name, templateId, cases \| querysetId, groups }` → `{ runId }`；`groups` 里给 Control 与各 Treatment 的每阶段模块/参数，缺省用模板默认值跑一个 Control |
+| POST | `/run` | `{ name, templateId, cases \| querysetId, groups }` → `{ runId }`；给了 `groups` 就要把每个阶段配齐，完全不给才按首个内置模块跑一个 Control。也接受平铺的 `stages`（等价于只有一组 Control） |
 | POST | `/cancel` | 取消当前运行 |
 | GET | `/runs/detail?id=<id>` | 单次任务的阶段、参数与日志 |
 | POST | `/runs/rerun` | `{ id }` 按原用例与阶段配置重跑 |
 | DELETE | `/runs?id=<id>` | 删掉一次任务（记录 + 产物目录） |
 | GET | `/report?run=<id>` | 读报告正文 |
 | GET | `/rows?run=<id>` | 读 `rows.jsonl` |
-| POST | `/templates` | 存一份自定义模板（`{id, name, description, stages: [...]}` → 渲染成 YAML 落盘，同 id 覆盖） |
+| POST | `/templates` | 存一份自定义模板（`{id, name, description, stages: [{id, kind, name?}]}` → 渲染成 YAML 落盘，同 id 覆盖；不存模块与参数） |
 | GET | `/templates/raw?id=<id>` | 读模板 YAML 原文 |
 | POST | `/templates/raw` | `{ yaml }` 直接把一段 YAML 存成模板 |
 | POST | `/templates/preview` | `{ id, name, stages }` → 只渲染 YAML 不落盘（新建模板时预览用） |

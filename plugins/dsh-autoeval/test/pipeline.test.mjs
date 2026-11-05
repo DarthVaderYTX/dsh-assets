@@ -300,25 +300,33 @@ test('状态接口把字段 schema 一起发出来', async () => {
   assert.deepEqual(sections.options.map((item) => item.value), ['summary', 'stages', 'cases', 'failures'])
 })
 
-test('自定义模板存成 YAML 文件，能读回来也能删', async () => {
+test('自定义模板存成 YAML 文件，只存阶段编排', async () => {
   const saved = await call('POST', '/autoeval-api/templates', {
     id: 'my-template',
     name: '我的模板',
-    description: '换个抓取间隔',
+    description: '多插一个重排',
     stages: [
-      { id: 'scraping', module: 'websearch', config: { maxResults: 8, queryField: 'q', intervalMs: 0 } },
-      { id: 'annotation', module: 'coverage-keyword', config: {} },
-      { id: 'metrics', module: 'standard', config: {} },
-      { id: 'reporting', module: 'markdown', config: { sections: ['summary'] } },
+      { id: 'scraping', module: 'websearch', config: { maxResults: 8 } },
+      { id: 'rerank', name: '重排', module: 'custom', config: { command: 'echo {}' } },
+      { id: 'annotation' },
+      { id: 'metrics' },
+      { id: 'reporting' },
     ],
   })
   assert.equal(saved.ok, true, saved.error)
+  assert.deepEqual(saved.template.stages, [
+    { id: 'scraping', kind: 'preset' },
+    { id: 'rerank', kind: 'custom', name: '重排' },
+    { id: 'annotation', kind: 'preset' },
+    { id: 'metrics', kind: 'preset' },
+    { id: 'reporting', kind: 'preset' },
+  ], '模板不该存模块与参数')
 
   // 落盘为 templates/my-template.yaml，带注释、能解析
   const file = path.join(process.env.DSH_HOME, 'storages', 'autoeval', 'templates', 'my-template.yaml')
   const text = await fsp.readFile(file, 'utf8')
-  assert.ok(text.includes('maxResults: 8'), text)
-  assert.ok(text.includes('#'), 'YAML 里应该有字段说明注释')
+  assert.ok(!text.includes('maxResults'), 'YAML 里不该有模块参数')
+  assert.ok(text.includes('#'), 'YAML 里应该有说明注释')
 
   const raw = await call('GET', '/autoeval-api/templates/raw?id=my-template')
   assert.equal(raw.ok, true)
@@ -328,7 +336,8 @@ test('自定义模板存成 YAML 文件，能读回来也能删', async () => {
   let state = await call('GET', '/autoeval-api/state')
   const found = state.templates.find((item) => item.id === 'my-template')
   assert.equal(found.name, '我的模板')
-  assert.equal(found.stages.find((item) => item.id === 'scraping').config.maxResults, 8)
+  assert.equal(found.stages.find((item) => item.id === 'rerank').name, '重排')
+  assert.equal(found.stages.find((item) => item.id === 'scraping').module, undefined, '不该有模块')
   assert.equal(found.broken, null)
 
   const removed = await call('DELETE', '/autoeval-api/templates?id=my-template')
@@ -343,75 +352,86 @@ test('模板可以整段 YAML 写进去', async () => {
     'name: 直接改 YAML 的模板',
     'description: 手写',
     'stages:',
-    '  scraping:',
-    '    template: websearch',
-    '    config:',
-    '      maxResults: 3',
-    '  annotation:',
-    '    template: coverage-rubric',
-    '    config:',
-    '      minCoverage: 0.8',
-    '  metrics:',
-    '    template: grouped',
-    '    config:',
-    '      groupBy: bucket',
-    '  reporting:',
-    '    template: markdown',
-    '    config:',
-    '      sections: [summary, cases]',
+    '  - id: scraping',
+    '  - id: rerank',
+    '    kind: custom',
+    '    name: 重排',
+    '  - id: annotation',
+    '  - id: metrics',
+    '  - id: reporting',
     '',
   ].join('\n')
   const saved = await call('POST', '/autoeval-api/templates/raw', { yaml })
   assert.equal(saved.ok, true, saved.error)
   assert.equal(saved.template.id, 'yaml-template')
-  assert.equal(saved.template.stages.find((item) => item.id === 'metrics').module, 'grouped')
-  assert.deepEqual(saved.template.stages.find((item) => item.id === 'reporting').config.sections, ['summary', 'cases'])
+  assert.deepEqual(saved.template.stages.map((item) => item.id),
+    ['scraping', 'rerank', 'annotation', 'metrics', 'reporting'])
+  assert.equal(saved.template.stages[1].name, '重排')
 
   const again = await call('GET', '/autoeval-api/templates/raw?id=yaml-template')
   const saved2 = await call('POST', '/autoeval-api/templates/raw', { yaml: again.yaml })
   assert.equal(saved2.ok, true, saved2.error)
-  assert.equal(saved2.template.stages.find((item) => item.id === 'annotation').config.minCoverage, 0.8)
+  assert.deepEqual(saved2.template.stages.map((item) => item.id), ['scraping', 'rerank', 'annotation', 'metrics', 'reporting'])
+
+  // 老格式（阶段对象 + template/config）也能读，只是实现那部分被忽略
+  const legacy = await call('POST', '/autoeval-api/templates/raw', {
+    yaml: [
+      'id: legacy-yaml',
+      'name: 老格式',
+      'stages:',
+      '  scraping: { template: websearch, config: { maxResults: 9 } }',
+      '  annotation: { template: coverage-rubric }',
+      '',
+    ].join('\n'),
+  })
+  assert.equal(legacy.ok, true, legacy.error)
+  assert.deepEqual(legacy.template.stages.map((item) => item.id), ['scraping', 'annotation'])
+  await call('DELETE', '/autoeval-api/templates?id=legacy-yaml')
   await call('DELETE', '/autoeval-api/templates?id=yaml-template')
 })
 
-test('用自定义模板提交时，阶段参数来自 YAML 文件', async () => {
+test('模板只给顺序：各阶段实现由提交时的分组决定', async () => {
   const saved = await call('POST', '/autoeval-api/templates', {
     id: 'fast-template',
     name: '快检模板',
-    stages: {
-      scraping: { template: 'websearch', config: { maxResults: 2, queryField: 'query', intervalMs: 0 } },
-      annotation: { template: 'coverage-keyword', config: { pointsField: 'infoPoints', minCoverage: 1 } },
-      metrics: { template: 'standard', config: { latencyField: 'latencyMs' } },
-      reporting: { template: 'markdown', config: { sections: ['summary'] } },
-    },
+    stages: [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }],
   })
   assert.equal(saved.ok, true, saved.error)
+  assert.deepEqual(saved.template.stages.map((stage) => stage.id), ['scraping', 'annotation', 'metrics', 'reporting'])
 
   const before = searches.length
-  const started = await call('POST', '/autoeval-api/run', { name: '按 YAML 模板跑', templateId: 'fast-template', cases: cases.slice(0, 1) })
+  const started = await call('POST', '/autoeval-api/run', {
+    name: '按分组跑',
+    templateId: 'fast-template',
+    cases: cases.slice(0, 1),
+    groups: [{
+      id: 'control', kind: 'control', name: 'Control',
+      stages: {
+        scraping: { module: 'websearch', config: { maxResults: 2, queryField: 'query', intervalMs: 0 } },
+        annotation: { module: 'coverage-keyword', config: { pointsField: 'infoPoints', minCoverage: 1 } },
+        metrics: { module: 'standard', config: { latencyField: 'latencyMs' } },
+        reporting: { module: 'markdown', config: { sections: ['summary'] } },
+      },
+    }],
+  })
   assert.equal(started.ok, true, started.error)
-  const state = await waitForIdle()
-  const run = state.runs.find((item) => item.id === started.runId)
+  const { run } = await waitForRun(started.runId)
   assert.equal(run.status, 'done', JSON.stringify(run.error || run.log))
-  assert.equal(run.stages.scraping.config.maxResults, 2, '运行记录里的参数不是模板里的')
+  assert.equal(run.stages.scraping.config.maxResults, 2, '运行记录里的参数不是提交时给的')
   assert.equal(run.stages.scraping.config.intervalMs, 0)
   assert.deepEqual(run.stages.reporting.config.sections, ['summary'])
   const used = searches.slice(before)
-  assert.ok(used.length > 0 && used.every((item) => item.maxResults === 2), `检索没用模板里的条数：${JSON.stringify(used)}`)
+  assert.ok(used.length > 0 && used.every((item) => item.maxResults === 2), `检索没用提交时的条数：${JSON.stringify(used)}`)
   await call('DELETE', '/autoeval-api/templates?id=fast-template')
 })
 
 test('工作区：路径、计数、配置读写', async () => {
-  await call('POST', '/autoeval-api/templates', {
+  const probe = await call('POST', '/autoeval-api/templates', {
     id: 'workspace-probe',
     name: '工作区探针',
-    stages: {
-      scraping: { template: 'inline', config: {} },
-      annotation: { template: 'coverage-keyword', config: {} },
-      metrics: { template: 'standard', config: {} },
-      reporting: { template: 'markdown', config: {} },
-    },
+    stages: [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }],
   })
+  assert.equal(probe.ok, true, probe.error)
   const state = await call('GET', '/autoeval-api/state')
   const workspace = state.workspace
   assert.ok(workspace, '没有工作区信息')
@@ -454,12 +474,7 @@ test('工作区：路径、计数、配置读写', async () => {
 })
 
 test('阶段顺序：预置阶段不能调换，自定义阶段可以插在中间', async () => {
-  const base = [
-    { id: 'scraping', module: 'inline', config: {} },
-    { id: 'annotation', module: 'coverage-keyword', config: {} },
-    { id: 'metrics', module: 'standard', config: {} },
-    { id: 'reporting', module: 'markdown', config: {} },
-  ]
+  const base = [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }]
   const swapped = await call('POST', '/autoeval-api/templates', {
     id: 'bad-order', name: 'x', stages: [base[1], base[0], base[2], base[3]],
   })
@@ -477,18 +492,25 @@ test('阶段顺序：预置阶段不能调换，自定义阶段可以插在中�
   const saved = await call('POST', '/autoeval-api/templates', {
     id: 'with-custom',
     name: '带自定义阶段',
-    stages: [
-      base[0],
-      { id: 'rerank', name: '重排', module: 'custom', config: { command } },
-      base[1],
-      base[2],
-      base[3],
-    ],
+    stages: [base[0], { id: 'rerank', name: '重排' }, base[1], base[2], base[3]],
   })
   assert.equal(saved.ok, true, saved.error)
   assert.deepEqual(saved.template.stages.map((item) => item.id), ['scraping', 'rerank', 'annotation', 'metrics', 'reporting'])
 
-  const started = await call('POST', '/autoeval-api/run', { templateId: 'with-custom', cases })
+  const started = await call('POST', '/autoeval-api/run', {
+    templateId: 'with-custom',
+    cases,
+    groups: [{
+      id: 'control', kind: 'control',
+      stages: {
+        scraping: { module: 'websearch' },
+        rerank: { module: 'custom', config: { command } },
+        annotation: { module: 'coverage-keyword' },
+        metrics: { module: 'standard' },
+        reporting: { module: 'markdown' },
+      },
+    }],
+  })
   assert.equal(started.ok, true, started.error)
   const { run } = await waitForRun(started.runId)
   assert.equal(run.status, 'done', JSON.stringify(run.error))
@@ -505,17 +527,21 @@ test('阶段可以删到只剩抓取和自定义：没有 metrics/reporting 也�
   const saved = await call('POST', '/autoeval-api/templates', {
     id: 'slim-template',
     name: '精简模板',
-    stages: [
-      { id: 'scraping', module: 'inline', config: {} },
-      { id: 'annotation', module: 'coverage-keyword', config: { minCoverage: 1 } },
-      { id: 'tag', name: '打标', module: 'custom', config: { command } },
-    ],
+    stages: [{ id: 'scraping' }, { id: 'annotation' }, { id: 'tag', name: '打标' }],
   })
   assert.equal(saved.ok, true, saved.error)
 
   const started = await call('POST', '/autoeval-api/run', {
     templateId: 'slim-template',
     cases: [{ id: 's1', query: '一', material: '苹果', infoPoints: ['苹果'] }],
+    groups: [{
+      id: 'control', kind: 'control',
+      stages: {
+        scraping: { module: 'inline' },
+        annotation: { module: 'coverage-keyword', config: { minCoverage: 1 } },
+        tag: { module: 'custom', config: { command } },
+      },
+    }],
   })
   assert.equal(started.ok, true, started.error)
   const { run } = await waitForRun(started.runId)
@@ -545,27 +571,29 @@ test('分组：Control + Treatment 各自覆盖参数，报告里有组间对比
   const saved = await call('POST', '/autoeval-api/templates', {
     id: 'ab-test',
     name: 'AB 测试',
-    stages: [
-      { id: 'scraping', module: 'inline', config: {} },
-      { id: 'annotation', module: 'coverage-keyword', config: { minCoverage: 1 } },
-      { id: 'metrics', module: 'standard', config: {} },
-      { id: 'reporting', module: 'markdown', config: { sections: ['summary'] } },
-    ],
+    stages: [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }],
   })
   assert.equal(saved.ok, true, saved.error)
-  assert.equal(saved.template.groups, undefined, '模板里不该再有分组')
+  assert.equal(saved.template.groups, undefined, '模板里不该有分组')
+  assert.equal(saved.template.stages.find((stage) => stage.id === 'scraping').module, undefined, '模板里不该有模块')
 
-  // 分组在提交时才定：Control 用模板默认，Treatment 独立配标注阶段
+  // 分组在提交时才定：两组都完整给出各阶段实现，Treatment 把判定阈值放宽
+  const base = {
+    scraping: { module: 'inline' },
+    annotation: { module: 'coverage-keyword', config: { minCoverage: 1 } },
+    metrics: { module: 'standard' },
+    reporting: { module: 'markdown', config: { sections: ['summary'] } },
+  }
   const started = await call('POST', '/autoeval-api/run', {
     templateId: 'ab-test',
     cases: groupCases,
     groups: [
-      { id: 'control', kind: 'control', name: '对照组' },
+      { id: 'control', kind: 'control', name: '对照组', stages: base },
       {
         id: 't1',
         kind: 'treatment',
         name: '放宽覆盖',
-        stages: { annotation: { module: 'coverage-keyword', config: { minCoverage: 0.4 } } },
+        stages: { ...base, annotation: { module: 'coverage-keyword', config: { minCoverage: 0.4 } } },
       },
     ],
   })
@@ -589,41 +617,72 @@ test('分组：Control + Treatment 各自覆盖参数，报告里有组间对比
   assert.equal(JSON.parse(lines[2]).group, 't1')
 })
 
-test('分组校验：提交时才能配组，必须正好一个 Control，只能配模板里的阶段', async () => {
-  const stages = [
-    { id: 'scraping', module: 'inline', config: {} },
-    { id: 'annotation', module: 'coverage-keyword', config: {} },
-    { id: 'metrics', module: 'standard', config: {} },
-    { id: 'reporting', module: 'markdown', config: {} },
-  ]
+test('分组校验：必须正好一个 Control，每个阶段都要选定实现', async () => {
+  const stages = [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }]
   const saved = await call('POST', '/autoeval-api/templates', { id: 'group-guard', name: 'x', stages })
   assert.equal(saved.ok, true, saved.error)
 
   const cases = [{ id: 'c1', query: '一', material: '苹果', infoPoints: ['苹果'] }]
   const run = (groups) => call('POST', '/autoeval-api/run', { templateId: 'group-guard', cases, groups })
+  const full = {
+    scraping: { module: 'inline' },
+    annotation: { module: 'coverage-keyword' },
+    metrics: { module: 'standard' },
+    reporting: { module: 'markdown' },
+  }
 
-  const twoControls = await run([{ id: 'control', kind: 'control' }, { id: 'c2', kind: 'control' }])
+  const twoControls = await run([
+    { id: 'control', kind: 'control', stages: full },
+    { id: 'c2', kind: 'control', stages: full },
+  ])
   assert.equal(twoControls.ok, false)
   assert.match(twoControls.error, /正好有一个 Control/)
 
-  const noControl = await run([{ id: 't1', kind: 'treatment' }])
+  const noControl = await run([{ id: 't1', kind: 'treatment', stages: full }])
   assert.equal(noControl.ok, false)
   assert.match(noControl.error, /正好有一个 Control/)
 
-  const badStage = await run([{ id: 'control', kind: 'control', stages: { nope: { module: 'inline' } } }])
+  const badStage = await run([{ id: 'control', kind: 'control', stages: { ...full, nope: { module: 'inline' } } }])
   assert.equal(badStage.ok, false)
   assert.match(badStage.error, /没有的阶段 nope/)
 
-  const badModule = await run([{ id: 'control', kind: 'control', stages: { scraping: { module: 'nope' } } }])
+  const badModule = await run([{ id: 'control', kind: 'control', stages: { ...full, scraping: { module: 'nope' } } }])
   assert.equal(badModule.ok, false)
   assert.match(badModule.error, /没有执行模块 nope/)
 
-  // 不给 groups 也能跑：默认一个 Control 用模板默认配置
-  const auto = await call('POST', '/autoeval-api/run', { templateId: 'group-guard', cases })
+  // 少了某个阶段：不会偷偷用默认模块，直接报错
+  const missingStage = await run([{
+    id: 'control', kind: 'control', stages: { ...full, metrics: undefined },
+  }])
+  assert.equal(missingStage.ok, false)
+  assert.match(missingStage.error, /metrics 还没有选执行模块/)
+
+  // 自定义阶段只能配自定义命令，而且命令不能空
+  const customTpl = await call('POST', '/autoeval-api/templates', {
+    id: 'custom-guard', name: 'x', stages: [{ id: 'scraping' }, { id: 'tag', name: '打标' }],
+  })
+  assert.equal(customTpl.ok, true, customTpl.error)
+  const wrongCustom = await call('POST', '/autoeval-api/run', {
+    templateId: 'custom-guard', cases,
+    groups: [{ id: 'control', kind: 'control', stages: { scraping: { module: 'inline' }, tag: { module: 'inline' } } }],
+  })
+  assert.equal(wrongCustom.ok, false)
+  assert.match(wrongCustom.error, /只能用「自定义命令」模块/)
+  const emptyCommand = await call('POST', '/autoeval-api/run', {
+    templateId: 'custom-guard', cases,
+    groups: [{ id: 'control', kind: 'control', stages: { scraping: { module: 'inline' }, tag: { module: 'custom' } } }],
+  })
+  assert.equal(emptyCommand.ok, false)
+  assert.match(emptyCommand.error, /缺少 command/)
+
+  // 什么都不给才走兜底：按每个阶段的首个内置模块跑一个 Control
+  const auto = await run(undefined)
   assert.equal(auto.ok, true, auto.error)
   const { run: autoRun } = await waitForRun(auto.runId)
-  assert.equal(autoRun.groups.length, 1)
-  assert.equal(autoRun.groups[0].kind, 'control')
+  assert.equal(autoRun.status, 'done', JSON.stringify(autoRun.error))
+  assert.equal(autoRun.stages.scraping.template, 'websearch', '兜底应该用首个内置模块')
+  await call('DELETE', '/autoeval-api/templates?id=custom-guard')
+  await call('DELETE', '/autoeval-api/templates?id=group-guard')
 })
 
 test('Queryset：导入 CSV / JSONL / XLSX，增删改查', async () => {
@@ -774,41 +833,51 @@ test('老 state.json 里的模板启动时迁成 YAML 文件', async () => {
   }
   const yaml = await fsp.readFile(path.join(dir, 'templates', 'legacy-template.yaml'), 'utf8')
   assert.ok(yaml.includes('id: legacy-template'), yaml)
-  assert.ok(yaml.includes('maxResults: 4'), yaml)
+  assert.ok(yaml.includes('id: scraping'), yaml)
+  assert.ok(!yaml.includes('maxResults'), '迁移后的模板不该再带模块参数')
   const state = JSON.parse(await fsp.readFile(path.join(dir, 'state.json'), 'utf8'))
   assert.deepEqual(state.templates, [], 'state.json 里的模板应该清空')
   process.env.DSH_HOME = previousHome
 })
 
-test('坏配置会被挡住：字段越界、阶段缺失、YAML 语法错', async () => {
-  const bad = async (body) => {
-    const result = await call('POST', '/autoeval-api/templates', body)
+test('坏配置会被挡住：阶段参数越界、阶段列表非法、YAML 语法错', async () => {
+  const saved = await call('POST', '/autoeval-api/templates', {
+    id: 'bad-config-guard', name: '参数守卫',
+    stages: [{ id: 'scraping' }, { id: 'annotation' }, { id: 'metrics' }, { id: 'reporting' }],
+  })
+  assert.equal(saved.ok, true, saved.error)
+
+  const cases = [{ id: 'c1', query: '一', material: '苹果', infoPoints: ['苹果'] }]
+  const bad = async (stages, templateId = 'bad-config-guard') => {
+    const result = await call('POST', '/autoeval-api/run', {
+      templateId, cases, groups: [{ id: 'control', kind: 'control', stages }],
+    })
     assert.equal(result.ok, false, '本该被拒绝')
     return result.error
   }
   const base = {
-    scraping: { template: 'websearch', config: {} },
-    annotation: { template: 'coverage-keyword', config: {} },
-    metrics: { template: 'standard', config: {} },
-    reporting: { template: 'markdown', config: {} },
+    scraping: { module: 'websearch', config: {} },
+    annotation: { module: 'coverage-keyword', config: {} },
+    metrics: { module: 'standard', config: {} },
+    reporting: { module: 'markdown', config: {} },
   }
-  assert.match(await bad({
-    id: 'bad-1', name: 'x', stages: { ...base, scraping: { template: 'websearch', config: { maxResults: 999 } } },
-  }), /不能大于 20/)
-  assert.match(await bad({
-    id: 'bad-2', name: 'x', stages: { ...base, annotation: { template: 'coverage-keyword', config: { minCoverage: 2 } } },
-  }), /不能大于 1/)
-  assert.match(await bad({
-    id: 'bad-3', name: 'x', stages: { ...base, reporting: { template: 'markdown', config: { sections: ['nope'] } } },
-  }), /不认识的取值/)
-  assert.match(await bad({
-    id: 'bad-4', name: 'x', stages: { ...base, scraping: { template: 'custom', config: {} } },
-  }), /缺少 command/)
-  assert.match(await bad({ id: 'bad-5', name: 'x', stages: {} }), /至少要有一个阶段/)
-  assert.match(await bad({ id: 'Bad Id', name: 'x', stages: base }), /模板 id 只能用/)
+  assert.match(await bad({ ...base, scraping: { module: 'websearch', config: { maxResults: 999 } } }), /不能大于 20/)
+  assert.match(await bad({ ...base, annotation: { module: 'coverage-keyword', config: { minCoverage: 2 } } }), /不能大于 1/)
+  assert.match(await bad({ ...base, reporting: { module: 'markdown', config: { sections: ['nope'] } } }), /不认识的取值/)
+
+  // 模板侧：阶段列表本身非法会被挡住
+  const badTemplate = async (body) => {
+    const result = await call('POST', '/autoeval-api/templates', body)
+    assert.equal(result.ok, false, '本该被拒绝')
+    return result.error
+  }
+  assert.match(await badTemplate({ id: 'bad-5', name: 'x', stages: [] }), /至少要有一个阶段/)
+  assert.match(await badTemplate({ id: 'bad-6', name: 'x', stages: [{ id: 'scraping' }, { id: 'scraping' }] }), /重复/)
+  assert.match(await badTemplate({ id: 'Bad Id', name: 'x', stages: [{ id: 'scraping' }] }), /模板 id 只能用/)
   const raw = await call('POST', '/autoeval-api/templates/raw', { yaml: 'id: x\n  bad: indent' })
   assert.equal(raw.ok, false)
   assert.match(raw.error, /YAML 解析失败/)
+  await call('DELETE', '/autoeval-api/templates?id=bad-config-guard')
 })
 
 test('手写坏的 YAML 文件不会被吞掉，列表里带 broken 标记', async () => {
