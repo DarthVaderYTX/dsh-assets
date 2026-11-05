@@ -135,6 +135,8 @@ window.__ModuleLoader__.load({
       'submit.template': '用哪个任务模板',
       'submit.templateHint': '阶段配置取自模板本身；要改配置先去「任务模板」里改模板。',
       'submit.pickTemplate': '先选一个任务模板。',
+      'submit.searchTemplate': '按名称或 id 过滤模板…',
+      'submit.noMatch': '没有匹配的模板。',
       'submit.progress': '运行中',
 
       'field.template': '执行模板',
@@ -310,6 +312,8 @@ window.__ModuleLoader__.load({
       'submit.template': 'Template to run',
       'submit.templateHint': 'Stage config comes from the template; edit the template first if it needs changes.',
       'submit.pickTemplate': 'Pick a template first.',
+      'submit.searchTemplate': 'Filter templates by name or id…',
+      'submit.noMatch': 'No template matches.',
       'submit.progress': 'Running',
 
       'field.template': 'Stage template',
@@ -450,6 +454,26 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-select { position: relative; }
+.ae-select-button { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
+  padding: 7px 10px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px; text-align: left;
+  color: var(--dsw-alias-label-primary, #1f1f1f); background: var(--dsw-alias-bg-base, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); }
+.ae-select-button:hover { border-color: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-select-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ae-select-menu { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  padding: 6px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); box-shadow: 0 8px 24px rgba(0,0,0,.16); }
+.ae-select-search { margin-bottom: 6px; }
+.ae-select-list { display: flex; flex-direction: column; max-height: 240px; overflow: auto; }
+.ae-select-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 8px;
+  background: transparent; cursor: pointer; font: inherit; font-size: 12.5px; text-align: left;
+  color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-select-item:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.04)); }
+.ae-select-item[data-active="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); font-weight: 600; }
+.ae-select-name { flex: 1 1 auto; }
+.ae-select-id { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-select-empty { padding: 10px 8px; font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-modal-mask { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center;
   justify-content: center; background: rgba(0,0,0,.28); padding: 24px; }
 .ae-modal { width: min(560px, 92vw); max-height: 78vh; overflow: auto; box-sizing: border-box;
@@ -564,6 +588,8 @@ window.__ModuleLoader__.load({
       const [workspaceEditing, setWorkspaceEditing] = React.useState(false)
       const [editingDraft, setEditingDraft] = React.useState(false)
       const [confirmDialog, setConfirmDialog] = React.useState(null)
+      const [pickerOpen, setPickerOpen] = React.useState(false)
+      const [pickerQuery, setPickerQuery] = React.useState('')
       const [workspaceDraft, setWorkspaceDraft] = React.useState(null)
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -1553,6 +1579,62 @@ window.__ModuleLoader__.load({
       }
 
       // ---------------------------------------------------------- 提交任务
+      const matchesTemplate = (template) => {
+        const query = pickerQuery.trim().toLowerCase()
+        if (!query) return true
+        return [template.id, template.name, template.description]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query))
+      }
+
+      /** 选模板：下拉列表 + 关键词过滤（匹配名称、id、说明）。 */
+      function renderTemplatePicker(selected) {
+        const matched = templates.filter(matchesTemplate)
+        return h('div', { className: 'ae-select', 'data-open': String(pickerOpen) },
+          h('button', {
+            type: 'button', className: 'ae-select-button',
+            'aria-expanded': String(pickerOpen),
+            onClick: () => {
+              setPickerOpen(!pickerOpen)
+              if (pickerOpen) setPickerQuery('')
+            },
+          },
+          h('span', { className: 'ae-select-value' },
+            selected ? `${selected.name}（${selected.id}）` : t('submit.pickTemplate')),
+          h('span', { className: 'ae-caret' }, pickerOpen ? '▴' : '▾')),
+          pickerOpen
+            ? h('div', { className: 'ae-select-menu' },
+              h('input', {
+                className: 'ae-input ae-select-search', type: 'search', spellCheck: false,
+                placeholder: t('submit.searchTemplate'), value: pickerQuery,
+                onChange: (event) => setPickerQuery(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Escape') {
+                    setPickerOpen(false)
+                    setPickerQuery('')
+                  }
+                },
+              }),
+              matched.length === 0
+                ? h('div', { className: 'ae-select-empty' }, t('submit.noMatch'))
+                : h('div', { className: 'ae-select-list' },
+                  ...matched.map((template) => h('button', {
+                    key: template.id, type: 'button', className: 'ae-select-item',
+                    'data-active': String(template.id === draft.templateId),
+                    onClick: () => {
+                      applyTemplateToDraft(template)
+                      setPickerOpen(false)
+                      setPickerQuery('')
+                    },
+                  },
+                  h('span', { className: 'ae-select-name' }, template.name),
+                  h('span', { className: 'ae-select-id ae-mono' }, template.id),
+                  template.builtin
+                    ? h('span', { className: 'ae-badge', 'data-kind': 'builtin' }, t('tpl.builtin'))
+                    : null))))
+            : null)
+      }
+
       function renderSubmit() {
         const progress = active && active.progress
         const selected = templates.find((item) => item.id === draft.templateId)
@@ -1584,12 +1666,7 @@ window.__ModuleLoader__.load({
               })),
             h('div', { className: 'ae-field' },
               h('label', { className: 'ae-label' }, t('submit.template')),
-              h('div', { className: 'ae-chips' },
-                ...templates.map((template) => h('button', {
-                  key: template.id, type: 'button', className: 'ae-chip',
-                  'data-active': String(draft.templateId === template.id),
-                  onClick: () => applyTemplateToDraft(template),
-                }, template.name))),
+              renderTemplatePicker(selected),
               h('div', { className: 'ae-card-note' }, t('submit.templateHint'))),
             h('div', { className: 'ae-label', style: { marginTop: '4px' } }, t('tpl.config')),
             preview || h('div', { className: 'ae-empty' }, t('submit.pickTemplate'))),

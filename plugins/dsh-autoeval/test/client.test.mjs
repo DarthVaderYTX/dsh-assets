@@ -262,6 +262,23 @@ const mainComponent = () => registered.find((item) => item.options.name === 'mai
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
 
 // 不管当前在哪个页面，都回到任务列表
+// 进提交页并把模板下拉展开、清空过滤词（状态在用例间是共享的）
+function openPicker() {
+  let view = ensureTaskList()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  if (findAll(view, hasClass('ae-select-menu')).length === 0) {
+    findAll(view, hasClass('ae-select-button'))[0].props.onClick()
+    view = render(mainComponent(), {})
+  }
+  const search = findAll(view, hasClass('ae-select-search'))[0]
+  if (search && search.props.value) {
+    search.props.onChange({ target: { value: '' } })
+    view = render(mainComponent(), {})
+  }
+  return view
+}
+
 function ensureTaskList() {
   let view = render(mainComponent(), {})
   const back = findAll(view, byClass('ae-back'))[0]
@@ -457,8 +474,13 @@ test('提交任务：表单 → POST /run', async () => {
   // 提交页不给改阶段：只有模板选择 + 只读预览
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 0, '提交页不该有阶段编辑器')
   assert.equal(findAll(view, hasClass('ae-textarea')).length, 1, '应该只有用例一个输入框')
-  const chips = findAll(view, byClass('ae-chip'))
-  assert.equal(chips.length, 2, '模板选项数量不对')
+  // 模板是下拉选择：展开后一个模板一项
+  assert.equal(findAll(view, hasClass('ae-select-list')).length, 0, '下拉默认应收起')
+  assert.ok(texts(findAll(view, hasClass('ae-select-value'))[0]).includes('websearch-tool'),
+    '收起时应显示选中的模板')
+  findAll(view, hasClass('ae-select-button'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-select-item')).length, 2, '模板选项数量不对')
 
   const before = calls.length
   const runButton = findAll(view, byClass('ae-btn ae-btn-primary'))[0]
@@ -487,16 +509,41 @@ test('提交任务：表单 → POST /run', async () => {
   assert.equal(body.stages, undefined, '提交时不该自带阶段配置')
 })
 
-test('提交任务：换模板只换引用，预览跟着变', async () => {
-  let view = ensureTaskList()
-  findAll(view, clickable('提交任务'))[0].props.onClick()
+test('提交任务：模板下拉支持关键词过滤', async () => {
+  let view = openPicker()
+  assert.equal(findAll(view, hasClass('ae-select-item')).length, 2)
+
+  // 按 id 过滤
+  const search = findAll(view, hasClass('ae-select-search'))[0]
+  assert.ok(search, '下拉里没有搜索框')
+  search.props.onChange({ target: { value: 'my-' } })
   view = render(mainComponent(), {})
-  const chips = findAll(view, byClass('ae-chip'))
-  chips[1].props.onClick()
+  let items = findAll(view, hasClass('ae-select-item'))
+  assert.equal(items.length, 1, '过滤后应该只剩一个')
+  assert.ok(texts(items[0]).includes('我的覆盖模板'))
+
+  // 按中文名过滤，大小写与空格无所谓
+  findAll(view, hasClass('ae-select-search'))[0].props.onChange({ target: { value: '  覆盖模  ' } })
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-select-item')).length, 1, '按名称过滤没生效')
+
+  // 没匹配给提示
+  findAll(view, hasClass('ae-select-search'))[0].props.onChange({ target: { value: 'zzz' } })
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-select-item')).length, 0)
+  assert.ok(texts(view).includes('没有匹配的模板'))
+})
+
+test('提交任务：换模板只换引用，预览跟着变', async () => {
+  let view = openPicker()
+  const items = findAll(view, hasClass('ae-select-item'))
+  items[1].props.onClick()
   view = render(mainComponent(), {})
   const text = texts(view)
   assert.ok(text.includes('我的覆盖模板'), '预览没跟着换模板')
-  assert.equal(findAll(view, byClass('ae-chip')).filter((node) => node.props['data-active'] === 'true').length, 1)
+  assert.equal(findAll(view, hasClass('ae-select-list')).length, 0, '选完应自动收起')
+  assert.equal(findAll(view, hasClass('ae-select-item')).filter((node) => node.props['data-active'] === 'true').length, 0)
+  assert.ok(texts(findAll(view, hasClass('ae-select-value'))[0]).includes('我的覆盖模板'), '没回填选中的模板')
 })
 
 test('二次确认可以取消：不发请求、不改文件', async () => {
