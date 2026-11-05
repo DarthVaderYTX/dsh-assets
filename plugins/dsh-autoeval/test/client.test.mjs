@@ -465,6 +465,20 @@ test('提交任务：表单 → POST /run', async () => {
   assert.ok(runButton, '没有开始运行按钮')
   await runButton.props.onClick()
   await settle()
+  assert.equal(calls.slice(before).filter((call) => call.url.endsWith('/run')).length, 0, '点运行不该直接发请求')
+
+  // 弹窗里把要跑的东西摊开：模板、用例数、四个阶段
+  view = render(mainComponent(), {})
+  const modal = findAll(view, byClass('ae-modal'))[0]
+  assert.ok(modal, '没有二次确认')
+  const modalText = texts(modal)
+  assert.ok(modalText.includes('确认提交这次评测'), '确认框标题不对')
+  assert.ok(modalText.includes('websearch-tool'), '没列出模板')
+  assert.ok(modalText.includes('4'), '没列出用例数')
+  assert.ok(modalText.includes('coverage-keyword'), '没列出各阶段')
+
+  await findAll(view, clickable('确认'))[0].props.onClick()
+  await settle()
   const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/run'))
   assert.ok(posted, '没有 POST /run')
   const body = JSON.parse(posted.body)
@@ -483,6 +497,42 @@ test('提交任务：换模板只换引用，预览跟着变', async () => {
   const text = texts(view)
   assert.ok(text.includes('我的覆盖模板'), '预览没跟着换模板')
   assert.equal(findAll(view, byClass('ae-chip')).filter((node) => node.props['data-active'] === 'true').length, 1)
+})
+
+test('二次确认可以取消：不发请求、不改文件', async () => {
+  // 提交任务：点运行 → 取消
+  let view = ensureTaskList()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const before = calls.length
+  const runButton = findAll(view, byClass('ae-btn ae-btn-primary'))[0]
+  runButton.props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(findAll(view, byClass('ae-modal'))[0], '没有确认框')
+  const runModal = findAll(view, byClass('ae-modal'))[0]
+  findAll(runModal, clickable('取消'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-modal')).length, 0, '取消后确认框应关掉')
+  assert.equal(calls.slice(before).filter((call) => call.url.endsWith('/run')).length, 0, '取消后还是发了请求')
+
+  // 保存模板：点保存 → 取消
+  findAll(view, byClass('ae-back'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, byClass('ae-tab'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const saveBefore = calls.length
+  findAll(view, clickable('保存'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const templateModal = findAll(view, byClass('ae-modal'))[0]
+  assert.ok(templateModal, '保存模板没有二次确认')
+  findAll(templateModal, clickable('取消'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-modal')).length, 0, '取消后确认框应关掉')
+  assert.equal(calls.slice(saveBefore).filter((call) => call.method === 'POST').length, 0, '取消后还是保存了')
 })
 
 test('模板列表点进详情：内置只读', () => {
@@ -528,6 +578,11 @@ test('自定义模板可以改字段并保存', async () => {
   view = render(mainComponent(), {})
   const before = calls.length
   findAll(view, byClass('ae-btn ae-btn-primary'))[0].props.onClick()
+  await settle()
+  assert.equal(calls.slice(before).filter((call) => call.url.endsWith('/templates')).length, 0, '没确认就保存了')
+  view = render(mainComponent(), {})
+  assert.ok(findAll(view, byClass('ae-modal'))[0], '保存模板没有二次确认')
+  await findAll(view, clickable('确认'))[0].props.onClick()
   await settle()
   const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/templates'))
   assert.ok(posted, '没有 POST /templates')
@@ -624,6 +679,10 @@ test('模板 YAML 页签：只读时不能改，进编辑后能改能存', async
   const saveButton = findAll(view, clickable('保存'))[0]
   const saveBefore = calls.length
   await saveButton.props.onClick()
+  await settle()
+  view = render(mainComponent(), {})
+  assert.ok(findAll(view, byClass('ae-modal'))[0], '保存 YAML 没有二次确认')
+  await findAll(view, clickable('确认'))[0].props.onClick()
   await settle()
   const posted = calls.slice(saveBefore).find((call) => call.method === 'POST' && call.url.includes('/templates/raw'))
   assert.ok(posted, '没有 POST /templates/raw')

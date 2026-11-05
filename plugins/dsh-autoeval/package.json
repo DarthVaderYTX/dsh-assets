@@ -1,6 +1,6 @@
 {
   "name": "dsh-autoeval",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "AutoEval: a four-stage evaluation pipeline (Scraping, Annotation, Metrics, Reporting) with preset and custom execution for every stage, reachable from a left-sidebar panel.",
   "type": "module",

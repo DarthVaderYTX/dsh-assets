@@ -106,6 +106,15 @@ window.__ModuleLoader__.load({
       'tpl.viewing': '只读查看，点「编辑」改配置',
       'tpl.editing': '编辑中，保存前不会动文件',
       'tpl.noParams': '这个执行模板没有可配参数',
+      'confirm.ok': '确认',
+      'confirm.runTitle': '确认提交这次评测？',
+      'confirm.runNote': '提交后立刻开跑，四个阶段会按上面的模板执行；期间可以在任务详情里看进度或取消。',
+      'confirm.templateTitle': '确认保存对模板的更改？',
+      'confirm.templateNote': '保存会重写 templates/<id>.yaml，之后提交的任务都用新配置。',
+      'confirm.yamlTitle': '确认保存模板 YAML？',
+      'confirm.yamlNote': '保存会按这段 YAML 重写模板文件；id 由内容里的 id 字段决定。',
+      'confirm.lines': '行',
+      'tpl.yamlEmpty': 'YAML 是空的，没什么可存。',
       'ws.title': '工作区',
       'ws.copy': '复制路径',
       'ws.open': '打开目录',
@@ -273,6 +282,15 @@ window.__ModuleLoader__.load({
       'tpl.viewing': 'Read-only; hit Edit to change the config',
       'tpl.editing': 'Editing — nothing is written until you save',
       'tpl.noParams': 'This preset has no parameters',
+      'confirm.ok': 'Confirm',
+      'confirm.runTitle': 'Submit this evaluation?',
+      'confirm.runNote': 'It starts right away and runs the four stages above; you can watch or cancel from the task detail.',
+      'confirm.templateTitle': 'Save changes to this template?',
+      'confirm.templateNote': 'Saving rewrites templates/<id>.yaml; later submissions will use the new config.',
+      'confirm.yamlTitle': 'Save this template YAML?',
+      'confirm.yamlNote': 'Saving rewrites the template file from this YAML; the id comes from the id field inside.',
+      'confirm.lines': 'lines',
+      'tpl.yamlEmpty': 'The YAML is empty, nothing to save.',
       'ws.title': 'Workspace',
       'ws.copy': 'Copy path',
       'ws.open': 'Open folder',
@@ -432,6 +450,14 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-modal-mask { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center;
+  justify-content: center; background: rgba(0,0,0,.28); padding: 24px; }
+.ae-modal { width: min(560px, 92vw); max-height: 78vh; overflow: auto; box-sizing: border-box;
+  padding: 16px; border-radius: 12px; background: var(--dsw-alias-bg-layer-1, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); box-shadow: 0 12px 32px rgba(0,0,0,.22); }
+.ae-modal-title { font-size: 13.5px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f);
+  margin-bottom: 10px; }
+.ae-modal-body { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .ae-workspace { margin: 8px 0; padding: 8px 12px; border-radius: 10px;
   background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.06));
   font-size: 12px; }
@@ -537,6 +563,7 @@ window.__ModuleLoader__.load({
       const [yamlBusy, setYamlBusy] = React.useState(false)
       const [workspaceEditing, setWorkspaceEditing] = React.useState(false)
       const [editingDraft, setEditingDraft] = React.useState(false)
+      const [confirmDialog, setConfirmDialog] = React.useState(null)
       const [workspaceDraft, setWorkspaceDraft] = React.useState(null)
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -637,7 +664,8 @@ window.__ModuleLoader__.load({
 
       // ---- 数据操作 ----
 
-      async function submit() {
+      /** 提交前先把要跑的东西摊开给用户看一眼，确认了才发。 */
+      function submit() {
         setError('')
         setNotice('')
         const cases = readJson(casesText)
@@ -650,12 +678,36 @@ window.__ModuleLoader__.load({
           setError(t('submit.pickTemplate'))
           return
         }
+        const rows = [
+          [t('submit.name'), draft.name || '-'],
+          [t('submit.template'), `${template.name}（${template.id}）`],
+          [t('submit.cases'), String(cases.value.length)],
+        ]
+        const stageRows = (state.stages || []).map((stage) => {
+          const entry = (template.stages && template.stages[stage.id]) || {}
+          const config = entry.config && Object.keys(entry.config).length > 0
+            ? JSON.stringify(entry.config)
+            : ''
+          return `${t(`stage.${stage.id}`)} · ${entry.template || '-'}${config ? ` ${config}` : ''}`
+        })
+        setConfirmDialog({
+          kind: 'run',
+          title: t('confirm.runTitle'),
+          note: t('confirm.runNote'),
+          rows,
+          stages: stageRows,
+          payload: { name: draft.name, templateId: template.id, cases: cases.value },
+        })
+      }
+
+      async function runConfirmed(payload) {
+        setConfirmDialog(null)
         setBusy(true)
         try {
           const result = await api('/run', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name: draft.name, templateId: template.id, cases: cases.value }),
+            body: JSON.stringify(payload),
           })
           setSubmitting(false)
           setView('tasks')
@@ -780,15 +832,36 @@ window.__ModuleLoader__.load({
         }
       }
 
-      async function saveTemplateYaml() {
+      function saveTemplateYaml() {
         setError('')
         setNotice('')
+        if (!String(templateYaml || '').trim()) {
+          setError(t('tpl.yamlEmpty'))
+          return
+        }
+        setConfirmDialog({
+          kind: 'yaml',
+          title: t('confirm.yamlTitle'),
+          note: t('confirm.yamlNote'),
+          rows: [
+            [t('tpl.id'), templateDraft ? templateDraft.id : '-'],
+            [t('tpl.yaml'), `${String(templateYaml).split('\n').length} ${t('confirm.lines')}`],
+          ],
+          payload: { yaml: templateYaml },
+        })
+      }
+
+      async function saveTemplateYamlConfirmed() {
+        const dialog = confirmDialog
+        setConfirmDialog(null)
+        if (!dialog) return
+        setError('')
         setYamlBusy(true)
         try {
           const result = await api('/templates/raw', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ yaml: templateYaml }),
+            body: JSON.stringify(dialog.payload),
           })
           await load()
           const saved = result.template
@@ -887,16 +960,35 @@ window.__ModuleLoader__.load({
           stages[stage.id] = { template: entry.template, config: parsed.value }
         }
         setError('')
+        const stageRows = (state.stages || []).map((stage) => {
+          const entry = stages[stage.id]
+          const config = entry.config && Object.keys(entry.config).length > 0 ? JSON.stringify(entry.config) : ''
+          return `${t(`stage.${stage.id}`)} · ${entry.template}${config ? ` ${config}` : ''}`
+        })
+        setConfirmDialog({
+          kind: 'template',
+          title: t('confirm.templateTitle'),
+          note: t('confirm.templateNote'),
+          rows: [
+            [t('tpl.id'), id],
+            [t('tpl.name'), current.name || id],
+            [t('tpl.desc'), current.description || '-'],
+          ],
+          stages: stageRows,
+          payload: { id, name: current.name || id, description: current.description || '', stages },
+          draft: current,
+        })
+      }
+
+      async function saveTemplateConfirmed(payload, current) {
+        setConfirmDialog(null)
+        const { id, stages } = payload
+        setError('')
         try {
           await api('/templates', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              id,
-              name: current.name || id,
-              description: current.description || '',
-              stages,
-            }),
+            body: JSON.stringify(payload),
           })
           setTemplateDraft({
             ...current,
@@ -1024,6 +1116,50 @@ window.__ModuleLoader__.load({
       }
 
       // ---------------------------------------------------------- 任务列表
+      // ---------------------------------------------------------- 二次确认
+      function renderConfirm() {
+        const dialog = confirmDialog
+        if (!dialog) return null
+        return h('div', { className: 'ae-modal-mask' },
+          h('div', { className: 'ae-modal' },
+            h('div', { className: 'ae-modal-title' }, dialog.title),
+            h('div', { className: 'ae-modal-body' },
+              ...(dialog.rows || []).map(([label, value], index) => h('div', {
+                className: 'ae-detail-row', key: `confirm-row-${index}`,
+              },
+              h('span', { className: 'ae-detail-key' }, label),
+              h('span', { className: 'ae-mono' }, value))),
+              ...(dialog.stages || []).map((line, index) => h('div', {
+                className: 'ae-card-note', key: `confirm-stage-${index}`,
+              }, line))),
+            dialog.note ? h('div', { className: 'ae-card-note' }, dialog.note) : null,
+            h('div', { className: 'ae-actions' },
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary',
+                onClick: () => { confirmNow() },
+              }, t('confirm.ok')),
+              h('button', {
+                type: 'button', className: 'ae-btn',
+                onClick: () => setConfirmDialog(null),
+              }, t('action.cancel')))))
+      }
+
+      function confirmNow() {
+        const dialog = confirmDialog
+        if (!dialog) return
+        if (dialog.kind === 'run') {
+          void runConfirmed(dialog.payload)
+          return
+        }
+        if (dialog.kind === 'template') {
+          void saveTemplateConfirmed(dialog.payload, dialog.draft)
+          return
+        }
+        if (dialog.kind === 'yaml') {
+          void saveTemplateYamlConfirmed()
+        }
+      }
+
       // ---------------------------------------------------------- 工作区
       function formatBytes(bytes) {
         const size = Number(bytes) || 0
@@ -1166,7 +1302,7 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, renderWorkspace(), tabs, messages,
+          head, renderWorkspace(), tabs, messages, renderConfirm(),
           h('div', { className: 'ae-card' },
             h('div', { className: 'ae-toolbar' },
               h('input', {
@@ -1323,7 +1459,7 @@ window.__ModuleLoader__.load({
         if (!run) {
           return h('div', { className: 'ae-page' },
             h('style', null, STYLE),
-            head, renderWorkspace(), tabs, messages,
+            head, renderWorkspace(), tabs, messages, renderConfirm(),
             h('button', {
               type: 'button', className: 'ae-back',
               onClick: () => { setTaskId(''); setDetail(null) },
@@ -1386,7 +1522,7 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, renderWorkspace(), tabs, messages,
+          head, renderWorkspace(), tabs, messages, renderConfirm(),
           h('button', {
             type: 'button', className: 'ae-back',
             onClick: () => { setTaskId(''); setDetail(null) },
@@ -1435,7 +1571,7 @@ window.__ModuleLoader__.load({
           : null
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, renderWorkspace(), tabs, messages,
+          head, renderWorkspace(), tabs, messages, renderConfirm(),
           h('button', { type: 'button', className: 'ae-back', onClick: () => setSubmitting(false) },
             `← ${t('action.back')}`),
           h('div', { className: 'ae-card' },
@@ -1484,7 +1620,7 @@ window.__ModuleLoader__.load({
       function renderTemplateList() {
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, renderWorkspace(), tabs, messages,
+          head, renderWorkspace(), tabs, messages, renderConfirm(),
           h('div', { className: 'ae-toolbar' },
             h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => newTemplate() }, t('action.newTemplate')),
             h('span', { className: 'ae-toolbar-count' },
@@ -1663,7 +1799,7 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, renderWorkspace(), tabs, messages,
+          head, renderWorkspace(), tabs, messages, renderConfirm(),
           h('button', { type: 'button', className: 'ae-back', onClick: () => setTemplateDraft(null) },
             `← ${t('action.back')}`),
           h('div', { className: 'ae-card' },
