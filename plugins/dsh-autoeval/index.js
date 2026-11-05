@@ -970,20 +970,12 @@ export function templateToYaml(template) {
     entry.config = stage.config || {}
     return entry
   })
-  const groups = (template.groups || []).map((group) => {
-    const entry = { id: group.id, kind: group.kind, name: group.name }
-    const overrides = {}
-    for (const [stageId, patch] of Object.entries(group.overrides || {})) {
-      overrides[stageId] = { module: patch.module, config: patch.config || {} }
-    }
-    entry.overrides = overrides
-    return entry
-  })
   const head = [
     `# AutoEval 任务模板：${template.name || template.id}`,
     `# 文件：templates/${template.id}.yaml（文件名就是模板 id）`,
     '# 阶段按 stages 里的顺序执行：预置阶段（scraping / annotation / metrics / reporting）可以删、可以加回来，',
-    '# 但都在的时候相对先后固定；自定义阶段可以插在任意位置。groups 里必须有且只有一个 control。',
+    '# 但都在的时候相对先后固定；自定义阶段可以插在任意位置。',
+    '# 这里是每个阶段的默认模块与参数，提交任务时再按组（Control / Treatment）各自调整。',
     '# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。',
     '',
   ].join('\n')
@@ -993,7 +985,6 @@ export function templateToYaml(template) {
       name: template.name || template.id,
       description: template.description || '',
       stages,
-      groups,
     },
     { comments },
   )}`
@@ -1009,8 +1000,8 @@ export function normalizeTemplate(input) {
   const name = String((input && input.name) || id).trim() || id
   const stages = stageListOf(input).map(normalizeStageEntry)
   validateStageOrder(stages)
-  const groups = normalizeGroups(input && input.groups, stages)
-  return { id, name, description: String((input && input.description) || ''), stages, groups }
+  // 模板只定「有哪些阶段 + 每个阶段的默认模块与参数」，分组在提交任务时定
+  return { id, name, description: String((input && input.description) || ''), stages }
 }
 
 /** v1 只有对象形式的 stages，这里按预置顺序摊成数组。 */
@@ -1065,8 +1056,8 @@ function validateStageOrder(stages) {
   }
 }
 
-/** 组：必须正好一个 Control，后面可以跟任意多个 Treatment。 */
-function normalizeGroups(input, stages) {
+/** 提交时定的分组：必须正好一个 Control，后面可以跟任意多个 Treatment。 */
+export function normalizeRunGroups(input, stages) {
   const raw = Array.isArray(input) && input.length > 0 ? input : [{ id: 'control', kind: 'control' }]
   const byId = new Map(stages.map((stage) => [stage.id, stage]))
   const out = []
@@ -1079,11 +1070,12 @@ function normalizeGroups(input, stages) {
     }
     if (seen.has(groupId)) throw new Error(`组 ${groupId} 重复了`)
     seen.add(groupId)
-    const overrides = {}
-    for (const [stageId, patch] of Object.entries((item && item.overrides) || {})) {
+    const chosen = (item && item.stages) || (item && item.overrides) || {}
+    const stageConfig = {}
+    for (const [stageId, patch] of Object.entries(chosen)) {
       const stage = byId.get(stageId)
-      if (!stage) throw new Error(`组 ${groupId} 覆盖了模板里没有的阶段 ${stageId}`)
-      const moduleId = String((patch && patch.module) || stage.module)
+      if (!stage) throw new Error(`组 ${groupId} 配了模板里没有的阶段 ${stageId}`)
+      const moduleId = String((patch && (patch.module || patch.template)) || stage.module)
       if (stage.kind === 'preset') {
         const def = STAGES.find((entry) => entry.id === stageId)
         if (!def.presets.some((entry) => entry.id === moduleId)) {
@@ -1092,7 +1084,7 @@ function normalizeGroups(input, stages) {
       } else if (moduleId !== 'custom') {
         throw new Error(`组 ${groupId} 的自定义阶段 ${stageId} 只能用「自定义命令」模块`)
       }
-      overrides[stageId] = {
+      stageConfig[stageId] = {
         module: moduleId,
         config: validateConfig(stage.kind === 'custom' ? 'custom' : stageId, moduleId, (patch && patch.config) || {}),
       }
@@ -1101,7 +1093,7 @@ function normalizeGroups(input, stages) {
       id: groupId,
       kind,
       name: String((item && item.name) || (kind === 'control' ? 'Control' : groupId)),
-      overrides,
+      stages: stageConfig,
     })
   }
   const controls = out.filter((group) => group.kind === 'control')
@@ -1112,7 +1104,8 @@ function normalizeGroups(input, stages) {
 /** 某个组实际要跑的阶段：模板阶段 + 该组的覆盖。 */
 export function effectiveStages(template, group) {
   return template.stages.map((stage) => {
-    const patch = group && group.overrides ? group.overrides[stage.id] : null
+    const chosen = group && (group.stages || group.overrides)
+    const patch = chosen ? chosen[stage.id] : null
     if (!patch) return stage
     return { ...stage, module: patch.module || stage.module, config: patch.config || stage.config }
   })
@@ -1193,7 +1186,6 @@ async function readTemplates() {
         broken: String(error.message),
         file,
         stages: [],
-        groups: [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }],
       })
       continue
     }
@@ -1213,7 +1205,6 @@ async function readTemplates() {
       broken,
       file,
       stages: (doc && doc.stages) || [],
-      groups: (doc && doc.groups) || [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }],
     })
   }
   return out
@@ -1279,6 +1270,9 @@ class AutoEvalService {
     }
     if (cases.length === 0) throw new Error('用例为空：至少给一条用例')
     const template = await this.templateFor(input)
+    // 分组是提交时定的：没给就跑一个用模板默认值的 Control
+    const groups = normalizeRunGroups(input.groups || template.groups, template.stages)
+    const plan = { ...template, groups }
     const id = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const run = {
       id,
@@ -1290,8 +1284,8 @@ class AutoEvalService {
       status: 'running',
       groups: [],
       stages: {},
-      // 把这次用的模板整份存下来，重跑和任务详情都靠它
-      templateSnapshot: template,
+      // 把这次用的模板 + 分组整份存下来，重跑和任务详情都靠它
+      templateSnapshot: plan,
       caseCount: cases.length,
       metrics: null,
       artifacts: null,
@@ -1307,7 +1301,7 @@ class AutoEvalService {
     const controller = new AbortController()
     this.controller = controller
     // 后台跑，HTTP 立刻返回 runId
-    void this.execute(run, cases, template, controller.signal).catch(() => {})
+    void this.execute(run, cases, plan, controller.signal).catch(() => {})
     return { runId: id }
   }
 
@@ -1495,23 +1489,26 @@ class AutoEvalService {
   /** 这次运行要用哪个模板：显式快照 > 模板文件 > 提交时塞进来的阶段配置。 */
   async templateFor(input) {
     if (input.stageSource === 'record' && input.templateSnapshot) {
-      return normalizeTemplate(input.templateSnapshot)
+      const snapshot = input.templateSnapshot
+      return { ...normalizeTemplate(snapshot), groups: snapshot.groups }
     }
     const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
-    if (chosen) return normalizeTemplate(chosen)
+    if (chosen) {
+      const template = normalizeTemplate(chosen)
+      return input.groups ? { ...template, groups: input.groups } : template
+    }
     if (input.stages) {
-      return normalizeTemplate({
-        id: String(input.templateId || 'custom'),
-        stages: input.stages,
-        groups: input.groups,
-      })
+      return normalizeTemplate({ id: String(input.templateId || 'custom'), stages: input.stages })
     }
     throw new Error(`没有这个模板：${input.templateId || '(空)'}`)
   }
 
   /** 重跑：优先用当次记录的模板快照，老记录就按阶段表反推。 */
   async templateForRun(run) {
-    if (run.templateSnapshot) return normalizeTemplate(run.templateSnapshot)
+    if (run.templateSnapshot) {
+      const snapshot = run.templateSnapshot
+      return { ...normalizeTemplate(snapshot), groups: snapshot.groups }
+    }
     const stages = Array.isArray(run.stages)
       ? run.stages
       : Object.entries(run.stages || {}).map(([stageId, entry]) => ({
@@ -1520,9 +1517,17 @@ class AutoEvalService {
         config: entry.config,
       }))
     const groups = Array.isArray(run.groups) && run.groups.length > 0
-      ? run.groups.map((group) => ({ id: group.id, kind: group.kind, name: group.name }))
+      ? run.groups.map((group) => ({
+        id: group.id,
+        kind: group.kind,
+        name: group.name,
+        stages: Object.fromEntries(Object.entries(group.stages || {}).map(([stageId, entry]) => [
+          stageId,
+          { module: entry.template, config: entry.config },
+        ])),
+      }))
       : undefined
-    return normalizeTemplate({ id: run.templateId || 'custom', stages, groups })
+    return { ...normalizeTemplate({ id: run.templateId || 'custom', stages }), groups }
   }
 
   async rerun(runId) {
@@ -1842,7 +1847,7 @@ export function apply(ctx, config = {}) {
   if (tools) {
     ctx.effect(() => tools.register({
       name: 'autoeval_run',
-      description: 'Run one AutoEval evaluation: scraping → annotation → metrics → reporting. Returns the run id; poll autoeval_status for progress.',
+      description: 'Run one AutoEval evaluation over a template\'s stages (Control + optional Treatment groups, each with its own stage modules and params). Returns the run id; poll autoeval_status for progress.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -1851,6 +1856,8 @@ export function apply(ctx, config = {}) {
           templateId: { type: 'string' },
           cases: { type: 'array', items: { type: 'object', additionalProperties: true } },
           stages: { type: 'object', additionalProperties: true },
+          groups: { type: 'array', items: { type: 'object', additionalProperties: true } },
+          querysetId: { type: 'string' },
         },
         required: ['cases'],
       },

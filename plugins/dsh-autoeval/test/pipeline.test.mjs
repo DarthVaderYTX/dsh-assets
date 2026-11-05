@@ -58,6 +58,17 @@ async function call(method, pathAndQuery, body) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** 等这一次运行真的落进 state（并发时单看 active 可能读到上一次的 runs[0]）。 */
+async function waitForRun(runId) {
+  for (let index = 0; index < 120; index += 1) {
+    const state = await call('GET', '/autoeval-api/state')
+    const found = (state.runs || []).find((item) => item.id === runId)
+    if (found && !state.active) return { state, run: found }
+    await sleep(50)
+  }
+  throw new Error(`运行 ${runId} 没有在 6s 内落进 state`)
+}
+
 async function waitForIdle() {
   for (let index = 0; index < 80; index += 1) {
     const state = await call('GET', '/autoeval-api/state')
@@ -479,8 +490,7 @@ test('阶段顺序：预置阶段不能调换，自定义阶段可以插在中�
 
   const started = await call('POST', '/autoeval-api/run', { templateId: 'with-custom', cases })
   assert.equal(started.ok, true, started.error)
-  const state = await waitForIdle()
-  const run = state.runs[0]
+  const { run } = await waitForRun(started.runId)
   assert.equal(run.status, 'done', JSON.stringify(run.error))
   assert.deepEqual(Object.keys(run.stages), ['scraping', 'rerank', 'annotation', 'metrics', 'reporting'])
   assert.equal(run.stages.rerank.kind, 'custom')
@@ -508,8 +518,7 @@ test('阶段可以删到只剩抓取和自定义：没有 metrics/reporting 也�
     cases: [{ id: 's1', query: '一', material: '苹果', infoPoints: ['苹果'] }],
   })
   assert.equal(started.ok, true, started.error)
-  const state = await waitForIdle()
-  const run = state.runs[0]
+  const { run } = await waitForRun(started.runId)
   assert.equal(run.status, 'done', JSON.stringify(run.error))
   assert.deepEqual(Object.keys(run.groups[0].stages), ['scraping', 'annotation', 'tag'])
   assert.equal(run.metrics.derived, true, '没有 metrics 阶段时应补一份兜底指标')
@@ -542,24 +551,26 @@ test('分组：Control + Treatment 各自覆盖参数，报告里有组间对比
       { id: 'metrics', module: 'standard', config: {} },
       { id: 'reporting', module: 'markdown', config: { sections: ['summary'] } },
     ],
+  })
+  assert.equal(saved.ok, true, saved.error)
+  assert.equal(saved.template.groups, undefined, '模板里不该再有分组')
+
+  // 分组在提交时才定：Control 用模板默认，Treatment 独立配标注阶段
+  const started = await call('POST', '/autoeval-api/run', {
+    templateId: 'ab-test',
+    cases: groupCases,
     groups: [
       { id: 'control', kind: 'control', name: '对照组' },
       {
         id: 't1',
         kind: 'treatment',
         name: '放宽覆盖',
-        overrides: { annotation: { module: 'coverage-keyword', config: { minCoverage: 0.4 } } },
+        stages: { annotation: { module: 'coverage-keyword', config: { minCoverage: 0.4 } } },
       },
     ],
   })
-  assert.equal(saved.ok, true, saved.error)
-  assert.equal(saved.template.groups.length, 2)
-  assert.equal(saved.template.groups[1].overrides.annotation.config.minCoverage, 0.4)
-
-  const started = await call('POST', '/autoeval-api/run', { templateId: 'ab-test', cases: groupCases })
   assert.equal(started.ok, true, started.error)
-  const state = await waitForIdle()
-  const run = state.runs[0]
+  const { run } = await waitForRun(started.runId)
   assert.equal(run.status, 'done', JSON.stringify(run.error))
   assert.equal(run.groups.length, 2)
   assert.equal(run.groups[0].metrics.passRate, 0)
@@ -578,31 +589,41 @@ test('分组：Control + Treatment 各自覆盖参数，报告里有组间对比
   assert.equal(JSON.parse(lines[2]).group, 't1')
 })
 
-test('分组校验：必须正好一个 Control，覆盖只能指向模板里的阶段', async () => {
+test('分组校验：提交时才能配组，必须正好一个 Control，只能配模板里的阶段', async () => {
   const stages = [
     { id: 'scraping', module: 'inline', config: {} },
     { id: 'annotation', module: 'coverage-keyword', config: {} },
     { id: 'metrics', module: 'standard', config: {} },
     { id: 'reporting', module: 'markdown', config: {} },
   ]
-  const twoControls = await call('POST', '/autoeval-api/templates', {
-    id: 'bad-groups', name: 'x', stages,
-    groups: [{ id: 'control', kind: 'control' }, { id: 'control2', kind: 'control' }],
-  })
+  const saved = await call('POST', '/autoeval-api/templates', { id: 'group-guard', name: 'x', stages })
+  assert.equal(saved.ok, true, saved.error)
+
+  const cases = [{ id: 'c1', query: '一', material: '苹果', infoPoints: ['苹果'] }]
+  const run = (groups) => call('POST', '/autoeval-api/run', { templateId: 'group-guard', cases, groups })
+
+  const twoControls = await run([{ id: 'control', kind: 'control' }, { id: 'c2', kind: 'control' }])
   assert.equal(twoControls.ok, false)
   assert.match(twoControls.error, /正好有一个 Control/)
 
-  const badOverride = await call('POST', '/autoeval-api/templates', {
-    id: 'bad-override', name: 'x', stages,
-    groups: [{ id: 'control', kind: 'control' }, { id: 't1', kind: 'treatment', overrides: { nope: { config: {} } } }],
-  })
-  assert.equal(badOverride.ok, false)
-  assert.match(badOverride.error, /没有的阶段 nope/)
+  const noControl = await run([{ id: 't1', kind: 'treatment' }])
+  assert.equal(noControl.ok, false)
+  assert.match(noControl.error, /正好有一个 Control/)
 
-  const auto = await call('POST', '/autoeval-api/templates', { id: 'auto-control', name: 'x', stages })
+  const badStage = await run([{ id: 'control', kind: 'control', stages: { nope: { module: 'inline' } } }])
+  assert.equal(badStage.ok, false)
+  assert.match(badStage.error, /没有的阶段 nope/)
+
+  const badModule = await run([{ id: 'control', kind: 'control', stages: { scraping: { module: 'nope' } } }])
+  assert.equal(badModule.ok, false)
+  assert.match(badModule.error, /没有执行模块 nope/)
+
+  // 不给 groups 也能跑：默认一个 Control 用模板默认配置
+  const auto = await call('POST', '/autoeval-api/run', { templateId: 'group-guard', cases })
   assert.equal(auto.ok, true, auto.error)
-  assert.equal(auto.template.groups.length, 1)
-  assert.equal(auto.template.groups[0].kind, 'control')
+  const { run: autoRun } = await waitForRun(auto.runId)
+  assert.equal(autoRun.groups.length, 1)
+  assert.equal(autoRun.groups[0].kind, 'control')
 })
 
 test('Queryset：导入 CSV / JSONL / XLSX，增删改查', async () => {

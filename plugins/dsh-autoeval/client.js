@@ -18,6 +18,10 @@ window.__ModuleLoader__.load({
       'tab.templates': '任务模板',
       'tab.querysets': 'Queryset',
       'qs.unit': '个 Queryset',
+      'tpl.defaultsHint': '这里是每个阶段的默认模块与参数，提交任务时再按 Control / Treatment 各组调整',
+      'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
+      'tpl.defaultsHint': 'Defaults for each stage; adjust them per Control / Treatment group when you submit a run',
+      'submit.groupHint': 'One Control is fixed; add as many Treatments as you like, each with its own stage modules and parameters',
       'tpl.stageOrderHint': '阶段按这里的顺序执行；四个预置阶段之间的先后固定，可以插自定义阶段',
       'tpl.addStage': '新增阶段',
       'tpl.addTreatment': '新增 Treatment 组',
@@ -745,6 +749,7 @@ window.__ModuleLoader__.load({
       const [taskStatus, setTaskStatus] = React.useState('all')
       const [openStages, setOpenStages] = React.useState({})
       const [stageGroup, setStageGroup] = React.useState('')
+      const [submitGroups, setSubmitGroups] = React.useState(null)
       const [templateTab, setTemplateTab] = React.useState('form')
       const [templateYaml, setTemplateYaml] = React.useState('')
       const [yamlBusy, setYamlBusy] = React.useState(false)
@@ -822,27 +827,6 @@ window.__ModuleLoader__.load({
           }
         })
       }
-
-      function groupsFromTemplate(template) {
-        const raw = (template && template.groups) || []
-        const list = raw.length > 0 ? raw : [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }]
-        return list.map((group, index) => ({
-          id: group.id || (index === 0 ? 'control' : `treatment-${index}`),
-          kind: group.kind === 'treatment' ? 'treatment' : 'control',
-          name: group.name || (index === 0 ? 'Control' : group.id),
-          overrides: Object.fromEntries(Object.entries(group.overrides || {}).map(([stageId, patch]) => {
-            const preset = moduleOf(stageId, patch.module)
-            const config = { ...(preset ? preset.config : {}), ...(patch.config || {}) }
-            return [stageId, {
-              module: patch.module || (preset ? preset.id : 'custom'),
-              config,
-              configText: JSON.stringify(config, null, 2),
-            }]
-          })),
-        }))
-      }
-
-      // 提交任务只认模板：draft 里只记选了哪个模板，阶段配置一律取自模板本身
       function defaultDraft(data) {
         const preferred = data.workspace && data.workspace.config ? data.workspace.config.defaultTemplate : ''
         const template = ((data.templates || []).find((item) => item.id === preferred))
@@ -941,16 +925,18 @@ window.__ModuleLoader__.load({
           [t('submit.template'), `${template.name}（${template.id}）`],
           ...caseRows,
         ]
-        const templateStages = stagesFromTemplate(template)
-        const stageRows = templateStages.map((stage) => {
-          const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
-          const label = stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
-          return `${label} · ${stage.module}${config ? ` ${config}` : ''}`
-        })
-        for (const group of groupsFromTemplate(template)) {
-          const names = Object.keys(group.overrides)
+        const groups = ensureSubmitGroups()
+        const groupPayload = submitGroupPayload(template, groups)
+        payload.groups = groupPayload
+        const stageRows = []
+        for (const group of groups) {
           const prefix = group.kind === 'control' ? t('tpl.control') : group.name
-          stageRows.push(`${prefix}${names.length > 0 ? ` · ${t('tpl.overrides')}：${names.join('、')}` : ''}`)
+          const parts = stagesFromTemplate(template).map((stage) => {
+            const entry = group.stages[stage.id] || {}
+            const config = Object.keys(entry.config || {}).length > 0 ? ` ${JSON.stringify(entry.config)}` : ''
+            return `${stageLabel(stage)}:${entry.module || stage.module}${config}`
+          })
+          stageRows.push(`${prefix} · ${parts.join(' | ')}`)
         }
         setConfirmDialog({
           kind: 'run',
@@ -1050,13 +1036,11 @@ window.__ModuleLoader__.load({
             name: template.name,
             description: template.description || '',
             stages: stagesFromTemplate(template),
-            groups: groupsFromTemplate(template),
           },
           id: template.id,
           name: template.name,
           description: template.description || '',
           stages: stagesFromTemplate(template),
-          groups: groupsFromTemplate(template),
         })
         setEditingDraft(false)
         setTemplateTab(template.broken ? 'yaml' : 'form')
@@ -1137,7 +1121,6 @@ window.__ModuleLoader__.load({
               name: saved.name,
               description: saved.description || '',
               stages: stagesFromTemplate(saved),
-              groups: groupsFromTemplate(saved),
             })
             setNotice(t('tpl.saved'))
             await loadTemplateYaml(saved.id)
@@ -1163,7 +1146,6 @@ window.__ModuleLoader__.load({
           stages: stagesFromTemplate({
             stages: (state.stages || []).map((stage) => ({ id: stage.id, module: stage.presets[0].id })),
           }),
-          groups: groupsFromTemplate(null),
         })
         setEditingDraft(true)
         setTemplateTab('form')
@@ -1180,7 +1162,6 @@ window.__ModuleLoader__.load({
           name: `${source.name} ${t('tpl.copySuffix')}`,
           description: source.description || '',
           stages: stagesFromTemplate(source),
-          groups: groupsFromTemplate(source),
         })
       }
 
@@ -1196,50 +1177,6 @@ window.__ModuleLoader__.load({
       }
 
       /** 预置阶段之间不能换位置，跟自定义阶段换可以。 */
-      function canSwap(index, delta) {
-        const list = templateDraft.stages || []
-        const a = list[index]
-        const b = list[index + delta]
-        if (!a || !b) return false
-        return !(a.kind === 'preset' && b.kind === 'preset')
-      }
-
-      function moveStageAt(index, delta) {
-        if (!canSwap(index, delta)) return
-        updateStages((list) => {
-          const next = [...list]
-          const target = index + delta
-          const tmp = next[index]
-          next[index] = next[target]
-          next[target] = tmp
-          return next
-        })
-      }
-
-      /** 把某个预置阶段加回模板：插在它该在的位置上。 */
-      function addPresetStage(stageId) {
-        updateStages((list) => {
-          if (list.some((item) => item.id === stageId)) return list
-          const def = catalogStage(stageId)
-          const preset = def && def.presets[0]
-          const entry = {
-            id: stageId,
-            kind: 'preset',
-            name: stageId,
-            module: preset ? preset.id : 'custom',
-            config: { ...(preset ? preset.config : {}) },
-            configText: JSON.stringify(preset ? preset.config : {}, null, 2),
-          }
-          const rank = (id) => {
-            const found = (state.stages || []).findIndex((item) => item.id === id)
-            return found < 0 ? 99 : found
-          }
-          const at = list.findIndex((item) => item.kind === 'preset' && rank(item.id) > rank(stageId))
-          if (at < 0) return [...list, entry]
-          return [...list.slice(0, at), entry, ...list.slice(at)]
-        })
-      }
-
       function addCustomStage() {
         const used = new Set((templateDraft.stages || []).map((item) => item.id))
         let index = 1
@@ -1284,49 +1221,182 @@ window.__ModuleLoader__.load({
         setStageAt(index, { module: moduleId, config, configText: JSON.stringify(config, null, 2) })
       }
 
-      function updateGroups(mapper) {
-        setTemplateDraft((current) => {
-          if (!current) return current
-          return { ...current, groups: mapper(current.groups || []) }
+
+      function canSwap(index, delta) {
+        const list = templateDraft.stages || []
+        const a = list[index]
+        const b = list[index + delta]
+        if (!a || !b) return false
+        return !(a.kind === 'preset' && b.kind === 'preset')
+      }
+
+      function moveStageAt(index, delta) {
+        if (!canSwap(index, delta)) return
+        updateStages((list) => {
+          const next = [...list]
+          const target = index + delta
+          const tmp = next[index]
+          next[index] = next[target]
+          next[target] = tmp
+          return next
         })
       }
 
-      function setGroupAt(index, patch) {
-        updateGroups((list) => list.map((item, at) => (at === index ? { ...item, ...patch } : item)))
+      /** 把某个预置阶段加回模板：插在它该在的位置上。 */
+      function addPresetStage(stageId) {
+        updateStages((list) => {
+          if (list.some((item) => item.id === stageId)) return list
+          const def = catalogStage(stageId)
+          const preset = def && def.presets[0]
+          const entry = {
+            id: stageId,
+            kind: 'preset',
+            name: stageId,
+            module: preset ? preset.id : 'custom',
+            config: { ...(preset ? preset.config : {}) },
+            configText: JSON.stringify(preset ? preset.config : {}, null, 2),
+          }
+          const rank = (id) => {
+            const found = (state.stages || []).findIndex((item) => item.id === id)
+            return found < 0 ? 99 : found
+          }
+          const at = list.findIndex((item) => item.kind === 'preset' && rank(item.id) > rank(stageId))
+          if (at < 0) return [...list, entry]
+          return [...list.slice(0, at), entry, ...list.slice(at)]
+        })
+      }
+      function applyTemplateToDraft(template) {
+        setDraft({ templateId: template.id, name: template.name })
+        setSubmitGroups(groupsForTemplate(template))
+        setNotice('')
+        setError('')
       }
 
-      function addTreatment() {
-        const used = new Set((templateDraft.groups || []).map((item) => item.id))
-        let index = 1
-        while (used.has(`treatment-${index}`)) index += 1
-        updateGroups((list) => [...list, {
-          id: `treatment-${index}`,
-          kind: 'treatment',
-          name: `${t('tpl.treatment')} ${index}`,
-          overrides: {},
-        }])
+      /** 提交时的分组：Control 用模板默认值起头，Treatment 默认抄一份 Control。 */
+      function groupsFromDefaults(template, source) {
+        const base = source || stagesFromTemplate(template)
+        return {
+          id: 'control',
+          kind: 'control',
+          name: 'Control',
+          stages: Object.fromEntries(base.map((stage) => [stage.id, {
+            module: stage.module,
+            config: { ...(stage.config || {}) },
+          }])),
+        }
       }
 
-      function removeGroupAt(index) {
-        const group = (templateDraft.groups || [])[index]
-        if (!group || group.kind === 'control') return
-        updateGroups((list) => list.filter((item, at) => at !== index))
+      function groupsForTemplate(template) {
+        return [groupsFromDefaults(template)]
       }
 
-      function setOverride(groupIndex, stageId, next) {
-        updateGroups((list) => list.map((group, at) => {
-          if (at !== groupIndex) return group
-          const overrides = { ...group.overrides }
-          if (next === null) delete overrides[stageId]
-          else overrides[stageId] = next
-          return { ...group, overrides }
+      function ensureSubmitGroups() {
+        const template = templates.find((item) => item.id === draft.templateId)
+        if (!template) return []
+        if (!Array.isArray(submitGroups) || submitGroups.length === 0) return [groupsFromDefaults(template)]
+        return submitGroups
+      }
+
+      function setSubmitGroupAt(index, patchOrUpdater) {
+        const list = ensureSubmitGroups()
+        setSubmitGroups(list.map((group, at) => {
+          if (at !== index) return group
+          return typeof patchOrUpdater === 'function' ? patchOrUpdater(group) : { ...group, ...patchOrUpdater }
         }))
       }
 
-      function applyTemplateToDraft(template) {
-        setDraft({ templateId: template.id, name: template.name })
-        setNotice('')
-        setError('')
+      function setSubmitStageConfig(index, stageId, next) {
+        setSubmitGroupAt(index, (group) => ({
+          ...group,
+          stages: { ...group.stages, [stageId]: { ...group.stages[stageId], ...next } },
+        }))
+      }
+
+      function addSubmitTreatment() {
+        const list = ensureSubmitGroups()
+        const used = new Set(list.map((group) => group.id))
+        let index = 1
+        while (used.has(`treatment-${index}`)) index += 1
+        const control = list.find((group) => group.kind === 'control') || list[0]
+        setSubmitGroups([...list, {
+          id: `treatment-${index}`,
+          kind: 'treatment',
+          name: `${t('tpl.treatment')} ${index}`,
+          stages: Object.fromEntries(Object.entries(control.stages).map(([stageId, entry]) => [
+            stageId,
+            { module: entry.module, config: { ...(entry.config || {}) } },
+          ])),
+        }])
+      }
+
+      function removeSubmitGroupAt(index) {
+        setSubmitGroups(ensureSubmitGroups().filter((group, at) => at !== index || group.kind === 'control'))
+      }
+
+      /** 提交时每组每阶段的模块与参数；确认框和请求体共用。 */
+      function submitGroupPayload(template, groups) {
+        return groups.map((group) => ({
+          id: group.id,
+          kind: group.kind,
+          name: group.name,
+          stages: Object.fromEntries(Object.entries(group.stages || {}).map(([stageId, entry]) => [
+            stageId,
+            { module: entry.module, config: { ...(entry.config || {}) } },
+          ])),
+        }))
+      }
+
+      function renderSubmitGroups(template) {
+        const groups = ensureSubmitGroups()
+        const stages = stagesFromTemplate(template)
+        return h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-title' }, t('tpl.groups')),
+          h('div', { className: 'ae-card-note' }, t('submit.groupHint')),
+          ...groups.map((group, index) => {
+            const isControl = group.kind === 'control'
+            return h('div', { className: 'ae-group-edit', key: `${group.id}-${index}`, 'data-kind': group.kind },
+              h('div', { className: 'ae-card-head' },
+                h('div', { className: 'ae-card-title' },
+                  `${isControl ? t('tpl.control') : t('tpl.treatment')} · ${group.name || group.id}`),
+                h('span', {
+                  className: 'ae-badge', 'data-kind': isControl ? 'builtin' : 'custom',
+                }, group.kind),
+                !isControl
+                  ? h('button', {
+                    type: 'button', className: 'ae-btn ae-btn-xs',
+                    onClick: () => removeSubmitGroupAt(index),
+                  }, t('action.delete'))
+                  : null),
+              h('div', { className: 'ae-field' },
+                h('label', { className: 'ae-label' }, t('tpl.groupName')),
+                h('input', {
+                  className: 'ae-input', type: 'text', value: group.name || '',
+                  onChange: (event) => setSubmitGroupAt(index, { name: event.target.value }),
+                })),
+              ...stages.map((stage) => {
+                const entry = group.stages[stage.id] || { module: stage.module, config: {} }
+                const preset = moduleOf(stage.id, entry.module)
+                return h('div', { className: 'ae-override', key: stage.id },
+                  h('div', { className: 'ae-override-title' }, stageLabel(stage)),
+                  moduleChips(stage.id, entry.module, false, (moduleId) => {
+                    const next = moduleOf(stage.id, moduleId)
+                    setSubmitStageConfig(index, stage.id, {
+                      module: moduleId,
+                      config: { ...(next ? next.config : {}) },
+                    })
+                  }),
+                  ...((preset && preset.fields) || []).map((field) => renderFieldInput(
+                    field,
+                    (entry.config || {})[field.key],
+                    (value) => setSubmitStageConfig(index, stage.id, {
+                      config: { ...(entry.config || {}), [field.key]: value },
+                    }),
+                    false,
+                  )))
+              }))
+          }),
+          h('div', { className: 'ae-actions' },
+            h('button', { type: 'button', className: 'ae-btn', onClick: addSubmitTreatment }, t('tpl.addTreatment'))))
       }
 
       async function saveTemplateDraft() {
@@ -1344,29 +1414,12 @@ window.__ModuleLoader__.load({
           module: stage.module,
           config: { ...(stage.config || {}) },
         }))
-        const groups = (current.groups || []).map((group) => ({
-          id: group.id,
-          kind: group.kind,
-          name: group.name,
-          overrides: Object.fromEntries(Object.entries(group.overrides || {}).map(([stageId, patch]) => [
-            stageId,
-            { module: patch.module, config: { ...(patch.config || {}) } },
-          ])),
-        }))
         setError('')
         const stageRows = stages.map((stage, index) => {
           const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
           const label = stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
           return `${index + 1}. ${label} · ${stage.module}${config ? ` ${config}` : ''}`
         })
-        for (const group of groups) {
-          const names = Object.keys(group.overrides).map((stageId) => {
-            const stage = stages.find((item) => item.id === stageId)
-            if (!stage) return stageId
-            return stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stageId}`)
-          })
-          stageRows.push(`${group.name}${names.length > 0 ? ` · ${t('tpl.overrides')}：${names.join('、')}` : ''}`)
-        }
         setConfirmDialog({
           kind: 'template',
           title: t('confirm.templateTitle'),
@@ -1377,7 +1430,7 @@ window.__ModuleLoader__.load({
             [t('tpl.desc'), current.description || '-'],
           ],
           stages: stageRows,
-          payload: { id, name: current.name || id, description: current.description || '', stages, groups },
+          payload: { id, name: current.name || id, description: current.description || '', stages },
           draft: current,
         })
       }
@@ -1396,14 +1449,12 @@ window.__ModuleLoader__.load({
             name: payload.name,
             description: payload.description,
             stages: payload.stages.map((stage) => ({ ...stage, config: { ...(stage.config || {}) } })),
-            groups: payload.groups.map((group) => ({ ...group, overrides: { ...group.overrides } })),
           }
           setTemplateDraft({
             ...current,
             mode: 'edit',
             readonly: false,
             stages: stagesFromTemplate(snapshot),
-            groups: groupsFromTemplate(snapshot),
             original: snapshot,
           })
           setEditingDraft(false)
@@ -1432,7 +1483,6 @@ window.__ModuleLoader__.load({
             name: original.name,
             description: original.description,
             stages: stagesFromTemplate(original),
-            groups: groupsFromTemplate(original),
           })
         }
         setEditingDraft(false)
@@ -1577,76 +1627,6 @@ window.__ModuleLoader__.load({
             : null,
           ...body)
       }
-
-      function renderGroupCard(group, index, editing, stages) {
-        const isControl = group.kind === 'control'
-        return h('div', { className: 'ae-group-edit', key: `${group.id}-${index}`, 'data-kind': group.kind },
-          h('div', { className: 'ae-card-head' },
-            h('div', { className: 'ae-card-title' }, `${isControl ? t('tpl.control') : t('tpl.treatment')} · ${group.name || group.id}`),
-            h('span', {
-              className: 'ae-badge',
-              'data-kind': isControl ? 'builtin' : 'custom',
-            }, group.kind),
-            editing && !isControl
-              ? h('button', {
-                type: 'button', className: 'ae-btn ae-btn-xs',
-                onClick: () => removeGroupAt(index),
-              }, t('action.delete'))
-              : null),
-          editing
-            ? h('div', { className: 'ae-field' },
-              h('label', { className: 'ae-label' }, t('tpl.groupName')),
-              h('input', {
-                className: 'ae-input', type: 'text', value: group.name || '',
-                onChange: (event) => setGroupAt(index, { name: event.target.value }),
-              }))
-            : null,
-          ...stages.map((stage) => {
-            const patch = group.overrides[stage.id]
-            return h('div', { className: 'ae-override', key: stage.id },
-              h('label', { className: 'ae-check' },
-                h('input', {
-                  type: 'checkbox', checked: Boolean(patch), disabled: !editing,
-                  onChange: (event) => {
-                    if (!editing) return
-                    if (event.target.checked) {
-                      setOverride(index, stage.id, {
-                        module: stage.module,
-                        config: { ...(stage.config || {}) },
-                        configText: JSON.stringify(stage.config || {}, null, 2),
-                      })
-                    } else {
-                      setOverride(index, stage.id, null)
-                    }
-                  },
-                }),
-                h('span', null, `${t('tpl.overrides')} ${stageLabel(stage)}`)),
-              patch
-                ? h('div', { className: 'ae-override-body' },
-                  moduleChips(stage.id, patch.module, !editing, (moduleId) => {
-                    const preset = moduleOf(stage.id, moduleId)
-                    setOverride(index, stage.id, {
-                      module: moduleId,
-                      config: { ...(preset ? preset.config : {}) },
-                      configText: JSON.stringify(preset ? preset.config : {}, null, 2),
-                    })
-                  }),
-                  ...((moduleOf(stage.id, patch.module) || {}).fields || []).map((field) => renderFieldInput(
-                    field,
-                    (patch.config || {})[field.key],
-                    (next) => setOverride(index, stage.id, {
-                      ...patch,
-                      config: { ...(patch.config || {}), [field.key]: next },
-                      configText: JSON.stringify({ ...(patch.config || {}), [field.key]: next }, null, 2),
-                    }),
-                    !editing,
-                  )))
-                : null)
-          }))
-      }
-
-      // ---------------------------------------------------------- 任务列表
-      // ---------------------------------------------------------- 二次确认
       function renderConfirm() {
         const dialog = confirmDialog
         if (!dialog) return null
@@ -1851,7 +1831,12 @@ window.__ModuleLoader__.load({
                 key === 'all' ? t('tasks.allStatus') : t(`label.${key}`)))),
               h('button', {
                 type: 'button', className: 'ae-btn ae-btn-primary', disabled: Boolean(active),
-                onClick: () => { setSubmitting(true); setError(''); setNotice('') },
+                onClick: () => {
+                  setSubmitting(true)
+                  setSubmitGroups(groupsForTemplate(templates.find((item) => item.id === draft.templateId) || templates[0] || { stages: [] }))
+                  setError('')
+                  setNotice('')
+                },
               }, t('action.submit')),
               h('span', { className: 'ae-toolbar-count' }, `${filtered.length} / ${runs.length} ${t('label.tasks')}`)),
             runs.length === 0
@@ -2209,17 +2194,14 @@ window.__ModuleLoader__.load({
       function renderSubmit() {
         const progress = active && active.progress
         const selected = templates.find((item) => item.id === draft.templateId)
+        const templateStages = selected ? stagesFromTemplate(selected) : []
         const preview = selected
           ? h('div', null,
-            ...(state.stages || []).map((stage) => {
-              const entry = (selected.stages && selected.stages[stage.id]) || {}
-              const config = entry.config && Object.keys(entry.config).length > 0
-                ? JSON.stringify(entry.config)
-                : ''
+            ...templateStages.map((stage) => {
+              const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
               return h('div', { className: 'ae-detail-row', key: stage.id },
-                h('span', { className: 'ae-detail-key' }, t(`stage.${stage.id}`)),
-                h('span', { className: 'ae-mono' },
-                  `${entry.template || '-'}${config ? `  ${config}` : ''}`))
+                h('span', { className: 'ae-detail-key' }, stageLabel(stage)),
+                h('span', { className: 'ae-mono' }, `${stage.module}${config ? `  ${config}` : ''}`))
             }))
           : null
         return h('div', { className: 'ae-page' },
@@ -2241,6 +2223,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'ae-card-note' }, t('submit.templateHint'))),
             h('div', { className: 'ae-label', style: { marginTop: '4px' } }, t('tpl.config')),
             preview || h('div', { className: 'ae-empty' }, t('submit.pickTemplate'))),
+          selected ? renderSubmitGroups(selected) : null,
           h('div', { className: 'ae-card' },
             h('div', { className: 'ae-card-head' },
               h('div', { className: 'ae-card-title' }, t('submit.cases')),
@@ -2426,14 +2409,11 @@ window.__ModuleLoader__.load({
           }, t(`tpl.tab.${tab}`))))
 
         const stageList = current.stages || []
-        const groupList = current.groups || []
         const formView = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
           h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
-          ...stageList.map((stage, index) => renderStageRow(stage, index, false)),
-          h('div', { className: 'ae-card-title', style: { marginTop: '10px' } }, t('tpl.groups')),
-          h('div', { className: 'ae-card-note' }, t('tpl.groupHint')),
-          ...groupList.map((group, index) => renderGroupCard(group, index, false, stageList)))
+          h('div', { className: 'ae-card-note' }, t('tpl.defaultsHint')),
+          ...stageList.map((stage, index) => renderStageRow(stage, index, false)))
 
         const formEdit = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
@@ -2448,13 +2428,7 @@ window.__ModuleLoader__.load({
               }, `+ ${t(`stage.${stage.id}`)}`)),
               h('button', { type: 'button', className: 'ae-btn', onClick: addCustomStage }, `+ ${t('stage.custom')}`))
             : null,
-          h('div', { className: 'ae-card-title', style: { marginTop: '10px' } }, t('tpl.groups')),
-          h('div', { className: 'ae-card-note' }, t('tpl.groupHint')),
-          ...groupList.map((group, index) => renderGroupCard(group, index, editing, stageList)),
-          editing
-            ? h('div', { className: 'ae-actions' },
-              h('button', { type: 'button', className: 'ae-btn', onClick: addTreatment }, t('tpl.addTreatment')))
-            : null)
+          )
 
         const yamlPane = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-head' },

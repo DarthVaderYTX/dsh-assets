@@ -766,7 +766,7 @@ test('模板列表点进详情：内置只读', () => {
   assert.equal(findAll(view, byClass('ae-btn ae-btn-primary')).length, 0, '内置模板不该有保存')
   assert.ok(findAll(view, clickable('复制')).length >= 1, '内置模板缺复制')
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '模板详情不是四个阶段')
-  assert.equal(findAll(view, byClass('ae-group-edit')).length, 1, '默认应该有一个 Control 组')
+  assert.equal(findAll(view, byClass('ae-group-edit')).length, 0, '模板里不该有分组')
 })
 
 test('自定义模板可以改字段并保存', async () => {
@@ -982,45 +982,47 @@ test('模板编辑：预置阶段可以删掉，也能从新增区加回来', as
   assert.ok(titles.some((text) => text === '2. Annotation · 标注'), '加回来的位置不对')
 })
 
-test('模板编辑：可以加 Treatment 组并覆盖阶段参数', async () => {
+test('提交任务：可以加 Treatment 并独立配置各阶段的模块与参数', async () => {
   let view = ensureTaskList()
-  view = openTab(view, '任务模板')
-  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
   view = render(mainComponent(), {})
-  findAll(view, clickable('编辑'))[0].props.onClick()
-  view = render(mainComponent(), {})
-  assert.equal(findAll(view, byClass('ae-group-edit')).length, 1, '默认只有一个 Control')
 
+  // 默认只有 Control，且它的各阶段按模板默认值预填
+  let groups = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groups.length, 1, '默认应该只有一个 Control')
+  assert.ok(texts(groups[0]).includes('Control'))
+  assert.ok(texts(groups[0]).includes('Scraping'), 'Control 没列出阶段')
+
+  // 加一个 Treatment：默认抄 Control，之后可以独立改
   findAll(view, clickable('新增 Treatment 组'))[0].props.onClick()
   view = render(mainComponent(), {})
-  const groups = findAll(view, byClass('ae-group-edit'))
+  groups = findAll(view, byClass('ae-group-edit'))
   assert.equal(groups.length, 2, '没加上 Treatment')
-  assert.ok(texts(groups[1]).includes('Control') === false)
 
-  // 勾上第一个阶段的覆盖
-  const checks = findAll(groups[1], byClass('ae-check'))
-  assert.equal(checks.length, 4, '每个阶段一行覆盖开关')
-  findAll(checks[0], (node) => node.props.type === 'checkbox')[0]
-    .props.onChange({ target: { checked: true } })
+  // 改 Treatment 的抓取模块：换成 inline
+  const chips = findAll(groups[1], byClass('ae-chip'))
+  assert.ok(chips.length >= 4, 'Treatment 应该给每个阶段都列出模块')
+  const inlineChip = chips.find((node) => texts(node).includes('用例自带材料'))
+  assert.ok(inlineChip, '找不到 inline 模块')
+  inlineChip.props.onClick()
   view = render(mainComponent(), {})
-  const groupsAfter = findAll(view, byClass('ae-group-edit'))
-  assert.equal(groupsAfter.length, 2, '覆盖之后组数量变了')
-  assert.ok(texts(groupsAfter[1]).includes('覆盖 Scraping'), '覆盖标题不对')
 
   const before = calls.length
   findAll(view, byClass('ae-btn ae-btn-primary'))[0].props.onClick()
   view = render(mainComponent(), {})
   const modal = findAll(view, byClass('ae-modal'))[0]
   assert.ok(texts(modal).includes('Treatment 1'), '确认框没列出 Treatment')
+
   await findAll(view, clickable('确认'))[0].props.onClick()
   await settle()
-  const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/templates'))
-  assert.ok(posted, '没有保存')
+  const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/run'))
+  assert.ok(posted, '没有 POST /run')
   const body = JSON.parse(posted.body)
-  assert.equal(body.groups.length, 2)
+  assert.equal(body.groups.length, 2, '分组没带上')
+  assert.equal(body.groups[0].kind, 'control')
   assert.equal(body.groups[1].kind, 'treatment')
-  assert.ok(body.groups[1].overrides.scraping, '覆盖没带上')
-  assert.equal(body.stages.length, 4)
+  assert.equal(body.groups[1].stages.scraping.module, 'inline', 'Treatment 的抓取模块没改到')
+  assert.equal(body.groups[0].stages.scraping.module, 'websearch', 'Control 不该被连累')
 })
 
 test('任务列表可以重跑与删除', async () => {
