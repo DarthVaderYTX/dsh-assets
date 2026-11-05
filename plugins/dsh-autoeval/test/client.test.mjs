@@ -982,6 +982,41 @@ test('模板编辑：预置阶段可以删掉，也能从新增区加回来', as
   assert.ok(titles.some((text) => text === '2. Annotation · 标注'), '加回来的位置不对')
 })
 
+test('提交任务：分组可以折叠成一行摘要，也能全部展开/折叠', async () => {
+  let view = ensureTaskList()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
+  view = render(mainComponent(), {})
+
+  // 默认展开：Control 底下有各阶段的模块 chips
+  let groups = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groups[0].props['data-open'], 'true', 'Control 默认应该展开')
+  assert.ok(findAll(groups[0], byClass('ae-chip')).length > 0, '展开时应该看到模块')
+
+  // 折叠：chips 消失，改显示一行摘要
+  findAll(groups[0], byClass('ae-fold'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  groups = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groups[0].props['data-open'], 'false', '折叠没生效')
+  assert.equal(findAll(groups[0], byClass('ae-chip')).length, 0, '折叠后不该还有 chips')
+  const summary = findAll(groups[0], byClass('ae-card-note ae-group-summary'))[0]
+  assert.ok(summary, '折叠后没有摘要')
+  assert.ok(texts(summary).includes('Scraping · 抓取:websearch'), `摘要内容不对：${texts(summary)}`)
+
+  // 再加一个 Treatment，然后全部折叠 / 全部展开
+  findAll(view, clickable('新增 Treatment 组'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('全部折叠'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  groups = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groups.length, 2)
+  assert.ok(groups.every((node) => node.props['data-open'] === 'false'), '全部折叠没生效')
+
+  findAll(view, clickable('全部展开'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  groups = findAll(view, byClass('ae-group-edit'))
+  assert.ok(groups.every((node) => node.props['data-open'] === 'true'), '全部展开没生效')
+})
+
 test('模板编辑：阶段列表可以拖拽排序，预置阶段不能互相越过', async () => {
   let view = ensureTaskList()
   view = openTab(view, '任务模板')

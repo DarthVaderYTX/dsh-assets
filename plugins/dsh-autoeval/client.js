@@ -23,12 +23,12 @@ window.__ModuleLoader__.load({
       'tpl.orderLocked': '预置阶段之间的先后固定，不能把其中一个拖到另一个后面',
       'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
       'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
-      'tpl.defaultsHint': 'Defaults for each stage; adjust them per Control / Treatment group when you submit a run',
-      'tpl.dragHint': 'Drag to reorder',
-      'tpl.orderLocked': 'Preset stages keep their relative order: you cannot drag one past another',
-      'tpl.stageOrderHint': 'Drag the ⠿ handle to reorder (or use ↑ ↓); the four preset stages keep their relative order and custom stages can be interleaved',
-      'submit.groupHint': 'One Control is fixed; add as many Treatments as you like, each with its own stage modules and parameters',
-      'tpl.stageOrderHint': '阶段按这里的顺序执行；四个预置阶段之间的先后固定，可以插自定义阶段',
+      'tpl.defaultsHint': '这里是每个阶段的默认模块与参数，提交任务时再按 Control / Treatment 各组调整',
+      'tpl.dragHint': '按住拖动调整顺序',
+      'tpl.orderLocked': '预置阶段之间的先后固定，不能把其中一个拖到另一个后面',
+      'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
+      'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
+      'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
       'tpl.addStage': '新增阶段',
       'tpl.addTreatment': '新增 Treatment 组',
       'tpl.presetStage': '预置',
@@ -269,6 +269,10 @@ window.__ModuleLoader__.load({
 
       'error.cases': '用例不是合法的 JSON 数组',
       'error.params': '该阶段参数不是合法的 JSON',
+      'tpl.expand': '展开',
+      'tpl.collapse': '折叠',
+      'tpl.expandAll': '全部展开',
+      'tpl.collapseAll': '全部折叠',
     }
 
     const en = {
@@ -278,7 +282,7 @@ window.__ModuleLoader__.load({
       'tab.templates': 'Templates',
       'tab.querysets': 'Queryset',
       'qs.unit': 'querysets',
-      'tpl.stageOrderHint': 'Stages run in this order; the four preset stages keep their relative order, custom stages can be interleaved',
+      'tpl.stageOrderHint': 'Drag the ⠿ handle to reorder (or use ↑ ↓); the four preset stages keep their relative order and custom stages can be interleaved',
       'tpl.addStage': 'Add stage',
       'tpl.addTreatment': 'Add treatment',
       'tpl.presetStage': 'Preset',
@@ -519,6 +523,14 @@ window.__ModuleLoader__.load({
 
       'error.cases': 'Cases are not a valid JSON array',
       'error.params': 'Stage params are not valid JSON',
+      'tpl.defaultsHint': 'Defaults for each stage; adjust them per Control / Treatment group when you submit a run',
+      'tpl.dragHint': 'Drag to reorder',
+      'tpl.expand': 'Expand',
+      'tpl.collapse': 'Collapse',
+      'tpl.expandAll': 'Expand all',
+      'tpl.collapseAll': 'Collapse all',
+      'tpl.orderLocked': 'Preset stages keep their relative order: you cannot drag one past another',
+      'submit.groupHint': 'One Control is fixed; add as many Treatments as you like, each with its own stage modules and parameters',
     }
 
     // ------------------------------------------------------------ 演示用例
@@ -610,6 +622,10 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-fold { display: flex; align-items: center; gap: 6px; background: none; border: none;
+  padding: 0; cursor: pointer; color: inherit; font: inherit; text-align: left; }
+.ae-fold-hint { font-size: 12px; color: var(--dsw-alias-text-l3, rgba(0,0,0,.45)); }
+.ae-group-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ae-drag { cursor: grab; color: var(--dsw-alias-text-l3, rgba(0,0,0,.35)); font-size: 14px;
   line-height: 1; padding: 2px 4px; border-radius: 4px; user-select: none; }
 .ae-drag:active { cursor: grabbing; }
@@ -763,6 +779,7 @@ window.__ModuleLoader__.load({
       const [submitGroups, setSubmitGroups] = React.useState(null)
       const [dragStage, setDragStage] = React.useState(-1)
       const [dragOverStage, setDragOverStage] = React.useState(-1)
+      const [groupFolded, setGroupFolded] = React.useState({})
       const [templateTab, setTemplateTab] = React.useState('form')
       const [templateYaml, setTemplateYaml] = React.useState('')
       const [yamlBusy, setYamlBusy] = React.useState(false)
@@ -1388,54 +1405,103 @@ window.__ModuleLoader__.load({
         }))
       }
 
+      /** 折叠状态按组 id 记，没记过就是展开。 */
+      function groupOpen(group) {
+        return groupFolded[group.id] !== false
+      }
+
+      function setAllGroups(open) {
+        const groups = ensureSubmitGroups()
+        setGroupFolded(Object.fromEntries(groups.map((group) => [group.id, open])))
+      }
+
+      /** 折叠时用一行摘要让你还能看清这组怎么跑。 */
+      function groupSummary(group, stages) {
+        return stages
+          .map((stage) => {
+            const entry = group.stages[stage.id] || {}
+            return `${stageLabel(stage)}:${entry.module || stage.module}`
+          })
+          .join(' · ')
+      }
+
       function renderSubmitGroups(template) {
         const groups = ensureSubmitGroups()
         const stages = stagesFromTemplate(template)
         return h('div', { className: 'ae-card' },
-          h('div', { className: 'ae-card-title' }, t('tpl.groups')),
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, t('tpl.groups')),
+            h('div', { className: 'ae-actions', style: { marginLeft: 'auto' } },
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-xs',
+                onClick: () => setAllGroups(true),
+              }, t('tpl.expandAll')),
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-xs',
+                onClick: () => setAllGroups(false),
+              }, t('tpl.collapseAll')))),
           h('div', { className: 'ae-card-note' }, t('submit.groupHint')),
           ...groups.map((group, index) => {
             const isControl = group.kind === 'control'
-            return h('div', { className: 'ae-group-edit', key: `${group.id}-${index}`, 'data-kind': group.kind },
-              h('div', { className: 'ae-card-head' },
-                h('div', { className: 'ae-card-title' },
-                  `${isControl ? t('tpl.control') : t('tpl.treatment')} · ${group.name || group.id}`),
-                h('span', {
-                  className: 'ae-badge', 'data-kind': isControl ? 'builtin' : 'custom',
-                }, group.kind),
-                !isControl
-                  ? h('button', {
-                    type: 'button', className: 'ae-btn ae-btn-xs',
-                    onClick: () => removeSubmitGroupAt(index),
-                  }, t('action.delete'))
-                  : null),
-              h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('tpl.groupName')),
-                h('input', {
-                  className: 'ae-input', type: 'text', value: group.name || '',
-                  onChange: (event) => setSubmitGroupAt(index, { name: event.target.value }),
-                })),
-              ...stages.map((stage) => {
-                const entry = group.stages[stage.id] || { module: stage.module, config: {} }
-                const preset = moduleOf(stage.id, entry.module)
-                return h('div', { className: 'ae-override', key: stage.id },
-                  h('div', { className: 'ae-override-title' }, stageLabel(stage)),
-                  moduleChips(stage.id, entry.module, false, (moduleId) => {
-                    const next = moduleOf(stage.id, moduleId)
-                    setSubmitStageConfig(index, stage.id, {
-                      module: moduleId,
-                      config: { ...(next ? next.config : {}) },
-                    })
+            const open = groupOpen(group)
+            const head = h('div', { className: 'ae-card-head' },
+              h('button', {
+                type: 'button', className: 'ae-fold', 'aria-expanded': String(open),
+                onClick: () => setGroupFolded({ ...groupFolded, [group.id]: !open }),
+              },
+              h('span', { className: 'ae-caret' }, open ? '▾' : '▸'),
+              h('span', { className: 'ae-card-title' },
+                `${isControl ? t('tpl.control') : t('tpl.treatment')} · ${group.name || group.id}`),
+              h('span', {
+                className: 'ae-badge', 'data-kind': isControl ? 'builtin' : 'custom',
+              }, group.kind),
+              h('span', { className: 'ae-fold-hint' }, open ? t('tpl.collapse') : t('tpl.expand'))),
+              !isControl
+                ? h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-xs',
+                  onClick: () => removeSubmitGroupAt(index),
+                }, t('action.delete'))
+                : null)
+            if (!open) {
+              return h('div', {
+                className: 'ae-group-edit', key: `${group.id}-${index}`,
+                'data-kind': group.kind, 'data-open': 'false',
+              },
+              head,
+              h('div', { className: 'ae-card-note ae-group-summary' }, groupSummary(group, stages)))
+            }
+            return h('div', {
+              className: 'ae-group-edit', key: `${group.id}-${index}`,
+              'data-kind': group.kind, 'data-open': 'true',
+            },
+            head,
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.groupName')),
+              h('input', {
+                className: 'ae-input', type: 'text', value: group.name || '',
+                onChange: (event) => setSubmitGroupAt(index, { name: event.target.value }),
+              })),
+            ...stages.map((stage) => {
+              const entry = group.stages[stage.id] || { module: stage.module, config: {} }
+              const preset = moduleOf(stage.id, entry.module)
+              return h('div', { className: 'ae-override', key: stage.id },
+                h('div', { className: 'ae-override-title' }, stageLabel(stage)),
+                moduleChips(stage.id, entry.module, false, (moduleId) => {
+                  const next = moduleOf(stage.id, moduleId)
+                  setSubmitStageConfig(index, stage.id, {
+                    module: moduleId,
+                    config: { ...(next ? next.config : {}) },
+                  })
+                }),
+                ...((preset && preset.fields) || []).map((field) => renderFieldInput(
+                  field,
+                  (entry.config || {})[field.key],
+                  (value) => setSubmitStageConfig(index, stage.id, {
+                    config: { ...(entry.config || {}), [field.key]: value },
                   }),
-                  ...((preset && preset.fields) || []).map((field) => renderFieldInput(
-                    field,
-                    (entry.config || {})[field.key],
-                    (value) => setSubmitStageConfig(index, stage.id, {
-                      config: { ...(entry.config || {}), [field.key]: value },
-                    }),
-                    false,
-                  )))
-              }))
+                  false,
+                )))
+            }))
           }),
           h('div', { className: 'ae-actions' },
             h('button', { type: 'button', className: 'ae-btn', onClick: addSubmitTreatment }, t('tpl.addTreatment'))))

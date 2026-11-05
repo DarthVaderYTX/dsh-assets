@@ -182,7 +182,7 @@ node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{
 
 - **Control**：固定一个，不能删也不能改名。每个阶段都从模板的默认值起头，可以逐个换模块、改参数
 - **Treatment**：点「新增 Treatment 组」加，可以加多个、可以删、可以改名。新组默认抄一份当前的 Control，之后每个阶段独立配置——**换的是哪一组、哪一阶段的实现都不影响别的组**
-- 每组都会把模板里的所有阶段列出来，一个阶段一张卡片（模块 chips + 按 schema 生成的参数控件）
+- 每组里把模板的每个阶段列出来（模块 chips + 按 schema 生成的参数控件），组多的时候点标题行可以**折叠**成一行摘要（`Scraping:websearch · Annotation:coverage-keyword …`），表头还有「全部展开 / 全部折叠」
 
 点「运行」先出确认框，逐组列出「阶段：模块 + 参数」，确认后才真的发 `POST /run`：
 
@@ -329,7 +329,7 @@ dsh-autoeval/
 
 ```bash
 cd plugins/dsh-autoeval
-node --test          # 68 个用例：宿主流水线 28 + 浏览器面板 29 + 导入解析 11
+node --test          # 69 个用例：宿主流水线 28 + 浏览器面板 30 + 导入解析 11
 ```
 
 - `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、模板优先级、模板 YAML 落盘与回读、老 state.json 模板迁移、工作区配置与裁剪、Queryset的导入/增删改/按集跑、坏配置拦截、任务详情/重跑/删除；数据写在临时 `DSH_HOME` 里。
