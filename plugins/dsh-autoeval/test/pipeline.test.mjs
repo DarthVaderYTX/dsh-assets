@@ -390,6 +390,68 @@ test('用自定义模板提交时，阶段参数来自 YAML 文件', async () =>
   await call('DELETE', '/autoeval-api/templates?id=fast-template')
 })
 
+test('工作区：路径、计数、配置读写', async () => {
+  await call('POST', '/autoeval-api/templates', {
+    id: 'workspace-probe',
+    name: '工作区探针',
+    stages: {
+      scraping: { template: 'inline', config: {} },
+      annotation: { template: 'coverage-keyword', config: {} },
+      metrics: { template: 'standard', config: {} },
+      reporting: { template: 'markdown', config: {} },
+    },
+  })
+  const state = await call('GET', '/autoeval-api/state')
+  const workspace = state.workspace
+  assert.ok(workspace, '没有工作区信息')
+  assert.equal(workspace.dir, path.join(process.env.DSH_HOME, 'storages', 'autoeval'))
+  assert.equal(workspace.configPath, path.join(workspace.dir, 'config.yaml'))
+  assert.ok(workspace.templatesDir.endsWith(path.join('autoeval', 'templates')))
+  assert.equal(workspace.templates, 1, '模板计数不对')
+  assert.equal(workspace.runs, state.runs.length, '运行目录数应与记录数一致')
+  assert.ok(workspace.bytes > 0, '占用应为正数')
+  assert.equal(workspace.config.maxRuns, 30)
+  assert.equal(workspace.config.commandTimeoutMs, 120000)
+  assert.deepEqual(workspace.fields.map((field) => field.key), ['maxRuns', 'defaultTemplate', 'commandTimeoutMs'])
+
+  const saved = await call('POST', '/autoeval-api/workspace/config', {
+    maxRuns: 12, defaultTemplate: 'websearch-tool', commandTimeoutMs: 30000,
+  })
+  assert.equal(saved.ok, true, saved.error)
+  assert.equal(saved.config.maxRuns, 12)
+
+  // 配置文件真的落盘，且带注释
+  const text = await fsp.readFile(workspace.configPath, 'utf8')
+  assert.ok(text.includes('maxRuns: 12'), text)
+  assert.ok(text.includes('#'), '配置里应该有字段说明')
+
+  // 越界会被挡住
+  const bad = await call('POST', '/autoeval-api/workspace/config', { maxRuns: 5000 })
+  assert.equal(bad.ok, false)
+  assert.match(bad.error, /不能大于 500/)
+
+  // 直接改文件也能读到
+  await fsp.writeFile(workspace.configPath, 'maxRuns: 7\ncommandTimeoutMs: 5000\n', 'utf8')
+  const again = await call('GET', '/autoeval-api/state')
+  assert.equal(again.workspace.config.maxRuns, 7)
+  assert.equal(again.workspace.config.commandTimeoutMs, 5000)
+
+  await call('POST', '/autoeval-api/workspace/config', {
+    maxRuns: 30, defaultTemplate: 'websearch-tool', commandTimeoutMs: 120000,
+  })
+  await call('DELETE', '/autoeval-api/templates?id=workspace-probe')
+})
+
+test('保留次数按工作区配置裁剪', async () => {
+  await call('POST', '/autoeval-api/workspace/config', { maxRuns: 1, defaultTemplate: 'websearch-tool', commandTimeoutMs: 120000 })
+  const started = await call('POST', '/autoeval-api/run', { name: '只留一条', templateId: 'websearch-tool', cases: cases.slice(0, 1) })
+  assert.equal(started.ok, true, started.error)
+  const state = await waitForIdle()
+  assert.equal(state.runs.length, 1, '应该按 maxRuns 裁剪到 1 条')
+  assert.equal(state.runs[0].id, started.runId)
+  await call('POST', '/autoeval-api/workspace/config', { maxRuns: 30, defaultTemplate: 'websearch-tool', commandTimeoutMs: 120000 })
+})
+
 test('老 state.json 里的模板启动时迁成 YAML 文件', async () => {
   const home = await fsp.mkdtemp(path.join(os.tmpdir(), 'autoeval-migrate-'))
   const dir = path.join(home, 'storages', 'autoeval')

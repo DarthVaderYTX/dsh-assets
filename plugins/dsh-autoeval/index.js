@@ -10,7 +10,6 @@ import os from 'node:os'
 import { parseYaml, stringifyYaml } from './yaml.js'
 
 const API_PREFIX = '/autoeval-api'
-const MAX_RUNS = 30
 const DATA_VERSION = 1
 
 function dataDir() {
@@ -86,6 +85,114 @@ const FIELDS = {
   'reporting.custom': [
     { key: 'command', type: 'command', label: '自定义命令', default: '', hint: 'stdin 收 JSON，stdout 吐 JSON' },
   ],
+}
+
+/** 工作区级配置：一个 config.yaml，管保留多少运行、默认模板、自定义命令超时。 */
+const WORKSPACE_FIELDS = [
+  { key: 'maxRuns', type: 'number', label: '保留最近多少次运行', default: 30, min: 1, max: 500, step: 1 },
+  {
+    key: 'defaultTemplate', type: 'string', label: '默认模板 id', default: 'websearch-tool',
+    hint: '提交任务时默认选中；留空则用列表里的第一个',
+  },
+  {
+    key: 'commandTimeoutMs', type: 'number', label: '自定义命令超时', default: 120000,
+    min: 1000, max: 600000, step: 1000, unit: 'ms',
+  },
+]
+
+function configPath() {
+  return path.join(dataDir(), 'config.yaml')
+}
+
+/** 工作区概况：面板顶部显示路径、各类文件数量与占用。 */
+async function workspaceInfo() {
+  const dir = dataDir()
+  const config = await readWorkspaceConfig()
+  let bytes = 0
+  let runs = 0
+  async function walk(target) {
+    let entries = []
+    try {
+      entries = await fsp.readdir(target, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = path.join(target, entry.name)
+      if (entry.isDirectory()) {
+        await walk(full)
+        continue
+      }
+      try {
+        bytes += (await fsp.stat(full)).size
+      } catch {
+        // 统计失败不影响别的
+      }
+    }
+  }
+  await walk(dir)
+  let templates = 0
+  try {
+    templates = (await fsp.readdir(path.join(dir, 'templates'))).filter((name) => /\.ya?ml$/i.test(name)).length
+  } catch {
+    templates = 0
+  }
+  try {
+    const entries = await fsp.readdir(path.join(dir, 'runs'), { withFileTypes: true })
+    runs = entries.filter((entry) => entry.isDirectory()).length
+  } catch {
+    runs = 0
+  }
+  return {
+    dir,
+    templates,
+    runs,
+    bytes,
+    configPath: configPath(),
+    templatesDir: path.join(dir, 'templates'),
+    runsDir: path.join(dir, 'runs'),
+  }
+}
+
+/** 读工作区配置：缺文件就用默认值，写坏了带上错误说明但不影响跑。 */
+async function readWorkspaceConfig() {
+  const config = Object.fromEntries(WORKSPACE_FIELDS.map((field) => [field.key, field.default]))
+  let broken = null
+  try {
+    const text = await fsp.readFile(configPath(), 'utf8')
+    const doc = parseYaml(text)
+    if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
+      for (const field of WORKSPACE_FIELDS) {
+        if (doc[field.key] === undefined || doc[field.key] === null) continue
+        try {
+          config[field.key] = validateField('config', 'workspace', field, doc[field.key])
+        } catch (error) {
+          broken = String(error && error.message ? error.message : error)
+        }
+      }
+    }
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') broken = `配置读取失败：${error.message}`
+  }
+  return { ...config, broken }
+}
+
+async function writeWorkspaceConfig(input) {
+  const config = {}
+  for (const field of WORKSPACE_FIELDS) {
+    const value = input && input[field.key] !== undefined ? input[field.key] : field.default
+    config[field.key] = validateField('config', 'workspace', field, value)
+  }
+  const comments = Object.fromEntries(WORKSPACE_FIELDS.map((field) => [field.key, fieldComment(field)]))
+  const head = [
+    '# AutoEval 工作区配置',
+    `# 文件：${configPath()}`,
+    '# 面板「工作区 → 配置」里改的是同一个文件，也可以直接编辑它。',
+    '',
+  ].join('\n')
+  await fsp.mkdir(dataDir(), { recursive: true })
+  await fsp.writeFile(configPath(), `${head}${stringifyYaml(config, { comments })}`, 'utf8')
+  return config
 }
 
 /** 某个阶段某个执行模板的可配字段（面板用它生成表单）。 */
@@ -212,6 +319,17 @@ function percentile(values, p) {
   return sorted[index]
 }
 
+/** 自定义命令的超时从工作区配置来，取不到就用 120s。 */
+async function commandTimeout() {
+  try {
+    const config = await readWorkspaceConfig()
+    const value = Number(config.commandTimeoutMs)
+    return Number.isFinite(value) && value >= 1000 ? value : 120000
+  } catch {
+    return 120000
+  }
+}
+
 /** 跑一段自定义命令：stdin 收 JSON，stdout 吐 JSON。 */
 function runCommand(command, payload, timeoutMs = 120000) {
   return new Promise((resolve, reject) => {
@@ -271,7 +389,7 @@ async function stageScraping(ctx, payload, config, signal) {
   const { cases } = payload
   const template = payload.template
   if (template === 'custom') {
-    const result = await runCommand(config.command, { stage: 'scraping', cases, config })
+    const result = await runCommand(config.command, { stage: 'scraping', cases, config }, await commandTimeout())
     return Array.isArray(result) ? result : result.cases || []
   }
   const queryField = config.queryField || 'query'
@@ -354,7 +472,7 @@ function pointsOf(item, config) {
 async function stageAnnotation(ctx, payload, config, signal) {
   const { cases } = payload
   if (payload.template === 'custom') {
-    const result = await runCommand(config.command, { stage: 'annotation', cases, config })
+    const result = await runCommand(config.command, { stage: 'annotation', cases, config }, await commandTimeout())
     return Array.isArray(result) ? result : result.cases || []
   }
   const minCoverage = typeof config.minCoverage === 'number' ? config.minCoverage : 1
@@ -387,7 +505,7 @@ async function stageAnnotation(ctx, payload, config, signal) {
 async function stageMetrics(ctx, payload, config, signal) {
   const { cases, stages } = payload
   if (payload.template === 'custom') {
-    const result = await runCommand(config.command, { stage: 'metrics', cases, stages, config })
+    const result = await runCommand(config.command, { stage: 'metrics', cases, stages, config }, await commandTimeout())
     return result.summary || result
   }
   const scored = cases.filter((item) => typeof item.score === 'number')
@@ -509,7 +627,7 @@ function buildMarkdown(payload, config) {
 
 async function stageReporting(ctx, payload, config, signal) {
   if (payload.template === 'custom') {
-    const result = await runCommand(config.command, { stage: 'reporting', ...payload, config })
+    const result = await runCommand(config.command, { stage: 'reporting', ...payload, config }, await commandTimeout())
     return { text: String(result.text || result.report || ''), format: 'markdown' }
   }
   if (payload.template === 'json') {
@@ -745,11 +863,17 @@ class AutoEvalService {
   async list() {
     const state = await readState()
     const files = await readTemplates()
+    const config = await readWorkspaceConfig()
     return {
       stages: stageCatalog(),
       templates: [...BUILTIN_TEMPLATES, ...files],
       runs: state.runs,
       active: this.active ? this.snapshot() : null,
+      workspace: {
+        ...(await workspaceInfo()),
+        fields: WORKSPACE_FIELDS,
+        config,
+      },
     }
   }
 
@@ -880,7 +1004,8 @@ class AutoEvalService {
       const finished = { ...run, cases: undefined }
       delete finished.cases
       state.runs.unshift(finished)
-      state.runs = state.runs.slice(0, MAX_RUNS)
+      const config = await readWorkspaceConfig()
+      state.runs = state.runs.slice(0, Math.max(1, Number(config.maxRuns) || 30))
       await writeState(state)
       this.lastRun = finished
       this.active = null
@@ -995,6 +1120,26 @@ class AutoEvalService {
     return { id, yaml: text, file, builtin: false }
   }
 
+  async saveConfig(input) {
+    return writeWorkspaceConfig(input)
+  }
+
+  /** 在系统文件管理器里打开工作区目录（本地应用，失败就把错误抛回去）。 */
+  async openWorkspace() {
+    const dir = dataDir()
+    await fsp.mkdir(dir, { recursive: true })
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    await new Promise((resolve, reject) => {
+      const child = spawn(opener, [dir], { stdio: 'ignore', detached: true })
+      child.on('error', (error) => reject(new Error(`打不开 ${dir}：${error.message}`)))
+      child.on('spawn', () => {
+        child.unref()
+        resolve()
+      })
+    })
+    return { dir }
+  }
+
   /** 只渲染不落盘：新建模板时 YAML 页签也要有东西可看。 */
   async previewTemplate(input) {
     return { yaml: templateToYaml(normalizeTemplate(input)) }
@@ -1094,6 +1239,16 @@ export function apply(ctx, config = {}) {
           if (req.method === 'POST' && routePath === '/templates') {
             const record = await service.saveTemplate(await readBody(req))
             sendJson(res, 200, { ok: true, template: record })
+            return
+          }
+          if (req.method === 'POST' && routePath === '/workspace/config') {
+            const config = await service.saveConfig(await readBody(req))
+            sendJson(res, 200, { ok: true, config })
+            return
+          }
+          if (req.method === 'POST' && routePath === '/workspace/open') {
+            const result = await service.openWorkspace()
+            sendJson(res, 200, { ok: true, ...result })
             return
           }
           if (req.method === 'POST' && routePath === '/templates/preview') {

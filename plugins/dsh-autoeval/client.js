@@ -20,6 +20,8 @@ window.__ModuleLoader__.load({
       'action.submit': '提交任务',
       'action.run': '开始运行',
       'action.cancel': '取消',
+      'action.edit': '编辑',
+      'action.reload': '重新载入',
       'action.cancelTask': '取消运行',
       'action.rerun': '重跑',
       'action.delete': '删除',
@@ -101,6 +103,19 @@ window.__ModuleLoader__.load({
       'tpl.yamlHint': '也可以直接用编辑器改 templates/<id>.yaml',
       'tpl.yamlSync': 'YAML 是模板的真实来源；表单保存会重写成 YAML，两边不会各改各的。',
       'tpl.saved': '模板已保存。',
+      'tpl.viewing': '只读查看，点「编辑」改配置',
+      'tpl.editing': '编辑中，保存前不会动文件',
+      'tpl.noParams': '这个执行模板没有可配参数',
+      'ws.title': '工作区',
+      'ws.copy': '复制路径',
+      'ws.open': '打开目录',
+      'ws.config': '配置',
+      'ws.templates': '模板',
+      'ws.runs': '运行',
+      'ws.copied': '工作区路径已复制。',
+      'ws.copyManual': '复制这个路径：',
+      'ws.opened': '已打开工作区：',
+      'ws.saved': '工作区配置已保存。',
       'tpl.broken': '配置有问题',
       'tpl.usedBy': '用在',
 
@@ -171,6 +186,8 @@ window.__ModuleLoader__.load({
       'action.submit': 'Submit task',
       'action.run': 'Run',
       'action.cancel': 'Cancel',
+      'action.edit': 'Edit',
+      'action.reload': 'Reload',
       'action.cancelTask': 'Cancel run',
       'action.rerun': 'Re-run',
       'action.delete': 'Delete',
@@ -253,6 +270,19 @@ window.__ModuleLoader__.load({
       'tpl.yamlSync': 'The YAML file is the source of truth; saving the form rewrites it, so the two never drift.',
       'tpl.saved': 'Template saved.',
       'tpl.broken': 'Broken config',
+      'tpl.viewing': 'Read-only; hit Edit to change the config',
+      'tpl.editing': 'Editing — nothing is written until you save',
+      'tpl.noParams': 'This preset has no parameters',
+      'ws.title': 'Workspace',
+      'ws.copy': 'Copy path',
+      'ws.open': 'Open folder',
+      'ws.config': 'Config',
+      'ws.templates': 'templates',
+      'ws.runs': 'runs',
+      'ws.copied': 'Workspace path copied.',
+      'ws.copyManual': 'Copy this path:',
+      'ws.opened': 'Opened workspace: ',
+      'ws.saved': 'Workspace config saved.',
       'tpl.usedBy': 'used by',
 
       'submit.title': 'Submit evaluation task',
@@ -402,6 +432,15 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-workspace { margin: 8px 0; padding: 8px 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.06));
+  font-size: 12px; }
+.ae-workspace-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ae-workspace-label { color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-workspace-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-workspace-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 12px;
+  margin-top: 8px; }
 .ae-acc { display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12));
   border-radius: 10px; overflow: hidden; }
 .ae-acc-item { border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.06)); }
@@ -496,6 +535,9 @@ window.__ModuleLoader__.load({
       const [templateTab, setTemplateTab] = React.useState('form')
       const [templateYaml, setTemplateYaml] = React.useState('')
       const [yamlBusy, setYamlBusy] = React.useState(false)
+      const [workspaceEditing, setWorkspaceEditing] = React.useState(false)
+      const [editingDraft, setEditingDraft] = React.useState(false)
+      const [workspaceDraft, setWorkspaceDraft] = React.useState(null)
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -532,7 +574,10 @@ window.__ModuleLoader__.load({
 
       // 提交任务只认模板：draft 里只记选了哪个模板，阶段配置一律取自模板本身
       function defaultDraft(data) {
-        const template = (data.templates || []).find((item) => item.builtin) || (data.templates || [])[0]
+        const preferred = data.workspace && data.workspace.config ? data.workspace.config.defaultTemplate : ''
+        const template = ((data.templates || []).find((item) => item.id === preferred))
+          || (data.templates || []).find((item) => item.builtin)
+          || (data.templates || [])[0]
         return {
           templateId: template ? template.id : '',
           name: template ? template.name : 'AutoEval 运行',
@@ -686,11 +731,18 @@ window.__ModuleLoader__.load({
         setTemplateDraft({
           mode: template.builtin ? 'view' : 'edit',
           readonly: Boolean(template.builtin),
+          original: {
+            id: template.id,
+            name: template.name,
+            description: template.description || '',
+            stages: cloneStages(template.stages, state.stages),
+          },
           id: template.id,
           name: template.name,
           description: template.description || '',
           stages: cloneStages(template.stages, state.stages),
         })
+        setEditingDraft(false)
         setTemplateTab(template.broken ? 'yaml' : 'form')
         setTemplateYaml('')
         if (template.broken) void loadTemplateYaml(template.id)
@@ -766,11 +818,14 @@ window.__ModuleLoader__.load({
         setTemplateDraft({
           mode: 'new',
           readonly: false,
+          original: null,
           id: `template-${Date.now().toString(36)}`,
           name: '',
           description: '',
           stages: cloneStages({}, state.stages),
         })
+        setEditingDraft(true)
+        setTemplateTab('form')
       }
 
       function copyTemplate(source) {
@@ -843,12 +898,47 @@ window.__ModuleLoader__.load({
               stages,
             }),
           })
-          setTemplateDraft({ ...current, mode: 'edit', readonly: false })
+          setTemplateDraft({
+            ...current,
+            mode: 'edit',
+            readonly: false,
+            original: {
+              id,
+              name: current.name || id,
+              description: current.description || '',
+              stages: cloneStages(stages, state.stages),
+            },
+          })
+          setEditingDraft(false)
           setNotice(t('label.saved'))
           await load()
         } catch (failure) {
           setError(String(failure.message || failure))
         }
+      }
+
+      function startTemplateEdit() {
+        setError('')
+        setNotice('')
+        setEditingDraft(true)
+      }
+
+      /** 没保存就退出编辑：回到打开时的样子。 */
+      function cancelTemplateEdit() {
+        setError('')
+        setNotice('')
+        const original = templateDraft && templateDraft.original
+        if (original) {
+          setTemplateDraft({
+            ...templateDraft,
+            id: original.id,
+            name: original.name,
+            description: original.description,
+            stages: cloneStages(original.stages, state.stages),
+          })
+        }
+        setEditingDraft(false)
+        setTemplateYaml('')
       }
 
       async function deleteTemplate(template) {
@@ -934,6 +1024,114 @@ window.__ModuleLoader__.load({
       }
 
       // ---------------------------------------------------------- 任务列表
+      // ---------------------------------------------------------- 工作区
+      function formatBytes(bytes) {
+        const size = Number(bytes) || 0
+        if (size < 1024) return `${size} B`
+        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+        return `${(size / 1024 / 1024).toFixed(1)} MB`
+      }
+
+      async function copyWorkspacePath(dir) {
+        try {
+          if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(dir)
+            setNotice(t('ws.copied'))
+            return
+          }
+        } catch {
+          // 落到下面的降级
+        }
+        setNotice(`${t('ws.copyManual')}${dir}`)
+      }
+
+      async function openWorkspace() {
+        setError('')
+        try {
+          const result = await api('/workspace/open', { method: 'POST' })
+          setNotice(`${t('ws.opened')}${result.dir || ''}`)
+        } catch (error) {
+          setError(String(error && error.message ? error.message : error))
+        }
+      }
+
+      function startWorkspaceEdit() {
+        const config = (state.workspace && state.workspace.config) || {}
+        setWorkspaceDraft({
+          maxRuns: config.maxRuns,
+          defaultTemplate: config.defaultTemplate,
+          commandTimeoutMs: config.commandTimeoutMs,
+        })
+        setWorkspaceEditing(true)
+        setError('')
+        setNotice('')
+      }
+
+      async function saveWorkspaceConfig() {
+        setBusy(true)
+        setError('')
+        try {
+          await api('/workspace/config', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(workspaceDraft || {}),
+          })
+          await load()
+          setWorkspaceEditing(false)
+          setNotice(t('ws.saved'))
+        } catch (error) {
+          setError(String(error && error.message ? error.message : error))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      /** 工作区：路径、模板/运行计数、占用，以及一份工作区级配置。 */
+      function renderWorkspace() {
+        const workspace = state.workspace
+        if (!workspace) return null
+        const fields = workspace.fields || []
+        const config = workspaceDraft || workspace.config || {}
+        return h('div', { className: 'ae-workspace' },
+          h('div', { className: 'ae-workspace-head' },
+            h('span', { className: 'ae-workspace-label' }, t('ws.title')),
+            h('span', { className: 'ae-mono ae-workspace-path', title: workspace.dir }, workspace.dir),
+            h('button', {
+              type: 'button', className: 'ae-link',
+              onClick: () => { void copyWorkspacePath(workspace.dir) },
+            }, t('ws.copy')),
+            h('button', {
+              type: 'button', className: 'ae-link',
+              onClick: () => { void openWorkspace() },
+            }, t('ws.open')),
+            workspaceEditing
+              ? null
+              : h('button', { type: 'button', className: 'ae-link', onClick: startWorkspaceEdit }, t('ws.config')),
+            h('span', { className: 'ae-toolbar-count' },
+              `${t('ws.templates')} ${workspace.templates} · ${t('ws.runs')} ${workspace.runs} · ${formatBytes(workspace.bytes)}`)),
+          workspace.broken
+            ? h('div', { className: 'ae-error' }, workspace.broken)
+            : null,
+          workspaceEditing
+            ? h('div', { className: 'ae-workspace-body' },
+              ...fields.map((field) => renderFieldInput(
+                field,
+                config[field.key],
+                (next) => setWorkspaceDraft({ ...(workspaceDraft || {}), [field.key]: next }),
+                busy,
+              )),
+              h('div', { className: 'ae-actions' },
+                h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-primary', disabled: busy,
+                  onClick: () => { void saveWorkspaceConfig() },
+                }, t('action.save')),
+                h('button', {
+                  type: 'button', className: 'ae-btn',
+                  onClick: () => { setWorkspaceEditing(false); setWorkspaceDraft(null) },
+                }, t('action.cancel'))))
+            : null)
+      }
+
       function renderTaskList() {
         const query = taskQuery.trim().toLowerCase()
         const filtered = runs.filter((item) => {
@@ -968,7 +1166,7 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, tabs, messages,
+          head, renderWorkspace(), tabs, messages,
           h('div', { className: 'ae-card' },
             h('div', { className: 'ae-toolbar' },
               h('input', {
@@ -1125,7 +1323,7 @@ window.__ModuleLoader__.load({
         if (!run) {
           return h('div', { className: 'ae-page' },
             h('style', null, STYLE),
-            head, tabs, messages,
+            head, renderWorkspace(), tabs, messages,
             h('button', {
               type: 'button', className: 'ae-back',
               onClick: () => { setTaskId(''); setDetail(null) },
@@ -1188,7 +1386,7 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, tabs, messages,
+          head, renderWorkspace(), tabs, messages,
           h('button', {
             type: 'button', className: 'ae-back',
             onClick: () => { setTaskId(''); setDetail(null) },
@@ -1237,7 +1435,7 @@ window.__ModuleLoader__.load({
           : null
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, tabs, messages,
+          head, renderWorkspace(), tabs, messages,
           h('button', { type: 'button', className: 'ae-back', onClick: () => setSubmitting(false) },
             `← ${t('action.back')}`),
           h('div', { className: 'ae-card' },
@@ -1286,7 +1484,7 @@ window.__ModuleLoader__.load({
       function renderTemplateList() {
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, tabs, messages,
+          head, renderWorkspace(), tabs, messages,
           h('div', { className: 'ae-toolbar' },
             h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => newTemplate() }, t('action.newTemplate')),
             h('span', { className: 'ae-toolbar-count' },
@@ -1316,13 +1514,8 @@ window.__ModuleLoader__.load({
 
       // ---------------------------------------------------------- 模板详情
       // 按 schema 生成一个字段的控件：类型、范围、枚举都来自宿主给的 fields
-      function renderFieldInput(stageId, entry, field, readonly) {
-        const value = entry.config && entry.config[field.key] !== undefined
-          ? entry.config[field.key]
-          : field.default
-        const patch = (next) => setTemplateStage(stageId, {
-          config: { ...(entry.config || {}), [field.key]: next },
-        })
+      function renderFieldInput(field, value, onPatch, disabled) {
+        const current = value === undefined || value === null ? field.default : value
         const label = h('label', { className: 'ae-label' },
           `${field.label || field.key}${field.unit ? `（${field.unit}）` : ''}`)
         const note = field.hint ? h('div', { className: 'ae-card-note' }, field.hint) : null
@@ -1331,10 +1524,10 @@ window.__ModuleLoader__.load({
           return h('div', { className: 'ae-field', key: field.key },
             label,
             h('input', {
-              className: 'ae-input', type: 'number', disabled: readonly,
+              className: 'ae-input', type: 'number', disabled,
               min: field.min, max: field.max, step: field.step,
-              value: value === undefined || value === null ? '' : String(value),
-              onChange: (event) => patch(event.target.value === '' ? null : Number(event.target.value)),
+              value: current === undefined || current === null ? '' : String(current),
+              onChange: (event) => onPatch(event.target.value === '' ? null : Number(event.target.value)),
             }),
             field.min != null && field.max != null
               ? h('div', { className: 'ae-card-note' }, `范围 ${field.min} ~ ${field.max}`)
@@ -1345,21 +1538,21 @@ window.__ModuleLoader__.load({
           return h('div', { className: 'ae-field', key: field.key },
             h('label', { className: 'ae-label' },
               h('input', {
-                type: 'checkbox', disabled: readonly, checked: Boolean(value),
-                onChange: (event) => patch(event.target.checked),
+                type: 'checkbox', disabled, checked: Boolean(current),
+                onChange: (event) => onPatch(event.target.checked),
               }),
               ` ${field.label || field.key}`),
             note)
         }
         if (field.type === 'list') {
-          const list = Array.isArray(value) ? value : []
+          const list = Array.isArray(current) ? current : []
           return h('div', { className: 'ae-field', key: field.key },
             label,
             h('div', { className: 'ae-chips' },
               ...(field.options || []).map((option) => h('button', {
-                key: option.value, type: 'button', className: 'ae-chip', disabled: readonly,
+                key: option.value, type: 'button', className: 'ae-chip', disabled,
                 'data-active': String(list.includes(option.value)),
-                onClick: () => patch(list.includes(option.value)
+                onClick: () => onPatch(list.includes(option.value)
                   ? list.filter((item) => item !== option.value)
                   : [...list, option.value]),
               }, option.label || option.value))),
@@ -1369,25 +1562,47 @@ window.__ModuleLoader__.load({
           return h('div', { className: 'ae-field', key: field.key },
             label,
             h('input', {
-              className: 'ae-input ae-mono', type: 'text', spellCheck: false, disabled: readonly,
-              placeholder: 'python3 ./my-judge.py', value: value || '',
-              onChange: (event) => patch(event.target.value),
+              className: 'ae-input ae-mono', type: 'text', spellCheck: false, disabled,
+              placeholder: 'python3 ./my-judge.py', value: current || '',
+              onChange: (event) => onPatch(event.target.value),
             }),
             note)
         }
         return h('div', { className: 'ae-field', key: field.key },
           label,
           h('input', {
-            className: 'ae-input', type: 'text', spellCheck: false, disabled: readonly,
-            value: value === undefined || value === null ? '' : String(value),
-            onChange: (event) => patch(event.target.value),
+            className: 'ae-input', type: 'text', spellCheck: false, disabled,
+            value: current === undefined || current === null ? '' : String(current),
+            onChange: (event) => onPatch(event.target.value),
           }),
           note)
+      }
+
+      /** 只读展示：字段值排成行，跟编辑态共用同一份数据。 */
+      function renderStageReadonly(stage, entry) {
+        const preset = stage.presets.find((item) => item.id === entry.template)
+        const fields = (preset && preset.fields) || []
+        return h('div', { className: 'ae-stage-edit', key: stage.id },
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
+            h('div', { className: 'ae-card-note' }, entry.template || '-')),
+          fields.length === 0
+            ? h('div', { className: 'ae-card-note' }, t('tpl.noParams'))
+            : h('div', null, ...fields.map((field) => {
+              const value = entry.config && entry.config[field.key] !== undefined
+                ? entry.config[field.key]
+                : field.default
+              const shown = Array.isArray(value) ? value.join(', ') : String(value === undefined ? '-' : value)
+              return h('div', { className: 'ae-detail-row', key: field.key },
+                h('span', { className: 'ae-detail-key' }, field.label || field.key),
+                h('span', { className: 'ae-mono' }, shown))
+            })))
       }
 
       function renderTemplateDetail() {
         const current = templateDraft
         const readonly = current.readonly
+        const editing = editingDraft && !readonly
         const subtabs = h('div', { className: 'ae-subtabs' },
           ...['form', 'yaml'].map((tab) => h('button', {
             key: tab, type: 'button', className: 'ae-subtab',
@@ -1398,7 +1613,11 @@ window.__ModuleLoader__.load({
             },
           }, t(`tpl.tab.${tab}`))))
 
-        const form = h('div', { className: 'ae-card' },
+        const formView = h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-title' }, t('tpl.config')),
+          ...(state.stages || []).map((stage) => renderStageReadonly(stage, current.stages[stage.id] || {})))
+
+        const formEdit = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
           ...(state.stages || []).map((stage) => {
             const entry = current.stages[stage.id] || {}
@@ -1408,23 +1627,25 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
                 h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
               stageChips(stage, entry, readonly),
-              ...((preset && preset.fields) || []).map((field) => renderFieldInput(stage.id, entry, field, readonly)))
+              ...((preset && preset.fields) || []).map((field) => renderFieldInput(
+                field,
+                entry.config ? entry.config[field.key] : undefined,
+                (next) => setTemplateStage(stage.id, { config: { ...(entry.config || {}), [field.key]: next } }),
+                !editing,
+              )))
           }))
 
         const yamlPane = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-head' },
             h('div', { className: 'ae-card-title' }, t('tpl.yaml')),
             h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('tpl.yamlHint'))),
-          readonly
-            ? h('div', { className: 'ae-card-note' }, t('tpl.readonly'))
-            : null,
           h('textarea', {
             className: 'ae-textarea ae-mono', rows: 26, spellCheck: false,
-            disabled: readonly || yamlBusy,
+            disabled: readonly || !editing || yamlBusy,
             value: templateYaml,
             onChange: (event) => setTemplateYaml(event.target.value),
           }),
-          readonly
+          readonly || !editing
             ? null
             : h('div', { className: 'ae-actions' },
               h('button', {
@@ -1436,9 +1657,13 @@ window.__ModuleLoader__.load({
                 onClick: () => { void loadTemplateYaml() },
               }, t('action.reload'))))
 
+        const body = templateTab === 'form'
+          ? (editing ? formEdit : formView)
+          : yamlPane
+
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
-          head, tabs, messages,
+          head, renderWorkspace(), tabs, messages,
           h('button', { type: 'button', className: 'ae-back', onClick: () => setTemplateDraft(null) },
             `← ${t('action.back')}`),
           h('div', { className: 'ae-card' },
@@ -1448,42 +1673,58 @@ window.__ModuleLoader__.load({
               h('span', {
                 className: 'ae-badge', 'data-kind': readonly ? 'builtin' : 'custom',
               }, readonly ? t('tpl.builtin') : t('tpl.custom')),
-              current.mode === 'new' ? null : h('div', { className: 'ae-card-note' }, t('tpl.edit')),
+              editing
+                ? h('div', { className: 'ae-card-note' }, t('tpl.editing'))
+                : h('div', { className: 'ae-card-note' }, t('tpl.viewing')),
               readonly
                 ? h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('tpl.readonly'))
                 : null),
             subtabs,
-            templateTab === 'form' ? null : h('div', { className: 'ae-card-note' }, t('tpl.yamlSync')),
-            h('div', { className: 'ae-field' },
-              h('label', { className: 'ae-label' }, t('tpl.id')),
-              h('input', {
-                className: 'ae-input', type: 'text', spellCheck: false,
-                disabled: readonly || current.mode === 'edit',
-                value: current.id,
-                onChange: (event) => setTemplateDraft({ ...current, id: event.target.value }),
-              })),
-            h('div', { className: 'ae-field' },
-              h('label', { className: 'ae-label' }, t('tpl.name')),
-              h('input', {
-                className: 'ae-input', type: 'text', disabled: readonly, value: current.name,
-                onChange: (event) => setTemplateDraft({ ...current, name: event.target.value }),
-              })),
-            h('div', { className: 'ae-field' },
-              h('label', { className: 'ae-label' }, t('tpl.desc')),
-              h('input', {
-                className: 'ae-input', type: 'text', disabled: readonly, value: current.description,
-                onChange: (event) => setTemplateDraft({ ...current, description: event.target.value }),
-              }))),
-          templateTab === 'form' ? form : yamlPane,
+            editing
+              ? h('div', null,
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('tpl.id')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', spellCheck: false,
+                    disabled: current.mode === 'edit',
+                    value: current.id,
+                    onChange: (event) => setTemplateDraft({ ...current, id: event.target.value }),
+                  })),
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('tpl.name')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', value: current.name,
+                    onChange: (event) => setTemplateDraft({ ...current, name: event.target.value }),
+                  })),
+                h('div', { className: 'ae-field' },
+                  h('label', { className: 'ae-label' }, t('tpl.desc')),
+                  h('input', {
+                    className: 'ae-input', type: 'text', value: current.description,
+                    onChange: (event) => setTemplateDraft({ ...current, description: event.target.value }),
+                  })))
+              : h('div', null,
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('tpl.id')),
+                  h('span', { className: 'ae-mono' }, current.id)),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('tpl.name')),
+                  h('span', null, current.name || '-')),
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('tpl.desc')),
+                  h('span', null, current.description || '-')))), 
+          body,
           h('div', { className: 'ae-actions' },
-            readonly || templateTab === 'yaml'
+            readonly
               ? null
-              : h('button', {
-                type: 'button', className: 'ae-btn ae-btn-primary',
-                onClick: () => { void saveTemplateDraft() },
-              }, t('action.save')),
+              : editing
+                ? h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-primary',
+                  onClick: () => { void saveTemplateDraft() },
+                }, t('action.save'))
+                : h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: startTemplateEdit }, t('action.edit')),
+            editing ? h('button', { type: 'button', className: 'ae-btn', onClick: cancelTemplateEdit }, t('action.cancel')) : null,
             h('button', { type: 'button', className: 'ae-btn', onClick: () => copyTemplate(current) }, t('action.copyTemplate')),
-            readonly || templateTab === 'yaml'
+            editing || readonly
               ? null
               : h('button', {
                 type: 'button', className: 'ae-btn ae-danger',

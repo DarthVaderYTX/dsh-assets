@@ -106,7 +106,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `how-to-write-document` | skill | [skills/how-to-write-document](skills/how-to-write-document) | 六类文档写作规范与模板：paper / prd / one-pager / experiment-report / research-report / technical-design |
 | `dsh-perf-profiler` | plugin | [plugins/dsh-perf-profiler](plugins/dsh-perf-profiler) | 把 hook 监听器与工具执行体的耗时可归因到插件/hook 点/工具/单次调用；支持实时报告与离线 JSONL 分析 |
 | `work-clock` | plugin | [plugins/work-clock](plugins/work-clock) | 浮窗工作时钟：打卡工时（下班 = 打卡 + 9 小时）、天气、今日飞书日程，临近日程 10/5/1 分钟与午餐/晚餐/会议开始时提醒 |
-| `dsh-autoeval` | plugin | [plugins/dsh-autoeval](plugins/dsh-autoeval) | 左侧栏 AutoEval 面板：四阶段评测流水线（Scraping 抓取 → Annotation 标注 → Metrics 指标 → Reporting 报告），每阶段有内置执行模板也能换成自定义命令；两个页签分别是「评测任务」（按模板提交、筛选、重跑、删除，点进去看指标、可折叠的分阶段进度、逐条结果与报告）与「任务模板」（模板即 `templates/<id>.yaml`，可手改文件也可用表单或 YAML 页签改，内置只读、自定义可建可改可删）；内置 WebSearchTool 检索覆盖模板，报告与逐条结果落盘 |
+| `dsh-autoeval` | plugin | [plugins/dsh-autoeval](plugins/dsh-autoeval) | 左侧栏 AutoEval 面板：四阶段评测流水线（Scraping 抓取 → Annotation 标注 → Metrics 指标 → Reporting 报告），每阶段有内置执行模板也能换成自定义命令；两个页签分别是「评测任务」（按模板提交、筛选、重跑、删除，点进去看指标、可折叠的分阶段进度、逐条结果与报告）与「任务模板」（模板即 `templates/<id>.yaml`，点进去默认只读、点「编辑」才改，内置只能复制）；插件有独立工作区（`storages/autoeval`：config.yaml + templates/ + runs/），面板顶部显示路径并可复制/打开/改配置；内置 WebSearchTool 检索覆盖模板，报告与逐条结果落盘 |
 | `dsh-pet` | plugin | [plugins/dsh-pet](plugins/dsh-pet) | 悬浮像素宠物：十二个品种（狸花猫 / 白猫 / 黑猫 / 金渐层 / 老虎 / 狮子 / 金毛 / 萨摩耶 / 哈士奇 / 鹦鹉 / 绵羊 / 山羊），48×54 全代码绘制，正面与侧面三档转身、呼吸、眨眼、抖耳、摇尾、打盹、发疯都按品种性格逐帧重画；可拖到窗口任意位置，点一下会跳、冒爱心、说专属台词 |
 
 ## 存放约定

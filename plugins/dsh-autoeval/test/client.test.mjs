@@ -30,6 +30,21 @@ const ROW = {
 const STATE = {
   ok: true,
   stages: stageCatalog(),
+  workspace: {
+    dir: '/tmp/autoeval',
+    templates: 1,
+    runs: 2,
+    bytes: 20480,
+    configPath: '/tmp/autoeval/config.yaml',
+    templatesDir: '/tmp/autoeval/templates',
+    runsDir: '/tmp/autoeval/runs',
+    fields: [
+      { key: 'maxRuns', type: 'number', label: '保留最近多少次运行', default: 30, min: 1, max: 500, step: 1 },
+      { key: 'defaultTemplate', type: 'string', label: '默认模板 id', default: 'websearch-tool' },
+      { key: 'commandTimeoutMs', type: 'number', label: '自定义命令超时', default: 120000, min: 1000, max: 600000, step: 1000, unit: 'ms' },
+    ],
+    config: { maxRuns: 30, defaultTemplate: 'websearch-tool', commandTimeoutMs: 120000 },
+  },
   templates: [
     ...BUILTIN_TEMPLATES,
     {
@@ -194,6 +209,8 @@ globalThis.fetch = async (url, options = {}) => {
   if (url.includes('/report')) return reply({ ok: true, text: '# AutoEval 报告\n\n通过率 66.7%' })
   if (url.includes('/runs/rerun')) return reply({ ok: true, runId: 'run-rerun' })
   if (url.includes('/runs?')) return reply({ ok: true, removed: 'run-fixture' })
+  if (url.includes('/workspace/config')) return reply({ ok: true, config: { maxRuns: 5 } })
+  if (url.includes('/workspace/open')) return reply({ ok: true, dir: '/tmp/autoeval' })
   if (url.includes('/templates/raw') && (options.method || 'GET') === 'GET') {
     return reply({
       ok: true,
@@ -307,6 +324,37 @@ test('只有两个页签：评测任务 / 任务模板', async () => {
   assert.equal(tabs.length, 2, '页签不是两个')
   assert.equal(tabs[0].props['data-active'], 'true')
   assert.match(texts(view), /AutoEval/)
+})
+
+test('顶部工作区条：路径、计数、配置可改', async () => {
+  let view = ensureTaskList()
+  const text = texts(view)
+  assert.ok(text.includes('/tmp/autoeval'), '没显示工作区路径')
+  assert.ok(text.includes('模板 1'), '模板计数没显示')
+  assert.ok(text.includes('运行 2'), '运行计数没显示')
+  assert.ok(text.includes('20.0 KB'), '占用没格式化')
+
+  // 打开目录
+  const openBefore = calls.length
+  await findAll(view, clickable('打开目录'))[0].props.onClick()
+  await settle()
+  assert.ok(calls.slice(openBefore).some((call) => call.url.includes('/workspace/open')), '没有请求打开目录')
+
+  // 配置：展开 → 改 → 保存
+  findAll(view, clickable('配置'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const numbers = findAll(view, (node) => node.type === 'input' && node.props.type === 'number')
+  assert.ok(numbers.length >= 2, '配置里应该有数字字段')
+  const maxRuns = numbers.find((node) => node.props.max === 500)
+  assert.ok(maxRuns, 'maxRuns 没带范围')
+  maxRuns.props.onChange({ target: { value: '5' } })
+  view = render(mainComponent(), {})
+  const saveBefore = calls.length
+  await findAll(view, clickable('保存'))[0].props.onClick()
+  await settle()
+  const posted = calls.slice(saveBefore).find((call) => call.method === 'POST' && call.url.includes('/workspace/config'))
+  assert.ok(posted, '没有 POST /workspace/config')
+  assert.equal(JSON.parse(posted.body).maxRuns, 5)
 })
 
 test('任务列表：表格、搜索、状态筛选', () => {
@@ -467,6 +515,12 @@ test('自定义模板可以改字段并保存', async () => {
   view = render(mainComponent(), {})
   assert.ok(texts(view).includes('我的覆盖模板'))
 
+  // 默认只读：没有输入框，只有「编辑」按钮
+  assert.equal(findAll(view, hasClass('ae-input')).length, 0, '默认不该直接可编辑')
+  assert.ok(texts(view).includes('只读查看'), '缺少只读提示')
+
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
   const nameInput = findAll(view, (node) => String(node.props.className || '') === 'ae-input'
     && node.props.value === '我的覆盖模板')[0]
   assert.ok(nameInput, '没有名称输入框')
@@ -480,6 +534,30 @@ test('自定义模板可以改字段并保存', async () => {
   const body = JSON.parse(posted.body)
   assert.equal(body.id, 'my-coverage')
   assert.equal(body.name, '改过名的模板')
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-input')).length, 0, '保存后应回到只读')
+})
+
+test('模板编辑：取消就回到打开时的样子', async () => {
+  let view = ensureTaskList()
+  findAll(view, byClass('ae-tab'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+
+  const nameInput = findAll(view, (node) => String(node.props.className || '') === 'ae-input'
+    && node.props.value === '我的覆盖模板')[0]
+  nameInput.props.onChange({ target: { value: '临时改的名字' } })
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('临时改的名字'))
+
+  findAll(view, clickable('取消'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-input')).length, 0, '取消后应回到只读')
+  assert.ok(texts(view).includes('我的覆盖模板'), '取消后应该回到原来的名字')
+  assert.ok(!texts(view).includes('临时改的名字'), '未保存的修改应该丢掉')
 })
 
 test('模板表单按 schema 生成控件：数字带范围、列表是 chips、命令是输入框', async () => {
@@ -487,6 +565,8 @@ test('模板表单按 schema 生成控件：数字带范围、列表是 chips、
   findAll(view, byClass('ae-tab'))[1].props.onClick()
   view = render(mainComponent(), {})
   findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
   view = render(mainComponent(), {})
 
   const numbers = findAll(view, (node) => node.type === 'input' && node.props.type === 'number')
@@ -513,7 +593,7 @@ test('模板表单按 schema 生成控件：数字带范围、列表是 chips、
   assert.equal(after.filter((node) => node.props['data-active'] === 'true').length, 3, '点一下应该取消选中')
 })
 
-test('模板 YAML 页签：读文件、改、存回去', async () => {
+test('模板 YAML 页签：只读时不能改，进编辑后能改能存', async () => {
   let view = ensureTaskList()
   findAll(view, byClass('ae-tab'))[1].props.onClick()
   view = render(mainComponent(), {})
@@ -528,9 +608,16 @@ test('模板 YAML 页签：读文件、改、存回去', async () => {
   const got = calls.slice(before).find((call) => call.method === 'GET' && call.url.includes('/templates/raw'))
   assert.ok(got, '没有去读模板文件')
 
+  const readonlyArea = findAll(view, byClass('ae-textarea ae-mono'))[0]
+  assert.ok(readonlyArea, 'YAML 页签没有文本域')
+  assert.ok(String(readonlyArea.props.value).includes('id: my-coverage'), '文本域没填上文件内容')
+  assert.equal(readonlyArea.props.disabled, true, '只读态不该能改 YAML')
+
+  // 点「编辑」后文本域解锁
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
   const area = findAll(view, byClass('ae-textarea ae-mono'))[0]
-  assert.ok(area, 'YAML 页签没有文本域')
-  assert.ok(String(area.props.value).includes('id: my-coverage'), '文本域没填上文件内容')
+  assert.notEqual(area.props.disabled, true, '编辑态应该能改 YAML')
 
   area.props.onChange({ target: { value: 'id: my-coverage\nname: 改过的名字\nstages: {}\n' } })
   view = render(mainComponent(), {})
