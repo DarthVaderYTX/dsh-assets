@@ -1015,6 +1015,30 @@ test('提交任务：分组可以折叠成一行摘要，也能全部展开/折�
   assert.ok(groups.every((node) => node.props['data-open'] === 'true'), '全部展开没生效')
 })
 
+test('模板里的每个阶段是一张卡片：带序号、类型与可选实现', async () => {
+  let view = ensureTaskList()
+  view = openTab(view, '任务模板')
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+
+  // 只读态也是卡片
+  let cards = findAll(view, byClass('ae-stage-edit'))
+  assert.equal(cards.length, 4, '四个阶段应该四张卡片')
+  assert.ok(findAll(view, byClass('ae-stage-list')).length === 1, '阶段应该排成一组卡片列表')
+  assert.ok(texts(cards[0]).includes('1. Scraping'), '卡片标题应带序号')
+  assert.ok(texts(cards[0]).includes('可选实现'), '卡片里应列出可选实现')
+  assert.ok(texts(cards[0]).includes('检索抓取'), `可选实现没渲染：${texts(cards[0])}`)
+
+  // 编辑态：拖拽手柄 + 增删按钮，卡片结构不变
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  cards = findAll(view, byClass('ae-stage-edit'))
+  assert.equal(cards.length, 4)
+  assert.ok(cards.every((card) => card.props.draggable === true), '编辑态卡片可拖')
+  assert.equal(findAll(view, byClass('ae-drag')).length, 4, '每张卡片一个拖拽手柄')
+  assert.ok(texts(cards[2]).includes('提交任务时为每个组选定具体实现与参数'), '卡片缺少说明')
+})
+
 test('模板编辑：阶段列表可以拖拽排序，预置阶段不能互相越过', async () => {
   let view = ensureTaskList()
   view = openTab(view, '任务模板')

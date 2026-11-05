@@ -31,6 +31,8 @@ window.__ModuleLoader__.load({
       'tpl.customModule': '自定义命令',
       'tpl.stageName': '阶段名称',
       'tpl.module': '模块',
+      'tpl.modulesAvailable': '可选实现',
+      'tpl.implAtSubmit': '提交任务时为每个组选定具体实现与参数',
       'run.comparison': '组间对比',
       'run.metric': '指标',
       'tpl.noOverride': '没有覆盖任何阶段',
@@ -285,6 +287,8 @@ window.__ModuleLoader__.load({
       'tpl.customModule': 'Custom command',
       'tpl.stageName': 'Stage name',
       'tpl.module': 'Module',
+      'tpl.modulesAvailable': 'Available implementations',
+      'tpl.implAtSubmit': 'Pick the concrete implementation and params per group when you submit',
       'run.comparison': 'Group comparison',
       'run.metric': 'Metric',
       'tpl.noOverride': 'No stage overridden',
@@ -711,9 +715,15 @@ window.__ModuleLoader__.load({
 .ae-template-card:hover { border-color: var(--dsw-alias-border-l2, rgba(0,0,0,.24)); }
 .ae-template-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
   color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-stage-edit { display: flex; flex-direction: column; gap: 6px; padding: 10px 0;
-  border-top: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
-.ae-stage-edit:first-of-type { border-top: 0; }
+.ae-stage-list { display: flex; flex-direction: column; gap: 10px; }
+.ae-stage-edit { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  background: var(--dsw-alias-bg-base, #fff); text-align: left;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 12px; }
+.ae-stage-edit:hover { border-color: var(--dsw-alias-border-l2, rgba(0,0,0,.2)); }
+.ae-stage-body { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ae-stage-body-label { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-stage-modules { font-size: 12px; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-stage-tip { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, rgba(0,0,0,.45)); }
 .ae-progress { height: 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.08)); overflow: hidden; }
 .ae-progress > i { display: block; height: 100%; border-radius: 999px; background: var(--dsw-alias-brand-primary, #247bbf); }
 .ae-empty { font-size: 12.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); padding: 12px 0; }
@@ -1648,8 +1658,17 @@ window.__ModuleLoader__.load({
             onClick: () => { if (!disabled) onPick(preset.id) },
           }, moduleLabel(stageId, preset.id))))
       }
+      /** 模板只排阶段：卡片上不配模块与参数，只把「这个阶段可选哪些实现」摊开看。 */
       function renderStageRow(stage, index, editing) {
-        const body = []
+        const available = stage.kind === 'custom'
+          ? [t('tpl.customModule')]
+          : moduleList(stage.id).map((preset) => moduleLabel(stage.id, preset.id))
+        const body = [
+          h('div', { className: 'ae-stage-body' },
+            h('span', { className: 'ae-stage-body-label' }, t('tpl.modulesAvailable')),
+            h('span', { className: 'ae-stage-modules' }, available.join(' / '))),
+          h('div', { className: 'ae-stage-tip' }, t('tpl.implAtSubmit')),
+        ]
         const dragging = dragStage === index
         const dropping = dragOverStage === index && dragStage >= 0 && dragStage !== index
         return h('div', {
@@ -2504,15 +2523,16 @@ window.__ModuleLoader__.load({
           }, t(`tpl.tab.${tab}`))))
 
         const stageList = current.stages || []
-        const formView = h('div', { className: 'ae-card' },
+        const formView = h('div', { className: 'ae-stage-list' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
           h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
           h('div', { className: 'ae-card-note' }, t('tpl.defaultsHint')),
           ...stageList.map((stage, index) => renderStageRow(stage, index, false)))
 
-        const formEdit = h('div', { className: 'ae-card' },
+        const formEdit = h('div', { className: 'ae-stage-list' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
           h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
+          h('div', { className: 'ae-card-note' }, t('tpl.defaultsHint')),
           ...stageList.map((stage, index) => renderStageRow(stage, index, editing)),
           editing
             ? h('div', { className: 'ae-actions', style: { flexWrap: 'wrap' } },
