@@ -2,7 +2,7 @@
 //   node --test
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, promises as fsp } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -12,6 +12,20 @@ const root = path.dirname(here)
 process.env.DSH_HOME = path.join(os.tmpdir(), 'autoeval-client-test')
 
 const { STAGES, BUILTIN_TEMPLATES } = await import(path.join(root, 'index.js'))
+
+const ROW = {
+  id: 'c1',
+  bucket: 'stable',
+  query: 'Python 3.13 新特性',
+  infoPoints: ['Python', '3.13'],
+  material: 'Python 3.13 有什么新变化',
+  sources: [{ url: 'https://example.com/a', title: 'a' }],
+  latencyMs: 4711,
+  hit: ['Python', '3.13'],
+  missed: [],
+  coverage: 1,
+  score: 1,
+}
 
 const STATE = {
   ok: true,
@@ -30,12 +44,24 @@ const STATE = {
     {
       id: 'run-fixture',
       name: '小测试集 · WebSearchTool 覆盖',
+      templateId: 'websearch-tool',
       status: 'done',
       startedAt: '2026-11-05T04:32:27.686Z',
       finishedAt: '2026-11-05T04:32:58.627Z',
       durationMs: 30944,
-      metrics: { total: 6, scored: 6, passed: 4, passRate: 0.6667, avgCoverage: 0.6667, latency: { p50Ms: 4470 } },
-      stages: { scraping: { status: 'done', durationMs: 30940 } },
+      caseCount: 6,
+      metrics: {
+        total: 6, scored: 6, passed: 4, passRate: 0.6667, avgCoverage: 0.6667,
+        scrapeErrors: 0, latency: { count: 6, avgMs: 4906, p50Ms: 4470, p95Ms: 7514 },
+      },
+      stages: {
+        scraping: { status: 'done', durationMs: 30940, template: 'websearch', config: { maxResults: 5 } },
+        annotation: { status: 'done', durationMs: 1, template: 'coverage-keyword', config: {} },
+        metrics: { status: 'done', durationMs: 0, template: 'standard', config: {} },
+        reporting: { status: 'done', durationMs: 1, template: 'markdown', config: {} },
+      },
+      artifacts: { dir: '/tmp/autoeval/runs/run-fixture', report: '/tmp/r.md', rows: '/tmp/r.jsonl' },
+      log: [],
     },
   ],
   active: null,
@@ -98,18 +124,35 @@ function findAll(node, predicate) {
   return found
 }
 
+const byClass = (name) => (node) => String(node.props.className || '') === name
+const hasClass = (name) => (node) => String(node.props.className || '').split(' ').includes(name)
+const clickable = (label) => (node) => typeof node.type === 'string'
+  && typeof node.props.onClick === 'function' && texts(node).includes(label)
+
 // ---------------------------------------------------------------- fetch 桩
 const calls = []
+
 globalThis.fetch = async (url, options = {}) => {
   calls.push({ url, method: options.method || 'GET', body: options.body })
   const reply = (value, status = 200) => ({ ok: status < 300, status, json: async () => value })
   if (url.endsWith('/state')) return reply(STATE)
   if (url.endsWith('/run')) return reply({ ok: true, runId: 'run-stub' })
   if (url.endsWith('/cancel')) return reply({ ok: true })
-  if (url.includes('/report')) return reply({ ok: true, text: '# stub report' })
-  if (url.includes('/runs/detail')) return reply({ ok: true, run: STATE.runs[0], log: [{ at: '2026-11-05T04:32:27.686Z', stage: 'scraping', message: '完成，用时 30940ms' }] })
-  if (url.includes('/runs?')) return reply({ ok: true, removed: 'run-fixture' })
+  if (url.includes('/runs/detail')) {
+    return reply({
+      ok: true,
+      run: STATE.runs[0],
+      log: [
+        { at: '2026-11-05T04:32:27.686Z', stage: 'scraping', message: '开始（模板 websearch）' },
+        { at: '2026-11-05T04:32:57.600Z', stage: 'scraping', message: '完成，用时 30940ms' },
+      ],
+    })
+  }
+  if (url.includes('/rows')) return reply({ ok: true, text: `${JSON.stringify(ROW)}\n` })
+  if (url.includes('/report')) return reply({ ok: true, text: '# AutoEval 报告\n\n通过率 66.7%' })
   if (url.includes('/runs/rerun')) return reply({ ok: true, runId: 'run-rerun' })
+  if (url.includes('/runs?')) return reply({ ok: true, removed: 'run-fixture' })
+  if (url.includes('/templates')) return reply({ ok: true, template: { id: 'x' } })
   return reply({ ok: false, error: `unexpected ${url}` }, 404)
 }
 
@@ -119,12 +162,11 @@ globalThis.clearInterval = () => {}
 
 // ---------------------------------------------------------------- 加载插件
 let captured = null
-globalThis.window = { __ModuleLoader__: { load: (mod) => { captured = mod } } }
+globalThis.window = { __ModuleLoader__: { load: (mod) => { captured = mod } }, confirm: () => true }
 const source = readFileSync(path.join(root, 'client.js'), 'utf8')
-// 写成临时文件再 import：报错时行号可读，而不是一长串 base64
 const copyPath = path.join(os.tmpdir(), 'autoeval-client-under-test.mjs')
-await import('node:fs').then(({ promises }) => promises.writeFile(copyPath, source, 'utf8'))
-await import(`${'file://'}${copyPath}`)
+await fsp.writeFile(copyPath, source, 'utf8')
+await import(`file://${copyPath}`)
 
 let dict = {}
 const registered = []
@@ -144,6 +186,26 @@ const mod = captured.factory((name) => {
   if (name === 'react') return React
   throw new Error(`意外的 require：${name}`)
 })
+
+const mainComponent = () => registered.find((item) => item.options.name === 'main').component
+const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
+
+// 首次渲染 + 等 /state 落地
+async function boot() {
+  render(mainComponent(), {})
+  for (const fn of effects.splice(0)) fn()
+  for (let tick = 0; tick < 60 && !pending; tick += 1) await new Promise((resolve) => setTimeout(resolve, 5))
+  pending = false
+  return render(mainComponent(), {})
+}
+
+// 回到任务列表
+function backToTaskList(view) {
+  const back = findAll(view, byClass('ae-back'))[0]
+  if (back) back.props.onClick()
+  findAll(view, byClass('ae-tab'))[0] || null
+  return render(mainComponent(), {})
+}
 
 test('模块 id 与依赖声明', () => {
   assert.equal(captured.id, 'dsh-autoeval')
@@ -170,148 +232,169 @@ test('侧栏图标跟随 size / active', () => {
   assert.equal(icon.props.width, 22)
 })
 
-test('面板：加载 /state 后渲染四个阶段与运行按钮', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  assert.match(texts(view), /AutoEval/)          // 首帧占位
-  for (const fn of effects.splice(0)) fn()
-  for (let tick = 0; tick < 40 && !pending; tick += 1) await new Promise((resolve) => setTimeout(resolve, 5))
-  assert.ok(pending, '没有触发重渲染')
-  assert.ok(calls.some((call) => call.url.endsWith('/state')))
-
-  pending = false
-  view = render(main.component, {})
-  const text = texts(view)
-  for (const expected of ['AutoEval', 'Scraping · 抓取', 'Annotation · 标注', 'Metrics · 指标', 'Reporting · 报告',
-    'WebSearchTool 检索覆盖', '开始运行']) {
-    assert.ok(text.includes(expected), `面板缺少「${expected}」`)
-  }
-  assert.ok(findAll(view, (node) => node.props.className === 'ae-chip').length >= 4)
+test('只有两个页签：评测任务 / 任务模板', async () => {
+  const view = await boot()
+  const tabs = findAll(view, byClass('ae-tab'))
+  assert.equal(tabs.length, 2, '页签不是两个')
+  assert.equal(tabs[0].props['data-active'], 'true')
+  assert.match(texts(view), /AutoEval/)
 })
 
-test('点「开始运行」把用例和阶段配置 POST 到 /run', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  const view = render(main.component, {})
-  const button = findAll(view, (node) => node.props.className === 'ae-btn ae-btn-primary')[0]
-  assert.ok(button)
+test('任务列表：表格、搜索、状态筛选', () => {
+  const view = render(mainComponent(), {})
+  const text = texts(view)
+  assert.ok(text.includes('小测试集'), '列表没有任务')
+  assert.ok(text.includes('66.7%'), '列表没有通过率')
+  assert.equal(findAll(view, hasClass('ae-search')).length, 1, '缺搜索框')
+  assert.equal(findAll(view, byClass('ae-select')).length, 1, '缺状态筛选')
+  assert.equal(findAll(view, clickable('提交任务')).length, 1, '缺提交任务按钮')
+  assert.equal(findAll(view, hasClass('ae-row-toggle')).length, 1, '任务名不可点')
+})
+
+test('点进任务：概览给指标与阶段，另有逐条结果与报告', async () => {
+  let view = render(mainComponent(), {})
+  const open = findAll(view, hasClass('ae-row-toggle'))[0]
   const before = calls.length
-  await button.props.onClick()
-  await new Promise((resolve) => setTimeout(resolve, 20))
+  await open.props.onClick()
+  await settle()
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/detail')), '没有请求任务详情')
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/rows')), '没有请求逐条结果')
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/report')), '没有请求报告')
+
+  view = render(mainComponent(), {})
+  const text = texts(view)
+  assert.ok(text.includes('小测试集'), '详情页没有任务名')
+  assert.equal(findAll(view, byClass('ae-metric')).length, 8, '指标卡片不是 8 个')
+  assert.ok(text.includes('66.7%'), '详情没有通过率')
+  assert.ok(text.includes('完成，用时 30940ms'), '详情没有日志')
+  const subtabs = findAll(view, byClass('ae-subtab'))
+  assert.equal(subtabs.length, 3, '子页签不是三个')
+
+  subtabs[1].props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('Python 3.13 新特性'), '逐条结果里没有用例')
+
+  findAll(view, byClass('ae-subtab'))[2].props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('AutoEval 报告'), '报告没渲染')
+})
+
+test('任务详情可以返回列表', () => {
+  let view = render(mainComponent(), {})
+  const back = findAll(view, byClass('ae-back'))[0]
+  assert.ok(back, '详情页没有返回')
+  back.props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, hasClass('ae-search')).length, 1, '没有回到列表')
+})
+
+test('提交任务：表单 → POST /run', async () => {
+  let view = render(mainComponent(), {})
+  const submitButton = findAll(view, clickable('提交任务'))[0]
+  submitButton.props.onClick()
+  view = render(mainComponent(), {})
+  const text = texts(view)
+  assert.ok(text.includes('提交评测任务'), '没有进入提交页')
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '提交页不是四个阶段')
+
+  const before = calls.length
+  const runButton = findAll(view, byClass('ae-btn ae-btn-primary'))[0]
+  assert.ok(runButton, '没有开始运行按钮')
+  await runButton.props.onClick()
+  await settle()
   const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/run'))
   assert.ok(posted, '没有 POST /run')
   const body = JSON.parse(posted.body)
-  assert.ok(Array.isArray(body.cases) && body.cases.length > 0)
+  assert.ok(Array.isArray(body.cases) && body.cases.length > 0, '用例为空')
   assert.deepEqual(Object.keys(body.stages).sort(), ['annotation', 'metrics', 'reporting', 'scraping'])
   assert.equal(body.stages.scraping.template, 'websearch')
 })
 
-globalThis.window.confirm = () => true
+test('模板列表点进详情：内置只读', () => {
+  let view = render(mainComponent(), {})
+  findAll(view, byClass('ae-tab'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  const cards = findAll(view, byClass('ae-template-card'))
+  assert.equal(cards.length, 2, '模板卡片数量不对')
+  assert.ok(texts(view).includes('WebSearchTool 检索覆盖'))
 
-test('历史页与报告页', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
-  assert.equal(tabs.length, 4)
-  tabs[1].props.onClick()       // 切到历史页
-  view = render(main.component, {})
-  assert.ok(texts(view).includes('小测试集'), '历史页没有记录')
-
-  const link = findAll(view, (node) => node.props.className === 'ae-link')[0]
-  assert.ok(link)
-  link.props.onClick()
-  await new Promise((resolve) => setTimeout(resolve, 20))
-  assert.ok(calls.some((call) => call.url.includes('/report?run=')))
-  view = render(main.component, {})
-  assert.ok(texts(view).includes('stub report'))
+  cards[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('内置模板只读'), '内置模板没提示只读')
+  assert.equal(findAll(view, byClass('ae-btn ae-btn-primary')).length, 0, '内置模板不该有保存')
+  assert.ok(findAll(view, clickable('复制')).length >= 1, '内置模板缺复制')
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '模板详情不是四个阶段')
 })
 
-test('任务页：表格、筛选、展开详情', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
-  assert.equal(tabs.length, 4, '应该是 4 个页签')
-  tabs[1].props.onClick()
-  view = render(main.component, {})
-  const text = texts(view)
-  assert.ok(text.includes('小测试集'), '任务表没有记录')
-  assert.ok(findAll(view, (node) => String(node.props.className).includes('ae-search')).length === 1, '缺少搜索框')
-  assert.ok(findAll(view, (node) => node.props.className === 'ae-select').length === 1, '缺少状态筛选')
-  const links = findAll(view, (node) => String(node.props.className || '').startsWith('ae-link'))
-  assert.ok(links.length >= 3, '行内操作太少')
+test('自定义模板可以改字段并保存', async () => {
+  let view = render(mainComponent(), {})
+  const back = findAll(view, byClass('ae-back'))[0]
+  if (back) back.props.onClick()
+  view = render(mainComponent(), {})
+  if (findAll(view, byClass('ae-template-card')).length === 0) {
+    findAll(view, byClass('ae-tab'))[1].props.onClick()
+    view = render(mainComponent(), {})
+  }
+  const cards = findAll(view, byClass('ae-template-card'))
+  cards[1].props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('我的覆盖模板'))
 
-  // 展开详情 → 请求 /runs/detail
+  const nameInput = findAll(view, (node) => String(node.props.className || '') === 'ae-input'
+    && node.props.value === '我的覆盖模板')[0]
+  assert.ok(nameInput, '没有名称输入框')
+  nameInput.props.onChange({ target: { value: '改过名的模板' } })
+  view = render(mainComponent(), {})
   const before = calls.length
-  const toggle = findAll(view, (node) => node.props.className === 'ae-row-toggle')[0]
-  assert.ok(toggle, '缺少展开按钮')
-  await toggle.props.onClick()
-  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/detail')), '没有请求 /runs/detail')
-  pending = false
-  view = render(main.component, {})
-  assert.ok(texts(view).includes('日志'), '详情里没有日志')
-})
-
-test('任务页：重跑与删除', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  const rerunButton = findAll(view, (node) => node.props.className === 'ae-link' && node.children.includes('重跑'))[0]
-  assert.ok(rerunButton, '缺少重跑按钮')
-  let before = calls.length
-  await rerunButton.props.onClick()
-  await new Promise((resolve) => setTimeout(resolve, 10))
-  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/rerun')), '没有请求 /runs/rerun')
-
-  // 重跑成功后会跳回运行页，重新切回任务页再找删除
-  view = render(main.component, {})
-  const tabList = findAll(view, (node) => node.props.className === 'ae-tab')
-  tabList[1].props.onClick()
-  view = render(main.component, {})
-  const deleteButton = findAll(view, (node) => node.props.className === 'ae-link ae-danger')[0]
-  assert.ok(deleteButton, '缺少删除按钮')
-  before = calls.length
-  await deleteButton.props.onClick()
-  await new Promise((resolve) => setTimeout(resolve, 10))
-  const deleted = calls.slice(before).find((call) => call.method === 'DELETE' && call.url.includes('/runs?'))
-  assert.ok(deleted, '没有 DELETE /runs')
-  assert.ok(deleted.url.includes('run-fixture'))
-})
-
-test('模板页：内置只读、自定义可编辑删除', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
-  tabs[2].props.onClick()
-  view = render(main.component, {})
-  const text = texts(view)
-  assert.ok(text.includes('WebSearchTool 检索覆盖'), '没有内置模板卡片')
-  assert.ok(text.includes('我的覆盖模板'), '没有自定义模板卡片')
-  const badges = findAll(view, (node) => node.props.className === 'ae-badge')
-  assert.equal(badges.length, 2)
-  assert.equal(badges[0].props['data-kind'], 'builtin')
-  assert.equal(badges[1].props['data-kind'], 'custom')
-  // 自定义卡片才有删除
-  const dangers = findAll(view, (node) => node.props.className === 'ae-link ae-danger')
-  assert.equal(dangers.length, 1)
-})
-
-test('模板页：新建并保存自定义模板', async () => {
-  const main = registered.find((item) => item.options.name === 'main')
-  let view = render(main.component, {})
-  const newButton = findAll(view, (node) => node.props.className === 'ae-btn ae-btn-primary')[0]
-  assert.ok(newButton, '缺少新建按钮')
-  await newButton.props.onClick()
-  view = render(main.component, {})
-  const text = texts(view)
-  assert.ok(text.includes('新建任务模板'), '没有进入编辑器')
-  assert.equal(findAll(view, (node) => node.props.className === 'ae-stage-edit').length, 4, '编辑器里不是四个阶段')
-
-  const saveButton = findAll(view, (node) => node.props.className === 'ae-btn ae-btn-primary')[0]
-  const before = calls.length
-  await saveButton.props.onClick()
-  await new Promise((resolve) => setTimeout(resolve, 10))
+  findAll(view, byClass('ae-btn ae-btn-primary'))[0].props.onClick()
+  await settle()
   const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/templates'))
   assert.ok(posted, '没有 POST /templates')
   const body = JSON.parse(posted.body)
-  assert.match(body.id, /^[a-z0-9][a-z0-9-]*$/)
-  assert.deepEqual(Object.keys(body.stages).sort(), ['annotation', 'metrics', 'reporting', 'scraping'])
-  assert.equal(body.stages.reporting.template, 'markdown')
+  assert.equal(body.id, 'my-coverage')
+  assert.equal(body.name, '改过名的模板')
+})
+
+test('模板页可以新建', () => {
+  let view = render(mainComponent(), {})
+  const back = findAll(view, byClass('ae-back'))[0]
+  if (back) {
+    back.props.onClick()
+    view = render(mainComponent(), {})
+  }
+  const newButton = findAll(view, clickable('新建模板'))[0]
+  assert.ok(newButton, '没有新建模板按钮')
+  newButton.props.onClick()
+  view = render(mainComponent(), {})
+  assert.ok(texts(view).includes('新建任务模板'), '没有进入新建页')
+  const idInput = findAll(view, (node) => String(node.props.className || '') === 'ae-input'
+    && String(node.props.value || '').startsWith('template-'))[0]
+  assert.ok(idInput, '新建模板没有 id 输入框')
+})
+
+test('任务列表可以重跑与删除', async () => {
+  let view = render(mainComponent(), {})
+  findAll(view, byClass('ae-tab'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const rerun = findAll(view, clickable('重跑'))[0]
+  assert.ok(rerun, '没有重跑按钮')
+  let before = calls.length
+  await rerun.props.onClick()
+  await settle()
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/rerun')), '没有请求重跑')
+
+  // 重跑成功会跳到新任务详情，回列表再删
+  view = render(mainComponent(), {})
+  const back = findAll(view, byClass('ae-back'))[0]
+  if (back) {
+    back.props.onClick()
+    view = render(mainComponent(), {})
+  }
+  const remove = findAll(view, (node) => String(node.props.className || '') === 'ae-link ae-danger')[0]
+  assert.ok(remove, '没有删除按钮')
+  before = calls.length
+  await remove.props.onClick()
+  await settle()
+  const deleted = calls.slice(before).find((call) => call.method === 'DELETE')
+  assert.ok(deleted && deleted.url.includes('run-fixture'), '没有 DELETE /runs')
 })

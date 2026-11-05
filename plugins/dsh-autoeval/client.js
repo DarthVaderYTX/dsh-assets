@@ -1,6 +1,7 @@
 // AutoEval 的浏览器侧：左侧栏图标 + 主面板。
 //
-// 面板不自己算评测，全部逻辑在宿主插件里，这里只通过同源的 /autoeval-api 读写状态。
+// 面板只有两个页签——「评测任务」和「任务模板」，点进一条任务或一个模板才是详情页。
+// 面板不自己算评测，逻辑全在宿主插件里，这里只通过同源的 /autoeval-api 读写状态。
 window.__ModuleLoader__.load({
   id: 'dsh-autoeval',
   factory(require) {
@@ -10,48 +11,84 @@ window.__ModuleLoader__.load({
     const API = '/autoeval-api'
 
     // ------------------------------------------------------------ 文案
-
     const zh = {
       'panel.title': 'AutoEval',
       'panel.subtitle': '四阶段评测流水线：抓取、标注、指标、报告',
-      'tab.run': '运行',
       'tab.tasks': '评测任务',
       'tab.templates': '任务模板',
-      'tab.report': '报告',
+
+      'action.submit': '提交任务',
+      'action.run': '开始运行',
+      'action.cancel': '取消',
+      'action.cancelTask': '取消运行',
       'action.rerun': '重跑',
       'action.delete': '删除',
-      'action.edit': '编辑',
-      'action.saveTemplate': '存为模板',
-      'action.new': '新建',
-      'action.cancelTask': '取消',
+      'action.back': '返回列表',
+      'action.save': '保存',
+      'action.refresh': '刷新',
+      'action.newTemplate': '新建模板',
+      'action.copyTemplate': '复制',
+      'action.editTemplate': '编辑',
+      'action.viewReport': '查看报告',
+      'action.saveAsTemplate': '存为模板',
+
       'tasks.search': '搜索名称 / id / 模板',
+      'tasks.allStatus': '全部状态',
+      'tasks.empty': '没有匹配的任务。',
+      'tasks.noRuns': '还没有提交过评测任务。点右上角「提交任务」跑第一个。',
       'tasks.name': '任务',
       'tasks.template': '模板',
       'tasks.status': '状态',
       'tasks.passRate': '通过率',
-      'tasks.passed': '通过/计分',
+      'tasks.passed': '通过 / 计分',
       'tasks.cases': '用例',
       'tasks.duration': '耗时',
       'tasks.startedAt': '提交时间',
-      'tasks.allStatus': '全部状态',
-      'tasks.empty': '没有匹配的任务。',
-      'tasks.noRuns': '还没有提交过评测任务。',
+
+      'detail.summary': '概览',
+      'detail.rows': '逐条结果',
+      'detail.report': '报告',
       'detail.stages': '阶段',
       'detail.log': '日志',
       'detail.artifacts': '产物目录',
-      'detail.cases': '用例快照',
-      'tpl.new': '新建任务模板',
-      'tpl.edit': '编辑任务模板',
-      'tpl.copy': '复制为自定义模板',
-      'tpl.empty': '还没有自定义模板。',
+      'detail.noReport': '这次任务没有报告（可能跑失败了）。',
+      'detail.noRows': '这次任务没有逐条结果。',
+      'detail.rowQuery': '用例',
+      'detail.rowScore': '分数',
+      'detail.rowCoverage': '覆盖',
+      'detail.rowMissed': '缺失信息点',
+      'detail.rowSources': '来源',
+      'detail.rowLatency': '检索耗时',
+      'detail.rowMaterial': '材料',
+      'detail.caseSnapshot': '用例快照',
+      'detail.loading': '加载中…',
+
+      'tpl.empty': '还没有自定义模板。点「新建模板」做一个。',
       'tpl.builtin': '内置',
       'tpl.custom': '自定义',
+      'tpl.new': '新建任务模板',
+      'tpl.edit': '编辑任务模板',
+      'tpl.readonly': '内置模板只读。要改就先复制成自定义模板。',
       'tpl.id': '模板 id',
       'tpl.name': '显示名称',
       'tpl.desc': '说明（可选）',
       'tpl.badId': '模板 id 只能用小写字母、数字和短横线',
       'tpl.copySuffix': '副本',
       'tpl.confirmDelete': '删除模板',
+      'tpl.config': '各阶段配置',
+      'tpl.usedBy': '用在',
+
+      'submit.title': '提交评测任务',
+      'submit.name': '任务名称',
+      'submit.cases': '用例集（JSON 数组）',
+      'submit.casesHint': '每条至少要有 id 和 query；infoPoints 是判分用的信息点。',
+      'submit.template': '从模板开始',
+      'submit.progress': '运行中',
+
+      'field.template': '执行模板',
+      'field.params': '参数（JSON）',
+      'field.command': '自定义命令（stdin 收 JSON，stdout 吐 JSON）',
+
       'stage.scraping': 'Scraping · 抓取',
       'stage.annotation': 'Annotation · 标注',
       'stage.metrics': 'Metrics · 指标',
@@ -60,6 +97,7 @@ window.__ModuleLoader__.load({
       'stage.hint.annotation': '按信息点判覆盖：全部命中记 1，缺任一条记 0；冲突不计错。',
       'stage.hint.metrics': '聚合通过率（分母 = 有分数的行）、平均覆盖与检索耗时。',
       'stage.hint.reporting': '产出 Markdown 报告，同时落盘 rows.jsonl。',
+
       'preset.scraping.websearch': '内置 · 检索抓取',
       'preset.scraping.inline': '内置 · 用例自带材料',
       'preset.scraping.custom': '自定义命令',
@@ -72,29 +110,26 @@ window.__ModuleLoader__.load({
       'preset.reporting.markdown': '内置 · Markdown 报告',
       'preset.reporting.json': '内置 · JSON 快照',
       'preset.reporting.custom': '自定义命令',
-      'field.template': '评测模板',
-      'field.cases': '用例集（JSON 数组）',
-      'field.command': '自定义命令（stdin 收 JSON，stdout 吐 JSON）',
-      'field.params': '参数',
-      'action.run': '开始运行',
-      'action.cancel': '取消',
-      'action.save': '保存',
-      'action.reset': '恢复内置模板',
-      'action.view': '查看报告',
-      'action.refresh': '刷新',
+
       'label.running': '运行中',
       'label.idle': '空闲',
       'label.done': '完成',
       'label.failed': '失败',
       'label.cancelled': '已取消',
       'label.pending': '等待',
-      'label.noRuns': '还没有运行记录。',
-      'label.noReport': '选择一次运行查看报告。',
       'label.passRate': '通过率',
+      'label.avgCoverage': '平均覆盖',
+      'label.total': '用例总数',
+      'label.scored': '有分数的行',
+      'label.passed': '通过',
+      'label.scrapeErrors': '抓取失败',
       'label.p50': 'P50 耗时',
-      'label.cases': '用例',
+      'label.p95': 'P95 耗时',
+      'label.avg': '平均耗时',
       'label.saved': '已保存',
-      'label.lastRun': '上一次运行结果',
+      'label.templates': '个模板',
+      'label.tasks': '个任务',
+
       'error.cases': '用例不是合法的 JSON 数组',
       'error.params': '该阶段参数不是合法的 JSON',
     }
@@ -102,265 +137,340 @@ window.__ModuleLoader__.load({
     const en = {
       'panel.title': 'AutoEval',
       'panel.subtitle': 'Four-stage evaluation pipeline: scraping, annotation, metrics, reporting',
-      'tab.run': 'Run',
       'tab.tasks': 'Tasks',
       'tab.templates': 'Templates',
-      'tab.report': 'Report',
+
+      'action.submit': 'Submit task',
+      'action.run': 'Run',
+      'action.cancel': 'Cancel',
+      'action.cancelTask': 'Cancel run',
       'action.rerun': 'Re-run',
       'action.delete': 'Delete',
-      'action.edit': 'Edit',
-      'action.saveTemplate': 'Save as template',
-      'action.new': 'New',
-      'action.cancelTask': 'Cancel',
+      'action.back': 'Back',
+      'action.save': 'Save',
+      'action.refresh': 'Refresh',
+      'action.newTemplate': 'New template',
+      'action.copyTemplate': 'Duplicate',
+      'action.editTemplate': 'Edit',
+      'action.viewReport': 'Open report',
+      'action.saveAsTemplate': 'Save as template',
+
       'tasks.search': 'Search name / id / template',
+      'tasks.allStatus': 'All statuses',
+      'tasks.empty': 'No matching tasks.',
+      'tasks.noRuns': 'No evaluation task yet. Use "Submit task" to run the first one.',
       'tasks.name': 'Task',
       'tasks.template': 'Template',
       'tasks.status': 'Status',
       'tasks.passRate': 'Pass rate',
-      'tasks.passed': 'Passed/scored',
+      'tasks.passed': 'Passed / scored',
       'tasks.cases': 'Cases',
       'tasks.duration': 'Duration',
       'tasks.startedAt': 'Submitted',
-      'tasks.allStatus': 'All statuses',
-      'tasks.empty': 'No matching tasks.',
-      'tasks.noRuns': 'No evaluation task has been submitted yet.',
+
+      'detail.summary': 'Overview',
+      'detail.rows': 'Per-case',
+      'detail.report': 'Report',
       'detail.stages': 'Stages',
       'detail.log': 'Log',
       'detail.artifacts': 'Artifacts',
-      'detail.cases': 'Cases snapshot',
-      'tpl.new': 'New template',
-      'tpl.edit': 'Edit template',
-      'tpl.copy': 'Copy to custom template',
-      'tpl.empty': 'No custom template yet.',
+      'detail.noReport': 'This task has no report (it may have failed).',
+      'detail.noRows': 'This task has no per-case result.',
+      'detail.rowQuery': 'Case',
+      'detail.rowScore': 'Score',
+      'detail.rowCoverage': 'Coverage',
+      'detail.rowMissed': 'Missing points',
+      'detail.rowSources': 'Sources',
+      'detail.rowLatency': 'Search latency',
+      'detail.rowMaterial': 'Material',
+      'detail.caseSnapshot': 'Cases snapshot',
+      'detail.loading': 'Loading…',
+
+      'tpl.empty': 'No custom template yet. Use "New template".',
       'tpl.builtin': 'built-in',
       'tpl.custom': 'custom',
+      'tpl.new': 'New template',
+      'tpl.edit': 'Edit template',
+      'tpl.readonly': 'Built-in templates are read-only. Duplicate it to change anything.',
       'tpl.id': 'Template id',
       'tpl.name': 'Display name',
       'tpl.desc': 'Description (optional)',
       'tpl.badId': 'Template id accepts lowercase letters, digits and dashes only',
       'tpl.copySuffix': 'copy',
       'tpl.confirmDelete': 'Delete template',
+      'tpl.config': 'Stage config',
+      'tpl.usedBy': 'used by',
+
+      'submit.title': 'Submit evaluation task',
+      'submit.name': 'Task name',
+      'submit.cases': 'Cases (JSON array)',
+      'submit.casesHint': 'Each case needs at least id and query; infoPoints drives scoring.',
+      'submit.template': 'Start from template',
+      'submit.progress': 'Running',
+
+      'field.template': 'Stage template',
+      'field.params': 'Params (JSON)',
+      'field.command': 'Custom command (JSON in via stdin, JSON out via stdout)',
+
       'stage.scraping': 'Scraping',
       'stage.annotation': 'Annotation',
       'stage.metrics': 'Metrics',
       'stage.reporting': 'Reporting',
-      'stage.hint.scraping': 'Runs a search per case and keeps the returned sources as the material to judge.',
-      'stage.hint.annotation': 'Coverage scoring: 1 when every info point appears, 0 otherwise; conflicts never cost points.',
-      'stage.hint.metrics': 'Aggregates pass rate (denominator = scored rows), coverage and search latency.',
-      'stage.hint.reporting': 'Writes a Markdown report plus rows.jsonl.',
-      'preset.scraping.websearch': 'Preset · search scraping',
-      'preset.scraping.inline': 'Preset · inline material',
-      'preset.scraping.custom': 'Custom command',
-      'preset.annotation.coverage-keyword': 'Preset · info-point coverage',
-      'preset.annotation.coverage-rubric': 'Preset · rubric coverage',
-      'preset.annotation.custom': 'Custom command',
-      'preset.metrics.standard': 'Preset · standard metrics',
-      'preset.metrics.grouped': 'Preset · grouped metrics',
-      'preset.metrics.custom': 'Custom command',
-      'preset.reporting.markdown': 'Preset · Markdown report',
-      'preset.reporting.json': 'Preset · JSON snapshot',
-      'preset.reporting.custom': 'Custom command',
-      'field.template': 'Template',
-      'field.cases': 'Cases (JSON array)',
-      'field.command': 'Custom command (JSON on stdin, JSON on stdout)',
-      'field.params': 'Parameters',
-      'action.run': 'Run',
-      'action.cancel': 'Cancel',
-      'action.save': 'Save',
-      'action.reset': 'Load built-in template',
-      'action.view': 'View report',
-      'action.refresh': 'Refresh',
+      'stage.hint.scraping': 'Search each query and treat the returned snippets as material.',
+      'stage.hint.annotation': 'Info-point coverage: 1 when all points hit, 0 otherwise; conflicts never cost points.',
+      'stage.hint.metrics': 'Aggregate pass rate (denominator = scored rows), coverage and search latency.',
+      'stage.hint.reporting': 'Write a Markdown report and rows.jsonl.',
+
+      'preset.scraping.websearch': 'built-in · web search',
+      'preset.scraping.inline': 'built-in · case material',
+      'preset.scraping.custom': 'custom command',
+      'preset.annotation.coverage-keyword': 'built-in · info points',
+      'preset.annotation.coverage-rubric': 'built-in · rubric',
+      'preset.annotation.custom': 'custom command',
+      'preset.metrics.standard': 'built-in · standard',
+      'preset.metrics.grouped': 'built-in · grouped',
+      'preset.metrics.custom': 'custom command',
+      'preset.reporting.markdown': 'built-in · Markdown',
+      'preset.reporting.json': 'built-in · JSON',
+      'preset.reporting.custom': 'custom command',
+
       'label.running': 'running',
       'label.idle': 'idle',
       'label.done': 'done',
       'label.failed': 'failed',
       'label.cancelled': 'cancelled',
       'label.pending': 'pending',
-      'label.noRuns': 'No runs yet.',
-      'label.noReport': 'Pick a run to read its report.',
-      'label.passRate': 'pass rate',
+      'label.passRate': 'Pass rate',
+      'label.avgCoverage': 'Avg coverage',
+      'label.total': 'Cases',
+      'label.scored': 'Scored rows',
+      'label.passed': 'Passed',
+      'label.scrapeErrors': 'Scrape errors',
       'label.p50': 'P50 latency',
-      'label.cases': 'cases',
-      'label.saved': 'saved',
-      'label.lastRun': 'Previous result',
+      'label.p95': 'P95 latency',
+      'label.avg': 'Avg latency',
+      'label.saved': 'Saved',
+      'label.templates': 'templates',
+      'label.tasks': 'tasks',
+
       'error.cases': 'Cases are not a valid JSON array',
-      'error.params': 'This stage parameter is not valid JSON',
+      'error.params': 'Stage params are not valid JSON',
     }
 
+    // ------------------------------------------------------------ 演示用例
     const DEMO_CASES = [
       { id: 'c1', bucket: 'stable', query: 'Python 3.13 新特性', infoPoints: ['Python', '3.13'] },
       { id: 'c2', bucket: 'stable', query: 'TypeScript 5.9 release notes', infoPoints: ['TypeScript', '5.9'] },
-      { id: 'c3', bucket: 'stable', query: 'DeepSeek API 定价 每百万 tokens', infoPoints: ['百万'] },
-      { id: 'c4', bucket: 'stable', query: 'Linus Torvalds 出生地', infoPoints: ['Linus'] },
-      { id: 'c5', bucket: 'stable', query: 'macOS 26 新功能', infoPoints: ['macOS'] },
-      { id: 'c6', bucket: 'hard', query: '2026 年 6 月 中国新能源汽车 销量 具体数字', infoPoints: ['万辆|销量'] },
+      { id: 'c3', bucket: 'detail', query: 'DeepSeek API 定价 每百万 tokens', infoPoints: ['DeepSeek', '百万'] },
+      { id: 'c4', bucket: 'hard', query: 'Linus Torvalds 出生于哪里', infoPoints: ['Helsinki'] },
     ]
 
     // ------------------------------------------------------------ 样式
-
     const STYLE = `
-.ae-page { display: flex; flex-direction: column; gap: 16px; padding: 24px 28px 40px; height: 100%; overflow: auto; box-sizing: border-box; }
-.ae-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.ae-title { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .2px; color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-sub { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary, #6b6b6b); }
-.ae-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px;
-  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: nowrap; }
-.ae-pill[data-state="running"] { color: var(--dsw-alias-brand-primary, #247bbf); border-color: currentColor; }
-.ae-pill[data-state="done"] { color: var(--dsw-alias-state-success-primary, #1a7f4b); border-color: currentColor; }
-.ae-pill[data-state="failed"] { color: var(--dsw-alias-state-error-primary, #c0392b); border-color: currentColor; }
-.ae-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ae-page { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 28px; height: 100%; overflow: auto; }
+.ae-head { display: flex; align-items: flex-start; gap: 12px; }
+.ae-title { margin: 0; font-size: 17px; font-weight: 650; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-sub { margin: 2px 0 0; font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12));
+  color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-idle-primary, #9aa0a6); }
+.ae-pill[data-state="running"] .ae-dot { background: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-pill[data-state="done"] .ae-dot { background: var(--dsw-alias-state-success-primary, #1a7f4b); }
+.ae-pill[data-state="failed"] .ae-dot { background: var(--dsw-alias-state-error-primary, #c0392b); }
 .ae-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
-.ae-tab { appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px; padding: 8px 12px;
-  color: var(--dsw-alias-label-secondary, #6b6b6b); border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.ae-tab[data-active="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-brand-primary, #247bbf); font-weight: 600; }
-.ae-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; align-items: start; }
-.ae-card { border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1, #fff); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.ae-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.ae-card-title { font-size: 13.5px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-card-note { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); line-height: 1.45; }
+.ae-tab { appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px;
+  padding: 8px 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); border-bottom: 2px solid transparent; }
+.ae-tab[data-active="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-subtabs { display: flex; gap: 6px; }
+.ae-subtab { appearance: none; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background: transparent;
+  color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-subtab[data-active="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05));
+  color: var(--dsw-alias-label-primary, #1f1f1f); border-color: var(--dsw-alias-border-l2, rgba(0,0,0,.2)); }
+.ae-card { background: var(--dsw-alias-bg-layer-1, #fff); border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1));
+  border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ae-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ae-card-title { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-card-note { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-back { appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px;
+  color: var(--dsw-alias-brand-primary, #247bbf); padding: 0; align-self: flex-start; }
 .ae-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ae-chip { appearance: none; cursor: pointer; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px;
-  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background: transparent; color: var(--dsw-alias-label-secondary, #6b6b6b); }
-.ae-chip[data-active="true"] { border-color: var(--dsw-alias-brand-primary, #247bbf); color: var(--dsw-alias-brand-primary, #247bbf);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #247bbf) 10%, transparent); font-weight: 600; }
-.ae-input, .ae-textarea { font: inherit; font-size: 12.5px; width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background: var(--dsw-alias-bg-base, #fff);
-  color: var(--dsw-alias-label-primary, #1f1f1f); resize: vertical; }
-.ae-textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; }
-.ae-textarea:focus, .ae-input:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #247bbf) 45%, transparent); outline-offset: 1px; }
-.ae-field { display: flex; flex-direction: column; gap: 5px; }
-.ae-label { font-size: 11.5px; font-weight: 600; letter-spacing: .2px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-chip { appearance: none; cursor: pointer; font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.14)); background: transparent;
+  color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-chip[data-active="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05));
+  color: var(--dsw-alias-label-primary, #1f1f1f); border-color: var(--dsw-alias-border-l2, rgba(0,0,0,.24)); }
+.ae-chip:disabled { cursor: default; opacity: .7; }
+.ae-input, .ae-textarea { font: inherit; font-size: 12.5px; padding: 7px 9px; border-radius: 8px; width: 100%;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.14)); background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-primary, #1f1f1f); box-sizing: border-box; }
+.ae-textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; resize: vertical; }
+.ae-input:disabled, .ae-textarea:disabled { opacity: .65; }
+.ae-field { display: flex; flex-direction: column; gap: 4px; }
+.ae-label { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-btn { appearance: none; cursor: pointer; font: inherit; font-size: 12.5px; padding: 7px 13px; border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.14)); background: transparent;
+  color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-btn:disabled { cursor: default; opacity: .5; }
+.ae-btn-primary { background: var(--dsw-alias-brand-primary, #247bbf); border-color: transparent; color: #fff; }
 .ae-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.ae-btn { appearance: none; cursor: pointer; font: inherit; font-size: 12.5px; padding: 7px 14px; border-radius: 8px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.18)); background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-btn:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.04)); }
-.ae-btn[disabled] { opacity: .5; cursor: not-allowed; }
-.ae-btn-primary { background: var(--dsw-alias-brand-primary, #247bbf); border-color: transparent; color: #fff; font-weight: 600; }
-.ae-btn-primary:hover { filter: brightness(1.06); background: var(--dsw-alias-brand-primary, #247bbf); }
-.ae-bar { height: 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.08)); overflow: hidden; }
-.ae-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--dsw-alias-brand-primary, #247bbf); transition: width .3s ease; }
-.ae-steps { display: flex; flex-direction: column; gap: 6px; }
-.ae-step { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px;
-  padding: 6px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); }
-.ae-step[data-status="done"] .ae-step-name { color: var(--dsw-alias-state-success-primary, #1a7f4b); }
-.ae-step[data-status="running"] .ae-step-name { color: var(--dsw-alias-brand-primary, #247bbf); font-weight: 600; }
-.ae-step[data-status="failed"] .ae-step-name { color: var(--dsw-alias-state-error-primary, #c0392b); }
-.ae-step-meta { color: var(--dsw-alias-label-secondary, #6b6b6b); font-variant-numeric: tabular-nums; }
-.ae-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
-.ae-metric { border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 10px; padding: 8px 10px; }
-.ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
-.ae-metric-v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
-.ae-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ae-table th, .ae-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
-.ae-table th { font-weight: 600; color: var(--dsw-alias-label-secondary, #6b6b6b); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
-.ae-table td { color: var(--dsw-alias-label-primary, #1f1f1f); font-variant-numeric: tabular-nums; }
-.ae-pre { margin: 0; padding: 14px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1));
-  background: var(--dsw-alias-bg-base, #fff); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
-  line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--dsw-alias-label-primary, #1f1f1f);
-  max-height: 62vh; overflow: auto; }
-.ae-error { font-size: 12px; padding: 8px 10px; border-radius: 8px; color: var(--dsw-alias-state-error-primary, #c0392b);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #c0392b) 10%, transparent); }
 .ae-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.ae-toolbar-count { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); font-variant-numeric: tabular-nums; margin-left: auto; }
+.ae-toolbar-count { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b);
+  font-variant-numeric: tabular-nums; margin-left: auto; }
 .ae-search { width: 220px; }
-.ae-select { font: inherit; font-size: 12.5px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12));
-  background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-select { font: inherit; font-size: 12.5px; padding: 7px 8px; border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-primary, #1f1f1f); }
 .ae-row-toggle { appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px;
-  color: var(--dsw-alias-label-primary, #1f1f1f); padding: 0; display: inline-flex; align-items: center; gap: 6px; text-align: left; }
-.ae-caret { color: var(--dsw-alias-label-secondary, #6b6b6b); font-size: 10px; }
+  color: var(--dsw-alias-label-primary, #1f1f1f); padding: 0; text-align: left; }
 .ae-state { font-size: 11.5px; }
 .ae-state[data-state="running"] { color: var(--dsw-alias-brand-primary, #247bbf); }
 .ae-state[data-state="done"] { color: var(--dsw-alias-state-success-primary, #1a7f4b); }
 .ae-state[data-state="failed"] { color: var(--dsw-alias-state-error-primary, #c0392b); }
 .ae-row-actions { display: flex; gap: 10px; white-space: nowrap; }
-.ae-danger { color: var(--dsw-alias-state-error-primary, #c0392b); }
-.ae-detail { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.ae-link { appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12px;
+  color: var(--dsw-alias-brand-primary, #247bbf); padding: 0; }
+.ae-link:disabled { cursor: default; opacity: .5; }
+.ae-danger { color: var(--dsw-alias-state-error-primary, #c0392b) !important; }
+.ae-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ae-table th { text-align: left; font-weight: 500; font-size: 11px; letter-spacing: .02em;
+  color: var(--dsw-alias-label-secondary, #6b6b6b); padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); white-space: nowrap; }
+.ae-table td { padding: 8px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.06));
+  color: var(--dsw-alias-label-primary, #1f1f1f); vertical-align: top; }
+.ae-table tr:last-child td { border-bottom: 0; }
+.ae-metrics { display: flex; flex-wrap: wrap; gap: 10px; }
+.ae-metric { flex: 1 1 96px; padding: 10px 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); }
+.ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-steps { display: flex; flex-direction: column; gap: 6px; }
+.ae-step { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.ae-step-name { color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-step-meta { margin-left: auto; font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b);
+  font-variant-numeric: tabular-nums; }
+.ae-step[data-status="running"] .ae-step-meta { color: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-step[data-status="failed"] .ae-step-meta { color: var(--dsw-alias-state-error-primary, #c0392b); }
+.ae-log { margin: 0; max-height: 200px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: pre-wrap; }
+.ae-pre { margin: 0; max-height: 460px; overflow: auto; padding: 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.65; color: var(--dsw-alias-label-primary, #1f1f1f); white-space: pre-wrap; }
 .ae-detail-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
 .ae-detail-key { min-width: 64px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
-.ae-log { margin: 0; max-height: 180px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: pre-wrap; }
-.ae-badge { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.14));
-  color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.ae-badge { font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.14)); color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-badge[data-kind="builtin"] { color: var(--dsw-alias-brand-primary, #247bbf); border-color: currentColor; }
-.ae-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.ae-template-card { border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 12px; padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 8px; background: var(--dsw-alias-bg-base, #fff); }
-.ae-template-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-stage-edit { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
+.ae-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ae-template-card { border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 12px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; cursor: pointer;
+  background: var(--dsw-alias-bg-base, #fff); text-align: left; font: inherit; }
+.ae-template-card:hover { border-color: var(--dsw-alias-border-l2, rgba(0,0,0,.24)); }
+.ae-template-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1f1f1f); }
+.ae-stage-edit { display: flex; flex-direction: column; gap: 6px; padding: 10px 0;
+  border-top: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
 .ae-stage-edit:first-of-type { border-top: 0; }
-.ae-empty { font-size: 12.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); padding: 18px 0; text-align: center; }
-.ae-link { appearance: none; border: 0; background: transparent; color: var(--dsw-alias-brand-primary, #247bbf);
-  cursor: pointer; font: inherit; font-size: 12px; padding: 0; text-decoration: underline; }
+.ae-progress { height: 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.08)); overflow: hidden; }
+.ae-progress > i { display: block; height: 100%; border-radius: 999px; background: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-empty { font-size: 12.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); padding: 12px 0; }
+.ae-error { font-size: 12px; color: var(--dsw-alias-state-error-primary, #c0392b); }
+.ae-notice { font-size: 12px; color: var(--dsw-alias-state-success-primary, #1a7f4b); }
+.ae-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; word-break: break-all; }
 `
-
-    // ------------------------------------------------------------ 工具
-
-    function readJson(text) {
-      try {
-        return { ok: true, value: JSON.parse(text) }
-      } catch (error) {
-        return { ok: false, error: error.message }
-      }
-    }
-
-    async function api(path, options) {
-      const response = await fetch(`${API}${path}`, options)
-      const data = await response.json().catch(() => ({ ok: false, error: `HTTP ${response.status}` }))
-      if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`)
-      return data
-    }
 
     function statusState(status) {
       if (status === 'running') return 'running'
       if (status === 'done') return 'done'
-      if (status === 'failed' || status === 'cancelled') return 'failed'
+      if (status === 'failed') return 'failed'
       return 'idle'
     }
 
     function pct(value) {
-      return `${(Number(value || 0) * 100).toFixed(1)}%`
+      if (typeof value !== 'number' || Number.isNaN(value)) return '-'
+      return `${Math.round(value * 1000) / 10}%`
     }
 
-    // ------------------------------------------------------------ 侧栏图标
+    function duration(ms) {
+      if (typeof ms !== 'number' || ms < 0) return '-'
+      return ms >= 1000 ? `${Math.round(ms / 100) / 10}s` : `${Math.round(ms)}ms`
+    }
 
-    function AutoEvalIcon(props) {
-      const size = props.size || 20
-      const active = props.active
+    // ------------------------------------------------------------ 图标
+    function AutoEvalIcon({ size = 20, active = false }) {
+      const stroke = active ? 'var(--dsw-alias-brand-primary, #247bbf)' : 'currentColor'
       return h('svg', {
-        viewBox: '0 0 24 24', width: size, height: size, fill: 'none',
-        'aria-hidden': true, style: { display: 'block' },
+        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
+        'aria-hidden': 'true', focusable: 'false',
       },
       h('path', {
-        d: 'M3.4 4.6h17.2l-6.5 7.7v6.5l-4.2 2.3v-8.8z',
-        fill: 'currentColor', opacity: active ? 0.95 : 0.7, stroke: 'none',
+        d: 'M3.4 4.6h17.2l-6.6 7.6v6.2l-4 2v-8.2z',
+        stroke, strokeWidth: 1.6, strokeLinejoin: 'round', fill: active ? 'rgba(36,123,191,.14)' : 'none',
       }),
-      h('circle', { cx: 18.2, cy: 18.1, r: 4.3, fill: 'var(--dsw-alias-bg-layer-1, #fff)', stroke: 'currentColor', strokeWidth: 1.2 }),
       h('path', {
-        d: 'M16.1 18.1l1.5 1.5 2.6-2.8', stroke: 'currentColor', strokeWidth: 1.8,
+        d: 'M14.2 16.6l2.2 2.2 4.2-4.6',
+        stroke: 'var(--dsw-alias-state-success-primary, #1a7f4b)', strokeWidth: 1.8,
         strokeLinecap: 'round', strokeLinejoin: 'round',
       }))
     }
 
-    // ------------------------------------------------------------ 主面板
-
-    function AutoEvalPanel(props) {
-      const t = (props && props.t) || ((key) => key)
-
+    // ------------------------------------------------------------ 面板
+    function AutoEvalPanel({ t }) {
       const [state, setState] = React.useState(null)
       const [draft, setDraft] = React.useState(null)
       const [casesText, setCasesText] = React.useState(() => JSON.stringify(DEMO_CASES, null, 2))
-      const [view, setView] = React.useState('run')
-      const [report, setReport] = React.useState('')
-      const [reportRun, setReportRun] = React.useState('')
+      const [view, setView] = React.useState('tasks')
+      const [submitting, setSubmitting] = React.useState(false)
+      const [taskId, setTaskId] = React.useState('')
+      const [detail, setDetail] = React.useState(null)
+      const [detailTab, setDetailTab] = React.useState('summary')
+      const [templateDraft, setTemplateDraft] = React.useState(null)
+      const [taskQuery, setTaskQuery] = React.useState('')
+      const [taskStatus, setTaskStatus] = React.useState('all')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
-      const [taskQuery, setTaskQuery] = React.useState('')
-      const [taskStatus, setTaskStatus] = React.useState('all')
-      const [expandedRun, setExpandedRun] = React.useState('')
-      const [details, setDetails] = React.useState({})
-      const [templateDraft, setTemplateDraft] = React.useState(null)
+
+      async function api(path, options) {
+        const response = await fetch(`${API}${path}`, options)
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || data.ok === false) throw new Error(data.error || `${response.status} ${path}`)
+        return data
+      }
+
+      function readJson(text) {
+        try {
+          return { ok: true, value: JSON.parse(text) }
+        } catch (failure) {
+          return { ok: false, error: String(failure.message || failure) }
+        }
+      }
+
+      function cloneStages(stages, catalog) {
+        const out = {}
+        for (const stage of catalog || []) {
+          const chosen = (stages && stages[stage.id]) || {}
+          const preset = stage.presets.find((item) => item.id === chosen.template) || stage.presets[0]
+          const config = { ...preset.config, ...(chosen.config || {}) }
+          out[stage.id] = {
+            template: preset.id,
+            config,
+            configText: JSON.stringify(config, null, 2),
+          }
+        }
+        return out
+      }
+
+      function defaultDraft(data) {
+        const template = (data.templates || []).find((item) => item.builtin) || (data.templates || [])[0]
+        return {
+          templateId: template ? template.id : 'custom',
+          name: template ? template.name : 'AutoEval 运行',
+          stages: cloneStages(template ? template.stages : {}, data.stages),
+        }
+      }
 
       const load = React.useCallback(async () => {
         try {
@@ -372,36 +482,200 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      const loadDetail = React.useCallback(async (runId) => {
+        if (!runId) return
+        try {
+          const [info, rows, report] = await Promise.all([
+            api(`/runs/detail?id=${encodeURIComponent(runId)}`),
+            api(`/rows?run=${encodeURIComponent(runId)}`).catch(() => null),
+            api(`/report?run=${encodeURIComponent(runId)}`).catch(() => null),
+          ])
+          const parsed = []
+          if (rows && typeof rows.text === 'string') {
+            for (const line of rows.text.split('\n')) {
+              if (!line.trim()) continue
+              try {
+                parsed.push(JSON.parse(line))
+              } catch {
+                // 半行产物，跳过
+              }
+            }
+          }
+          setDetail({ run: info.run, log: info.log || [], rows: parsed, report: report ? report.text : '' })
+        } catch (failure) {
+          setDetail({ run: null, log: [], rows: [], report: '', error: String(failure.message || failure) })
+        }
+      }, [])
+
       React.useEffect(() => {
         void load()
-        const timer = setInterval(() => { void load() }, 1500)
+        if (taskId) void loadDetail(taskId)
+        const timer = setInterval(() => {
+          void load()
+          if (taskId) void loadDetail(taskId)
+        }, 1500)
         return () => clearInterval(timer)
-      }, [load])
+      }, [load, loadDetail, taskId])
 
       const active = state && state.active
       const runs = (state && state.runs) || []
+      const templates = (state && state.templates) || []
+      const polled = (detail && detail.run) || (taskId ? runs.find((item) => item.id === taskId) : null)
+      const status = active ? active.status : (runs[0] ? runs[0].status : 'idle')
 
-      function defaultDraft(data) {
-        const template = (data.templates || []).find((item) => item.builtin) || (data.templates || [])[0]
-        return {
-          templateId: template ? template.id : 'custom',
-          name: template ? template.name : 'AutoEval 运行',
-          stages: cloneStages(template ? template.stages : {}, data.stages),
+      // ---- 数据操作 ----
+
+      async function submit() {
+        setError('')
+        setNotice('')
+        const cases = readJson(casesText)
+        if (!cases.ok || !Array.isArray(cases.value) || cases.value.length === 0) {
+          setError(`${t('error.cases')}${cases.ok ? '' : `：${cases.error}`}`)
+          return
+        }
+        const stages = {}
+        for (const stage of (state.stages || [])) {
+          const entry = draft.stages[stage.id]
+          const parsed = readJson(entry.configText || '{}')
+          if (!parsed.ok) {
+            setError(`${stage.id} / ${t('error.params')}：${parsed.error}`)
+            return
+          }
+          stages[stage.id] = { template: entry.template, config: parsed.value }
+        }
+        setBusy(true)
+        try {
+          const result = await api('/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name: draft.name, templateId: draft.templateId, cases: cases.value, stages }),
+          })
+          setSubmitting(false)
+          setView('tasks')
+          setDetailTab('summary')
+          setDetail(null)
+          setTaskId(result.runId)
+          setNotice(`runId: ${result.runId}`)
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        } finally {
+          setBusy(false)
         }
       }
 
-      function cloneStages(stages, catalog) {
-        const out = {}
-        for (const stage of catalog || []) {
-          const chosen = (stages && stages[stage.id]) || {}
-          const preset = stage.presets.find((item) => item.id === chosen.template) || stage.presets[0]
-          out[stage.id] = {
-            template: preset.id,
-            config: { ...preset.config, ...(chosen.config || {}) },
-            configText: JSON.stringify({ ...preset.config, ...(chosen.config || {}) }, null, 2),
-          }
+      async function cancel() {
+        try {
+          await api('/cancel', { method: 'POST' })
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
         }
-        return out
+      }
+
+      async function rerun(runId) {
+        setError('')
+        try {
+          const result = await api('/runs/rerun', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: runId }),
+          })
+          setNotice(`runId: ${result.runId}`)
+          setView('tasks')
+          setDetailTab('summary')
+          setDetail(null)
+          setTaskId(result.runId)
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        }
+      }
+
+      async function removeRun(item) {
+        if (!window.confirm(`${t('action.delete')}「${item.name}」？产物目录也会一起删掉。`)) return
+        setError('')
+        try {
+          await api(`/runs?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' })
+          if (taskId === item.id) {
+            setTaskId('')
+            setDetail(null)
+          }
+          await load()
+        } catch (failure) {
+          setError(String(failure.message || failure))
+        }
+      }
+
+      async function openTask(runId) {
+        setError('')
+        setView('tasks')
+        setSubmitting(false)
+        setDetailTab('summary')
+        setTaskId(runId)
+        setDetail({ run: null, log: [], rows: [], report: '', loading: true })
+        await loadDetail(runId)
+      }
+
+      function openTemplate(template) {
+        setError('')
+        setNotice('')
+        setView('templates')
+        setTemplateDraft({
+          mode: template.builtin ? 'view' : 'edit',
+          readonly: Boolean(template.builtin),
+          id: template.id,
+          name: template.name,
+          description: template.description || '',
+          stages: cloneStages(template.stages, state.stages),
+        })
+      }
+
+      function newTemplate() {
+        setError('')
+        setNotice('')
+        setView('templates')
+        setTemplateDraft({
+          mode: 'new',
+          readonly: false,
+          id: `template-${Date.now().toString(36)}`,
+          name: '',
+          description: '',
+          stages: cloneStages({}, state.stages),
+        })
+      }
+
+      function copyTemplate(source) {
+        setError('')
+        setNotice('')
+        setView('templates')
+        setTemplateDraft({
+          mode: 'new',
+          readonly: false,
+          id: `${source.id}-copy`,
+          name: `${source.name} ${t('tpl.copySuffix')}`,
+          description: source.description || '',
+          stages: cloneStages(source.stages, state.stages),
+        })
+      }
+
+      function draftToTemplate() {
+        setError('')
+        setNotice('')
+        setView('templates')
+        setTemplateDraft({
+          mode: 'new',
+          readonly: false,
+          id: `template-${Date.now().toString(36)}`,
+          name: draft.name,
+          description: '',
+          stages: Object.fromEntries(
+            Object.entries(draft.stages).map(([key, value]) => [
+              key,
+              { template: value.template, config: value.config, configText: value.configText },
+            ]),
+          ),
+        })
       }
 
       function setStage(stageId, patch) {
@@ -414,179 +688,6 @@ window.__ModuleLoader__.load({
         })
       }
 
-      function pickPreset(stageId, presetId) {
-        const stage = (state.stages || []).find((item) => item.id === stageId)
-        const preset = stage && stage.presets.find((item) => item.id === presetId)
-        setStage(stageId, {
-          template: presetId,
-          config: { ...(preset ? preset.config : {}) },
-          configText: JSON.stringify(preset ? preset.config : {}, null, 2),
-        })
-      }
-
-      async function run() {
-        setError('')
-        setNotice('')
-        let cases
-        try {
-          cases = JSON.parse(casesText)
-        } catch (failure) {
-          setError(`${t('error.cases')}：${failure.message}`)
-          return
-        }
-        if (!Array.isArray(cases) || cases.length === 0) {
-          setError(t('error.cases'))
-          return
-        }
-        const stages = {}
-        for (const stage of state.stages || []) {
-          const entry = draft.stages[stage.id]
-          let config = entry.config
-          if (entry.configText !== undefined) {
-            const parsed = readJson(entry.configText)
-            if (!parsed.ok) {
-              setError(`${stage.id} / ${t('error.params')}：${parsed.error}`)
-              return
-            }
-            config = parsed.value
-          }
-          stages[stage.id] = { template: entry.template, config }
-        }
-        setBusy(true)
-        try {
-          const result = await api('/run', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name: draft.name, templateId: draft.templateId, cases, stages }),
-          })
-          setNotice(`runId: ${result.runId}`)
-          setView('run')
-          await load()
-        } catch (failure) {
-          setError(String(failure.message || failure))
-        } finally {
-          setBusy(false)
-        }
-      }
-
-      async function cancel() {
-        try {
-          await api('/cancel', { method: 'POST' })
-        } catch (failure) {
-          setError(String(failure.message || failure))
-        }
-      }
-
-      // ---- 任务管理 ----
-
-      async function rerun(runId) {
-        setError('')
-        try {
-          const result = await api('/runs/rerun', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: runId }),
-          })
-          setNotice(`runId: ${result.runId}`)
-          setView('run')
-          await load()
-        } catch (failure) {
-          setError(String(failure.message || failure))
-        }
-      }
-
-      async function removeRun(item) {
-        if (!window.confirm(`${t('action.delete')}「${item.name}」？产物目录也会一起删掉。`)) return
-        setError('')
-        try {
-          await api(`/runs?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' })
-          if (expandedRun === item.id) setExpandedRun('')
-          if (reportRun === item.id) setReportRun('')
-          await load()
-        } catch (failure) {
-          setError(String(failure.message || failure))
-        }
-      }
-
-      async function toggleRun(runId) {
-        if (expandedRun === runId) {
-          setExpandedRun('')
-          return
-        }
-        setExpandedRun(runId)
-        if (details[runId]) return
-        try {
-          const data = await api(`/runs/detail?id=${encodeURIComponent(runId)}`)
-          setDetails((current) => ({ ...current, [runId]: { run: data.run, log: data.log || [] } }))
-        } catch (failure) {
-          setError(String(failure.message || failure))
-        }
-      }
-
-      // ---- 模板管理 ----
-
-      function emptyTemplateStages() {
-        return cloneStages({}, state.stages)
-      }
-
-      function newTemplate() {
-        setError('')
-        setNotice('')
-        setTemplateDraft({
-          mode: 'new',
-          id: `template-${Date.now().toString(36)}`,
-          name: '',
-          description: '',
-          stages: emptyTemplateStages(),
-        })
-        setView('templates')
-      }
-
-      function editTemplate(template) {
-        setError('')
-        setNotice('')
-        setTemplateDraft({
-          mode: 'edit',
-          id: template.id,
-          name: template.name,
-          description: template.description || '',
-          stages: cloneStages(template.stages, state.stages),
-        })
-        setView('templates')
-      }
-
-      function copyTemplate(template) {
-        setError('')
-        setNotice('')
-        setTemplateDraft({
-          mode: 'new',
-          id: `${template.id}-${t('tpl.copySuffix') === '副本' ? 'copy' : 'copy'}`,
-          name: `${template.name} ${t('tpl.copySuffix')}`,
-          description: template.description || '',
-          stages: cloneStages(template.stages, state.stages),
-        })
-        setView('templates')
-      }
-
-      // 运行页的「存为模板」：把当前配置带进模板编辑器
-      function draftToTemplate() {
-        setError('')
-        setNotice('')
-        setTemplateDraft({
-          mode: 'new',
-          id: `template-${Date.now().toString(36)}`,
-          name: draft.name,
-          description: '',
-          stages: Object.fromEntries(
-            Object.entries(draft.stages).map(([key, value]) => [
-              key,
-              { template: value.template, config: value.config, configText: value.configText },
-            ]),
-          ),
-        })
-        setView('templates')
-      }
-
       function setTemplateStage(stageId, patch) {
         setTemplateDraft((current) => {
           if (!current) return current
@@ -597,26 +698,38 @@ window.__ModuleLoader__.load({
         })
       }
 
-      function pickTemplatePreset(stageId, presetId) {
+      function pickStagePreset(stageId, presetId, target) {
         const stage = (state.stages || []).find((item) => item.id === stageId)
         const preset = stage && stage.presets.find((item) => item.id === presetId)
-        setTemplateStage(stageId, {
+        const patch = {
           template: presetId,
           config: { ...(preset ? preset.config : {}) },
           configText: JSON.stringify(preset ? preset.config : {}, null, 2),
+        }
+        if (target === 'template') setTemplateStage(stageId, patch)
+        else setStage(stageId, patch)
+      }
+
+      function applyTemplateToDraft(template) {
+        setDraft({
+          templateId: template.id,
+          name: template.name,
+          stages: cloneStages(template.stages, state.stages),
         })
+        setNotice('')
+        setError('')
       }
 
       async function saveTemplateDraft() {
         const current = templateDraft
-        if (!current) return
+        if (!current || current.readonly) return
         const id = String(current.id || '').trim()
         if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
           setError(t('tpl.badId'))
           return
         }
         const stages = {}
-        for (const stage of state.stages || []) {
+        for (const stage of (state.stages || [])) {
           const entry = current.stages[stage.id]
           const parsed = readJson(entry.configText || '{}')
           if (!parsed.ok) {
@@ -637,7 +750,7 @@ window.__ModuleLoader__.load({
               stages,
             }),
           })
-          setTemplateDraft(null)
+          setTemplateDraft({ ...current, mode: 'edit', readonly: false })
           setNotice(t('label.saved'))
           await load()
         } catch (failure) {
@@ -650,44 +763,23 @@ window.__ModuleLoader__.load({
         setError('')
         try {
           await api(`/templates?id=${encodeURIComponent(template.id)}`, { method: 'DELETE' })
+          setTemplateDraft(null)
           await load()
         } catch (failure) {
           setError(String(failure.message || failure))
         }
       }
 
-      function applyTemplateToRun(templateId) {
-        const template = (state.templates || []).find((item) => item.id === templateId)
-        if (!template) return
-        setDraft({
-          templateId: template.id,
-          name: template.name,
-          stages: cloneStages(template.stages, state.stages),
-        })
-        setNotice('')
-        setError('')
-      }
-
-      async function openReport(runId) {
-        setReportRun(runId)
-        setView('report')
-        try {
-          const data = await api(`/report?run=${encodeURIComponent(runId)}`)
-          setReport(data.text)
-        } catch (failure) {
-          setReport('')
-          setError(String(failure.message || failure))
-        }
-      }
-
+      // ---- 首屏 ----
       if (!state || !draft) {
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
           h('div', { className: 'ae-empty' }, 'AutoEval …'))
       }
 
-      const status = active ? active.status : (runs[0] ? runs[0].status : 'idle')
-      const progress = active && active.progress
+      const messages = h('div', null,
+        error ? h('div', { className: 'ae-error' }, error) : null,
+        notice ? h('div', { className: 'ae-notice' }, notice) : null)
 
       const head = h('div', { className: 'ae-head' },
         h('div', null,
@@ -695,194 +787,98 @@ window.__ModuleLoader__.load({
           h('p', { className: 'ae-sub' }, t('panel.subtitle'))),
         h('div', { className: 'ae-pill', 'data-state': statusState(status) },
           h('i', { className: 'ae-dot' }),
-          status === 'running' ? t('label.running') : status === 'done' ? t('label.done') : status === 'failed' ? t('label.failed') : t('label.idle')))
+          status === 'running' ? t('label.running') : status === 'done' ? t('label.done')
+            : status === 'failed' ? t('label.failed') : t('label.idle')))
 
       const tabs = h('div', { className: 'ae-tabs' },
-        ...['run', 'tasks', 'templates', 'report'].map((key) => h('button', {
+        ...['tasks', 'templates'].map((key) => h('button', {
           key, type: 'button', className: 'ae-tab', 'data-active': String(view === key),
-          onClick: () => setView(key),
+          onClick: () => {
+            setView(key)
+            setSubmitting(false)
+            setTaskId('')
+            setDetail(null)
+            setTemplateDraft(null)
+            setError('')
+            setNotice('')
+          },
         }, t(`tab.${key}`))))
 
-      const messages = h('div', null,
-        error ? h('div', { className: 'ae-error' }, error) : null,
-        notice && !error ? h('div', { className: 'ae-card-note' }, notice) : null)
-
-      if (view === 'run') {
-        const stageCards = (state.stages || []).map((stage, index) => {
-          const entry = draft.stages[stage.id]
-          const chips = stage.presets.map((preset) => h('button', {
-            key: preset.id, type: 'button', className: 'ae-chip',
+      function stageChips(stage, entry, target, disabled) {
+        return h('div', { className: 'ae-chips' },
+          ...stage.presets.map((preset) => h('button', {
+            key: preset.id, type: 'button', className: 'ae-chip', disabled,
             'data-active': String(entry.template === preset.id),
-            onClick: () => pickPreset(stage.id, preset.id),
-          }, t(`preset.${stage.id}.${preset.id}`) || preset.id))
-          return h('div', { className: 'ae-card', key: stage.id },
-            h('div', { className: 'ae-card-head' },
-              h('div', { className: 'ae-card-title' }, `${index + 1}. ${t(`stage.${stage.id}`)}`),
-              h('div', { className: 'ae-card-note' }, entry.template)),
-            h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`)),
-            h('div', { className: 'ae-chips' }, ...chips),
-            entry.template === 'custom'
-              ? h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('field.command')),
-                h('input', {
-                  className: 'ae-input', type: 'text', spellCheck: false,
-                  value: entry.config.command || '',
-                  placeholder: 'python3 ./my-judge.py',
-                  onChange: (event) => {
-                    const config = { ...entry.config, command: event.target.value }
-                    setStage(stage.id, { config, configText: JSON.stringify(config, null, 2) })
-                  },
-                }))
-              : null,
-            h('details', null,
-              h('summary', { className: 'ae-card-note', style: { cursor: 'pointer' } }, t('field.params')),
-              h('textarea', {
-                className: 'ae-textarea', rows: 6, spellCheck: false, value: entry.configText,
-                onChange: (event) => setStage(stage.id, { configText: event.target.value }),
-              })))
-        })
-
-        const metrics = (active && active.metrics) || (runs[0] && runs[0].metrics)
-
-        return h('div', { className: 'ae-page' },
-          h('style', null, STYLE),
-          head, tabs, messages,
-          h('div', { className: 'ae-cols' },
-            h('div', { className: 'ae-card' },
-              h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('field.template')),
-                h('div', { className: 'ae-chips' },
-                  ...(state.templates || []).map((template) => h('button', {
-                    key: template.id, type: 'button', className: 'ae-chip',
-                    'data-active': String(draft.templateId === template.id),
-                    onClick: () => applyTemplateToRun(template.id),
-                  }, template.name)))),
-              ...stageCards),
-            h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
-              h('div', { className: 'ae-card' },
-                h('div', { className: 'ae-field' },
-                  h('label', { className: 'ae-label' }, t('field.cases')),
-                  h('textarea', {
-                    className: 'ae-textarea', rows: 12, spellCheck: false, value: casesText,
-                    onChange: (event) => setCasesText(event.target.value),
-                  })),
-                h('div', { className: 'ae-actions' },
-                  h('button', {
-                    type: 'button', className: 'ae-btn ae-btn-primary',
-                    disabled: busy || Boolean(active), onClick: () => { void run() },
-                  }, t('action.run')),
-                  h('button', {
-                    type: 'button', className: 'ae-btn', disabled: !active, onClick: () => { void cancel() },
-                  }, t('action.cancel')),
-                  h('button', { type: 'button', className: 'ae-btn', onClick: () => draftToTemplate() }, t('action.saveTemplate')))),
-              active || progress
-                ? h('div', { className: 'ae-card' },
-                  h('div', { className: 'ae-card-title' }, `${t('label.running')} · ${active ? active.name : ''}`),
-                  h('div', { className: 'ae-bar' },
-                    h('i', {
-                      style: {
-                        width: `${progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 4}%`,
-                      },
-                    })),
-                  h('div', { className: 'ae-steps' },
-                    ...Object.entries((active && active.stages) || {}).map(([key, value]) => h('div', {
-                      key, className: 'ae-step', 'data-status': value.status,
-                    },
-                    h('span', { className: 'ae-step-name' }, t(`stage.${key}`)),
-                    h('span', { className: 'ae-step-meta' },
-                      `${t(`label.${value.status}`)}${value.durationMs == null ? '' : ` · ${value.durationMs}ms`}`)))))
-                : null,
-              metrics
-                ? h('div', { className: 'ae-card' },
-                  h('div', { className: 'ae-card-title' },
-                    active ? `${t('label.lastRun')}` : (runs[0] && runs[0].name ? runs[0].name : draft.name)),
-                  h('div', { className: 'ae-metrics' },
-                    h('div', { className: 'ae-metric' },
-                      h('div', { className: 'ae-metric-k' }, t('label.passRate')),
-                      h('div', { className: 'ae-metric-v' }, pct(metrics.passRate))),
-                    h('div', { className: 'ae-metric' },
-                      h('div', { className: 'ae-metric-k' }, `${metrics.passed}/${metrics.scored}`),
-                      h('div', { className: 'ae-metric-v' }, String(metrics.total))),
-                    h('div', { className: 'ae-metric' },
-                      h('div', { className: 'ae-metric-k' }, 'coverage'),
-                      h('div', { className: 'ae-metric-v' }, pct(metrics.avgCoverage))),
-                    h('div', { className: 'ae-metric' },
-                      h('div', { className: 'ae-metric-k' }, t('label.p50')),
-                      h('div', { className: 'ae-metric-v' }, `${metrics.latency ? metrics.latency.p50Ms : 0}ms`))),
-                  runs[0]
-                    ? h('button', { type: 'button', className: 'ae-link', onClick: () => { void openReport(runs[0].id) } }, t('action.view'))
-                    : null)
-                : null)))
-      }
-
-      // ---------------------------------------------------------- 评测任务页
-
-      function renderRunDetail(item) {
-        const entry = details[item.id]
-        const stages = item.stages || {}
-        return h('div', { className: 'ae-detail' },
-          item.error ? h('div', { className: 'ae-error' }, item.error) : null,
-          h('div', { className: 'ae-label' }, t('detail.stages')),
-          h('div', { className: 'ae-steps' },
-            ...Object.entries(stages).map(([key, value]) => h('div', {
-              key, className: 'ae-step', 'data-status': value.status,
+            onClick: () => {
+              if (!disabled) pickStagePreset(stage.id, preset.id, target)
             },
-            h('span', { className: 'ae-step-name' },
-              `${t(`stage.${key}`)}${value.template ? ` · ${value.template}` : ''}`),
-            h('span', { className: 'ae-step-meta' },
-              `${t(`label.${value.status}`)}${value.durationMs == null ? '' : ` · ${value.durationMs}ms`}`)))),
-          item.artifacts && item.artifacts.dir
-            ? h('div', { className: 'ae-detail-row' },
-              h('span', { className: 'ae-detail-key' }, t('detail.artifacts')),
-              h('span', { className: 'ae-card-note' }, item.artifacts.dir))
-            : null,
-          h('div', { className: 'ae-label' }, t('detail.log')),
-          entry
-            ? h('pre', { className: 'ae-log' },
-              (entry.log || []).length === 0
-                ? '-'
-                : entry.log.map((line) => `${String(line.at || '').slice(11, 19)}  ${line.stage || '-'}  ${line.message}`).join('\n'))
-            : h('div', { className: 'ae-card-note' }, '…'))
+          }, t(`preset.${stage.id}.${preset.id}`) || preset.id)))
       }
 
-      if (view === 'tasks') {
+      function stageEditor(stage, entry, target, readonly) {
+        return h('div', { className: 'ae-stage-edit', key: stage.id },
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
+            h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
+          stageChips(stage, entry, target, readonly),
+          entry.template === 'custom'
+            ? h('input', {
+              className: 'ae-input', type: 'text', spellCheck: false, disabled: readonly,
+              placeholder: 'python3 ./my-judge.py', value: entry.config.command || '',
+              onChange: (event) => {
+                const config = { ...entry.config, command: event.target.value }
+                const patch = { config, configText: JSON.stringify(config, null, 2) }
+                if (target === 'template') setTemplateStage(stage.id, patch)
+                else setStage(stage.id, patch)
+              },
+            })
+            : null,
+          h('div', { className: 'ae-field' },
+            h('label', { className: 'ae-label' }, t('field.params')),
+            h('textarea', {
+              className: 'ae-textarea', rows: 4, spellCheck: false, disabled: readonly,
+              value: entry.configText,
+              onChange: (event) => {
+                const patch = { configText: event.target.value }
+                if (target === 'template') setTemplateStage(stage.id, patch)
+                else setStage(stage.id, patch)
+              },
+            })))
+      }
+
+      // ---------------------------------------------------------- 任务列表
+      function renderTaskList() {
         const query = taskQuery.trim().toLowerCase()
         const filtered = runs.filter((item) => {
           if (taskStatus !== 'all' && item.status !== taskStatus) return false
           if (!query) return true
           return `${item.name} ${item.id} ${item.templateId || ''}`.toLowerCase().includes(query)
         })
-        const rows = []
-        for (const item of filtered) {
-          const expanded = expandedRun === item.id
-          const metrics = item.metrics
-          rows.push(h('tr', { key: item.id },
-            h('td', null, h('button', {
-              type: 'button', className: 'ae-row-toggle', 'aria-expanded': String(expanded),
-              onClick: () => { void toggleRun(item.id) },
-            }, h('span', { className: 'ae-caret' }, expanded ? '▾' : '▸'), item.name)),
-            h('td', null, item.templateId || '-'),
-            h('td', null, h('span', { className: 'ae-state', 'data-state': statusState(item.status) }, t(`label.${item.status}`))),
-            h('td', null, metrics ? pct(metrics.passRate) : '-'),
-            h('td', null, metrics ? `${metrics.passed}/${metrics.scored}` : '-'),
-            h('td', null, String(item.caseCount == null ? '-' : item.caseCount)),
-            h('td', null, item.durationMs == null ? '-' : `${(item.durationMs / 1000).toFixed(1)}s`),
-            h('td', null, (item.startedAt || '').replace('T', ' ').slice(0, 19)),
-            h('td', null, h('div', { className: 'ae-row-actions' },
-              h('button', { type: 'button', className: 'ae-link', onClick: () => { void openReport(item.id) } }, t('action.view')),
-              h('button', {
-                type: 'button', className: 'ae-link', disabled: Boolean(active),
-                onClick: () => { void rerun(item.id) },
-              }, t('action.rerun')),
-              item.status === 'running'
-                ? h('button', { type: 'button', className: 'ae-link', onClick: () => { void cancel() } }, t('action.cancelTask'))
-                : h('button', {
-                  type: 'button', className: 'ae-link ae-danger',
-                  onClick: () => { void removeRun(item) },
-                }, t('action.delete'))))))
-          if (expanded) rows.push(h('tr', { key: `${item.id}-detail` }, h('td', { colSpan: 9 }, renderRunDetail(item))))
-        }
         const statuses = ['all', 'running', 'done', 'failed', 'cancelled']
+        const rows = filtered.map((item) => h('tr', { key: item.id },
+          h('td', null, h('button', {
+            type: 'button', className: 'ae-row-toggle',
+            onClick: () => { void openTask(item.id) },
+          }, item.name)),
+          h('td', null, item.templateId || '-'),
+          h('td', null, h('span', { className: 'ae-state', 'data-state': statusState(item.status) }, t(`label.${item.status}`))),
+          h('td', null, item.metrics ? pct(item.metrics.passRate) : '-'),
+          h('td', null, item.metrics ? `${item.metrics.passed}/${item.metrics.scored}` : '-'),
+          h('td', null, String(item.caseCount == null ? '-' : item.caseCount)),
+          h('td', null, duration(item.durationMs)),
+          h('td', null, (item.startedAt || '').replace('T', ' ').slice(0, 19)),
+          h('td', null, h('div', { className: 'ae-row-actions' },
+            h('button', {
+              type: 'button', className: 'ae-link', disabled: Boolean(active),
+              onClick: () => { void rerun(item.id) },
+            }, t('action.rerun')),
+            item.status === 'running'
+              ? h('button', { type: 'button', className: 'ae-link', onClick: () => { void cancel() } }, t('action.cancelTask'))
+              : h('button', {
+                type: 'button', className: 'ae-link ae-danger',
+                onClick: () => { void removeRun(item) },
+              }, t('action.delete'))))))
+
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
           head, tabs, messages,
@@ -898,90 +894,218 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setTaskStatus(event.target.value),
               }, ...statuses.map((key) => h('option', { key, value: key },
                 key === 'all' ? t('tasks.allStatus') : t(`label.${key}`)))),
-              h('span', { className: 'ae-toolbar-count' }, `${filtered.length} / ${runs.length}`)),
+              h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary', disabled: Boolean(active),
+                onClick: () => { setSubmitting(true); setError(''); setNotice('') },
+              }, t('action.submit')),
+              h('span', { className: 'ae-toolbar-count' }, `${filtered.length} / ${runs.length} ${t('label.tasks')}`)),
             runs.length === 0
               ? h('div', { className: 'ae-empty' }, t('tasks.noRuns'))
               : filtered.length === 0
                 ? h('div', { className: 'ae-empty' }, t('tasks.empty'))
                 : h('table', { className: 'ae-table' },
                   h('thead', null, h('tr', null,
-                    ...['tasks.name', 'tasks.template', 'tasks.status', 'tasks.passRate', 'tasks.passed', 'tasks.cases', 'tasks.duration', 'tasks.startedAt', '']
-                      .map((key, index) => h('th', { key: index }, t(key))))),
+                    ...['tasks.name', 'tasks.template', 'tasks.status', 'tasks.passRate', 'tasks.passed',
+                      'tasks.cases', 'tasks.duration', 'tasks.startedAt', '']
+                      .map((key, index) => h('th', { key: index }, key ? t(key) : '')))),
                   h('tbody', null, ...rows))))
       }
 
-      // ---------------------------------------------------------- 任务模板页
+      // ---------------------------------------------------------- 任务详情
+      function renderMetrics(metrics) {
+        if (!metrics) return h('div', { className: 'ae-empty' }, '-')
+        const tiles = [
+          [t('label.total'), String(metrics.total)],
+          [t('label.scored'), String(metrics.scored)],
+          [t('label.passed'), String(metrics.passed)],
+          [t('label.passRate'), pct(metrics.passRate)],
+          [t('label.avgCoverage'), pct(metrics.avgCoverage)],
+          [t('label.scrapeErrors'), String(metrics.scrapeErrors)],
+          [t('label.p50'), metrics.latency ? duration(metrics.latency.p50Ms) : '-'],
+          [t('label.p95'), metrics.latency ? duration(metrics.latency.p95Ms) : '-'],
+        ]
+        return h('div', { className: 'ae-metrics' },
+          ...tiles.map(([key, value]) => h('div', { className: 'ae-metric', key },
+            h('div', { className: 'ae-metric-k' }, key),
+            h('div', { className: 'ae-metric-v' }, value))))
+      }
 
-      if (view === 'templates') {
-        if (templateDraft) {
+      function renderTaskDetail() {
+        const run = polled
+        const log = (detail && detail.log) || []
+        const rows = (detail && detail.rows) || []
+        if (!run) {
           return h('div', { className: 'ae-page' },
             h('style', null, STYLE),
             head, tabs, messages,
+            h('button', {
+              type: 'button', className: 'ae-back',
+              onClick: () => { setTaskId(''); setDetail(null) },
+            }, `← ${t('action.back')}`),
             h('div', { className: 'ae-card' },
-              h('div', { className: 'ae-card-title' },
-                templateDraft.mode === 'edit' ? t('tpl.edit') : t('tpl.new')),
-              h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('tpl.id')),
-                h('input', {
-                  className: 'ae-input', type: 'text', spellCheck: false,
-                  value: templateDraft.id, disabled: templateDraft.mode === 'edit',
-                  onChange: (event) => setTemplateDraft((current) => ({ ...current, id: event.target.value })),
-                })),
-              h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('tpl.name')),
-                h('input', {
-                  className: 'ae-input', type: 'text', value: templateDraft.name,
-                  onChange: (event) => setTemplateDraft((current) => ({ ...current, name: event.target.value })),
-                })),
-              h('div', { className: 'ae-field' },
-                h('label', { className: 'ae-label' }, t('tpl.desc')),
-                h('input', {
-                  className: 'ae-input', type: 'text', value: templateDraft.description,
-                  onChange: (event) => setTemplateDraft((current) => ({ ...current, description: event.target.value })),
-                })),
-              ...(state.stages || []).map((stage) => {
-                const entry = templateDraft.stages[stage.id]
-                return h('div', { className: 'ae-stage-edit', key: stage.id },
-                  h('div', { className: 'ae-card-head' },
-                    h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
-                    h('div', { className: 'ae-card-note' }, entry.template)),
-                  h('div', { className: 'ae-chips' },
-                    ...stage.presets.map((preset) => h('button', {
-                      key: preset.id, type: 'button', className: 'ae-chip',
-                      'data-active': String(entry.template === preset.id),
-                      onClick: () => pickTemplatePreset(stage.id, preset.id),
-                    }, t(`preset.${stage.id}.${preset.id}`) || preset.id))),
-                  entry.template === 'custom'
-                    ? h('input', {
-                      className: 'ae-input', type: 'text', spellCheck: false,
-                      placeholder: 'python3 ./my-judge.py',
-                      value: entry.config.command || '',
-                      onChange: (event) => {
-                        const config = { ...entry.config, command: event.target.value }
-                        setTemplateStage(stage.id, { config, configText: JSON.stringify(config, null, 2) })
-                      },
-                    })
-                    : null,
-                  h('textarea', {
-                    className: 'ae-textarea', rows: 4, spellCheck: false, value: entry.configText,
-                    onChange: (event) => setTemplateStage(stage.id, { configText: event.target.value }),
-                  }))
-              }),
-              h('div', { className: 'ae-actions' },
-                h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => { void saveTemplateDraft() } }, t('action.save')),
-                h('button', { type: 'button', className: 'ae-btn', onClick: () => setTemplateDraft(null) }, t('action.cancel')))))
+              h('div', { className: 'ae-empty' }, (detail && detail.error) ? detail.error : t('detail.loading'))))
         }
+        const running = run.status === 'running'
 
-        const templates = state.templates || []
+        const summary = h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, t('label.passRate')),
+            running && active && active.progress
+              ? h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } },
+                `${t('submit.progress')} · ${active.progress.stage || '-'} ${active.progress.done}/${active.progress.total}`)
+              : null),
+          renderMetrics(run.metrics),
+          h('div', { className: 'ae-card-title', style: { marginTop: '4px' } }, t('detail.stages')),
+          h('div', { className: 'ae-steps' },
+            ...Object.entries(run.stages || {}).map(([key, value]) => h('div', {
+              key, className: 'ae-step', 'data-status': value.status,
+            },
+            h('span', { className: 'ae-step-name' },
+              `${t(`stage.${key}`)}${value.template ? ` · ${value.template}` : ''}`),
+            h('span', { className: 'ae-step-meta' },
+              `${t(`label.${value.status}`)}${value.durationMs == null ? '' : ` · ${duration(value.durationMs)}`}`)))),
+          run.artifacts && run.artifacts.dir
+            ? h('div', { className: 'ae-detail-row' },
+              h('span', { className: 'ae-detail-key' }, t('detail.artifacts')),
+              h('span', { className: 'ae-mono' }, run.artifacts.dir))
+            : null,
+          h('div', { className: 'ae-label' }, t('detail.log')),
+          h('pre', { className: 'ae-log' },
+            log.length === 0 ? '-'
+              : log.map((line) => `${String(line.at || '').slice(11, 19)}  ${line.stage || '-'}  ${line.message}`).join('\n')))
+
+        const rowTable = rows.length === 0
+          ? h('div', { className: 'ae-empty' }, t('detail.noRows'))
+          : h('table', { className: 'ae-table' },
+            h('thead', null, h('tr', null,
+              ...['detail.rowQuery', 'detail.rowScore', 'detail.rowCoverage', 'detail.rowMissed',
+                'detail.rowSources', 'detail.rowLatency']
+                .map((key, index) => h('th', { key: index }, t(key))))),
+            h('tbody', null, ...rows.map((row) => h('tr', { key: row.id || row.query },
+              h('td', null,
+                h('div', null, row.query || '-'),
+                h('div', { className: 'ae-card-note' }, `${row.id || '?'}${row.bucket ? ` · ${row.bucket}` : ''}`),
+                row.material
+                  ? h('details', null,
+                    h('summary', { className: 'ae-card-note' }, t('detail.rowMaterial')),
+                    h('pre', { className: 'ae-log' }, String(row.material).slice(0, 4000)))
+                  : null),
+              h('td', null, row.error
+                ? h('span', { className: 'ae-state', 'data-state': 'failed' }, 'error')
+                : String(row.score == null ? '-' : row.score)),
+              h('td', null, row.coverage == null ? '-' : pct(row.coverage)),
+              h('td', null, (row.missed && row.missed.length) ? row.missed.join('、') : '-'),
+              h('td', null, String((row.sources || []).length)),
+              h('td', null, duration(row.latencyMs))))))
+
+        const body = detailTab === 'summary' ? summary
+          : detailTab === 'rows' ? h('div', { className: 'ae-card' }, rowTable)
+            : h('div', { className: 'ae-card' },
+              (detail && detail.report)
+                ? h('pre', { className: 'ae-pre' }, detail.report)
+                : h('div', { className: 'ae-empty' }, t('detail.noReport')))
+
+        return h('div', { className: 'ae-page' },
+          h('style', null, STYLE),
+          head, tabs, messages,
+          h('button', {
+            type: 'button', className: 'ae-back',
+            onClick: () => { setTaskId(''); setDetail(null) },
+          }, `← ${t('action.back')}`),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-head' },
+              h('div', null,
+                h('div', { className: 'ae-card-title' }, run.name),
+                h('div', { className: 'ae-card-note' },
+                  `${run.id} · ${run.templateId || '-'} · ${(run.startedAt || '').replace('T', ' ').slice(0, 19)} · ${duration(run.durationMs)}`)),
+              h('div', { className: 'ae-actions', style: { marginLeft: 'auto' } },
+                running
+                  ? h('button', { type: 'button', className: 'ae-btn', onClick: () => { void cancel() } }, t('action.cancelTask'))
+                  : h('button', {
+                    type: 'button', className: 'ae-btn', disabled: Boolean(active),
+                    onClick: () => { void rerun(run.id) },
+                  }, t('action.rerun')),
+                h('button', {
+                  type: 'button', className: 'ae-btn ae-danger',
+                  onClick: () => { void removeRun(run) },
+                }, t('action.delete')))),
+            h('div', { className: 'ae-subtabs' },
+              ...['summary', 'rows', 'report'].map((key) => h('button', {
+                key, type: 'button', className: 'ae-subtab', 'data-active': String(detailTab === key),
+                onClick: () => setDetailTab(key),
+              }, t(`detail.${key}`)))),
+            body))
+      }
+
+      // ---------------------------------------------------------- 提交任务
+      function renderSubmit() {
+        const progress = active && active.progress
+        return h('div', { className: 'ae-page' },
+          h('style', null, STYLE),
+          head, tabs, messages,
+          h('button', { type: 'button', className: 'ae-back', onClick: () => setSubmitting(false) },
+            `← ${t('action.back')}`),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-title' }, t('submit.title')),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('submit.name')),
+              h('input', {
+                className: 'ae-input', type: 'text', value: draft.name,
+                onChange: (event) => setDraft({ ...draft, name: event.target.value }),
+              })),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('submit.template')),
+              h('div', { className: 'ae-chips' },
+                ...templates.map((template) => h('button', {
+                  key: template.id, type: 'button', className: 'ae-chip',
+                  'data-active': String(draft.templateId === template.id),
+                  onClick: () => applyTemplateToDraft(template),
+                }, template.name))))),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-title' }, t('tpl.config')),
+            ...(state.stages || []).map((stage) => stageEditor(stage, draft.stages[stage.id], 'draft', false))),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-head' },
+              h('div', { className: 'ae-card-title' }, t('submit.cases')),
+              h('div', { className: 'ae-card-note' }, t('submit.casesHint'))),
+            h('textarea', {
+              className: 'ae-textarea', rows: 10, spellCheck: false, value: casesText,
+              onChange: (event) => setCasesText(event.target.value),
+            })),
+          progress
+            ? h('div', { className: 'ae-card' },
+              h('div', { className: 'ae-progress' },
+                h('i', { style: { width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` } })),
+              h('div', { className: 'ae-card-note' },
+                `${t('submit.progress')} · ${progress.stage || '-'} ${progress.done}/${progress.total}`))
+            : null,
+          h('div', { className: 'ae-actions' },
+            h('button', {
+              type: 'button', className: 'ae-btn ae-btn-primary', disabled: busy || Boolean(active),
+              onClick: () => { void submit() },
+            }, t('action.run')),
+            h('button', { type: 'button', className: 'ae-btn', onClick: () => draftToTemplate() }, t('action.saveAsTemplate'))))
+      }
+
+      // ---------------------------------------------------------- 模板列表
+      function renderTemplateList() {
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
           head, tabs, messages,
           h('div', { className: 'ae-toolbar' },
-            h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => newTemplate() }, t('tpl.new')),
+            h('button', { type: 'button', className: 'ae-btn ae-btn-primary', onClick: () => newTemplate() }, t('action.newTemplate')),
             h('span', { className: 'ae-toolbar-count' },
-              `${templates.filter((item) => !item.builtin).length} / ${templates.length}`)),
-          h('div', { className: 'ae-template-grid' },
-            ...templates.map((template) => h('div', { className: 'ae-template-card', key: template.id },
+              `${templates.filter((item) => !item.builtin).length} / ${templates.length} ${t('label.templates')}`)),
+          templates.length === 0
+            ? h('div', { className: 'ae-empty' }, t('tpl.empty'))
+            : h('div', { className: 'ae-template-grid' },
+              ...templates.map((template) => h('div', {
+                key: template.id, className: 'ae-template-card', role: 'button', tabIndex: 0,
+                onClick: () => openTemplate(template),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') openTemplate(template)
+                },
+              },
               h('div', { className: 'ae-template-name' }, template.name,
                 h('span', {
                   className: 'ae-badge',
@@ -989,31 +1113,77 @@ window.__ModuleLoader__.load({
                 }, template.builtin ? t('tpl.builtin') : t('tpl.custom'))),
               h('div', { className: 'ae-card-note' }, template.description || template.id),
               h('div', { className: 'ae-card-note' },
-                Object.entries(template.stages || {}).map(([key, value]) => `${key}: ${value.template}`).join(' · ')),
-              h('div', { className: 'ae-row-actions' },
-                template.builtin
-                  ? h('button', { type: 'button', className: 'ae-link', onClick: () => copyTemplate(template) }, t('tpl.copy'))
-                  : [
-                    h('button', { key: 'e', type: 'button', className: 'ae-link', onClick: () => editTemplate(template) }, t('action.edit')),
-                    h('button', { key: 'c', type: 'button', className: 'ae-link', onClick: () => copyTemplate(template) }, t('tpl.copy')),
-                    h('button', { key: 'd', type: 'button', className: 'ae-link ae-danger', onClick: () => { void deleteTemplate(template) } }, t('action.delete')),
-                  ])))))
+                Object.entries(template.stages || {}).map(([key, value]) => `${key}: ${value.template}`).join(' · '))))))
       }
 
-      return h('div', { className: 'ae-page' },
-        h('style', null, STYLE),
-        head, tabs, messages,
-        h('div', { className: 'ae-card' },
-          h('div', { className: 'ae-card-head' },
-            h('div', { className: 'ae-card-title' }, reportRun || t('tab.report')),
-            h('div', { className: 'ae-actions' },
-              h('button', {
-                type: 'button', className: 'ae-btn', disabled: !reportRun,
-                onClick: () => { void openReport(reportRun) },
-              }, t('action.refresh')))),
-          report
-            ? h('pre', { className: 'ae-pre' }, report)
-            : h('div', { className: 'ae-empty' }, t('label.noReport'))))
+      // ---------------------------------------------------------- 模板详情
+      function renderTemplateDetail() {
+        const current = templateDraft
+        const readonly = current.readonly
+        return h('div', { className: 'ae-page' },
+          h('style', null, STYLE),
+          head, tabs, messages,
+          h('button', { type: 'button', className: 'ae-back', onClick: () => setTemplateDraft(null) },
+            `← ${t('action.back')}`),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-head' },
+              h('div', { className: 'ae-card-title' },
+                current.mode === 'new' ? t('tpl.new') : (current.name || current.id)),
+              h('span', {
+                className: 'ae-badge', 'data-kind': readonly ? 'builtin' : 'custom',
+              }, readonly ? t('tpl.builtin') : t('tpl.custom')),
+              readonly ? null : h('div', { className: 'ae-card-note' }, t('tpl.edit')),
+              readonly
+                ? h('div', { className: 'ae-card-note', style: { marginLeft: 'auto' } }, t('tpl.readonly'))
+                : null),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.id')),
+              h('input', {
+                className: 'ae-input', type: 'text', spellCheck: false,
+                disabled: readonly || current.mode === 'edit',
+                value: current.id,
+                onChange: (event) => setTemplateDraft({ ...current, id: event.target.value }),
+              })),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.name')),
+              h('input', {
+                className: 'ae-input', type: 'text', disabled: readonly, value: current.name,
+                onChange: (event) => setTemplateDraft({ ...current, name: event.target.value }),
+              })),
+            h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.desc')),
+              h('input', {
+                className: 'ae-input', type: 'text', disabled: readonly, value: current.description,
+                onChange: (event) => setTemplateDraft({ ...current, description: event.target.value }),
+              }))),
+          h('div', { className: 'ae-card' },
+            h('div', { className: 'ae-card-title' }, t('tpl.config')),
+            ...(state.stages || []).map((stage) => stageEditor(stage, current.stages[stage.id], 'template', readonly))),
+          h('div', { className: 'ae-actions' },
+            readonly
+              ? null
+              : h('button', {
+                type: 'button', className: 'ae-btn ae-btn-primary',
+                onClick: () => { void saveTemplateDraft() },
+              }, t('action.save')),
+            h('button', { type: 'button', className: 'ae-btn', onClick: () => copyTemplate(current) }, t('action.copyTemplate')),
+            readonly
+              ? null
+              : h('button', {
+                type: 'button', className: 'ae-btn ae-danger',
+                onClick: () => { void deleteTemplate({ id: current.id, name: current.name || current.id }) },
+              }, t('action.delete')),
+            h('button', { type: 'button', className: 'ae-btn', onClick: () => setTemplateDraft(null) }, t('action.back'))))
+      }
+
+      // ---------------------------------------------------------- 路由
+      if (view === 'tasks') {
+        if (submitting) return renderSubmit()
+        if (taskId) return renderTaskDetail()
+        return renderTaskList()
+      }
+      if (templateDraft) return renderTemplateDetail()
+      return renderTemplateList()
     }
 
     // ------------------------------------------------------------ 注册
