@@ -193,6 +193,50 @@ test('存储写入 state.json 与 runs/<id>/', async () => {
   assert.ok(rows.trim().split('\n').length >= 1)
 })
 
+test('任务详情返回阶段配置与日志', async () => {
+  const state = await call('GET', '/autoeval-api/state')
+  const target = state.runs[0]
+  const detail = await call('GET', `/autoeval-api/runs/detail?id=${target.id}`)
+  assert.equal(detail.ok, true)
+  assert.equal(detail.run.id, target.id)
+  assert.ok(Array.isArray(detail.log) && detail.log.length >= 8, '日志太短')
+  for (const stage of STAGES) {
+    assert.equal(detail.run.stages[stage.id].template, target.stages[stage.id].template)
+  }
+  assert.ok(detail.run.stages.scraping.config, '阶段参数没存下来')
+})
+
+test('重跑沿用原用例与阶段配置', async () => {
+  const state = await call('GET', '/autoeval-api/state')
+  const source = state.runs[0]
+  const rerun = await call('POST', '/autoeval-api/runs/rerun', { id: source.id })
+  assert.equal(rerun.ok, true)
+  assert.notEqual(rerun.runId, source.id)
+  const after = await waitForIdle()
+  const fresh = after.runs.find((item) => item.id === rerun.runId)
+  assert.ok(fresh, '重跑没有进历史')
+  assert.equal(fresh.status, 'done', JSON.stringify(fresh.error || fresh.log))
+  assert.equal(fresh.caseCount, source.caseCount)
+  assert.equal(fresh.metrics.total, source.metrics.total)
+  for (const stage of STAGES) {
+    assert.equal(fresh.stages[stage.id].template, source.stages[stage.id].template)
+  }
+})
+
+test('删除运行会连产物目录一起删掉', async () => {
+  const state = await call('GET', '/autoeval-api/state')
+  const victim = state.runs[0]
+  const dir = victim.artifacts.dir
+  await fsp.access(dir)
+  const removed = await call('DELETE', `/autoeval-api/runs?id=${victim.id}`)
+  assert.equal(removed.removed, victim.id)
+  const after = await call('GET', '/autoeval-api/state')
+  assert.ok(!after.runs.some((item) => item.id === victim.id), '记录还在')
+  await assert.rejects(fsp.access(dir), '产物目录没删')
+  const missing = await call('GET', `/autoeval-api/report?run=${victim.id}`)
+  assert.equal(missing.ok, false)
+})
+
 test('空用例与非法的阶段模板都被拒绝', async () => {
   const empty = await call('POST', '/autoeval-api/run', { cases: [] })
   assert.equal(empty.ok, false)

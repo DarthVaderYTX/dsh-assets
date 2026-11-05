@@ -525,13 +525,22 @@ class AutoEvalService {
       finishedAt: null,
       status: 'running',
       stages: Object.fromEntries(
-        STAGES.map((stage) => [stage.id, { status: 'pending', durationMs: null, error: null, summary: null }]),
+        STAGES.map((stage) => [
+          stage.id,
+          // 把这次用的模板与参数一起存下来，重跑和任务详情都靠它
+          { status: 'pending', durationMs: null, error: null, summary: null, template: stages[stage.id].template, config: stages[stage.id].config },
+        ]),
       ),
       caseCount: cases.length,
       metrics: null,
       artifacts: null,
       log: [],
     }
+    // 用例快照先落盘：任务失败也还能照着原样重跑
+    const dir = path.join(dataDir(), 'runs', id)
+    await fsp.mkdir(dir, { recursive: true })
+    await fsp.writeFile(path.join(dir, 'cases.json'), JSON.stringify(cases, null, 2), 'utf8')
+    run.artifacts = { dir, report: null, rows: null, cases: path.join(dir, 'cases.json') }
     this.active = { ...run, cases }
     this.progress = { stage: null, done: 0, total: cases.length }
     const controller = new AbortController()
@@ -625,7 +634,12 @@ class AutoEvalService {
       cases.map((item) => JSON.stringify(item)).join('\n') + '\n',
       'utf8',
     )
-    run.artifacts = { dir, report: path.join(dir, reportName), rows: path.join(dir, 'rows.jsonl') }
+    run.artifacts = {
+      dir,
+      report: path.join(dir, reportName),
+      rows: path.join(dir, 'rows.jsonl'),
+      cases: path.join(dir, 'cases.json'),
+    }
     this.active.artifacts = run.artifacts
   }
 
@@ -634,7 +648,53 @@ class AutoEvalService {
     const run = state.runs.find((item) => item.id === runId)
     if (!run || !run.artifacts) throw new Error(`找不到运行 ${runId} 的产物`)
     const file = kind === 'rows' ? run.artifacts.rows : run.artifacts.report
+    if (!file) throw new Error(`运行 ${runId} 没有${kind === 'rows' ? '逐条结果' : '报告'}（跑失败了？）`)
     return fsp.readFile(file, 'utf8')
+  }
+
+  /** 删掉一次运行：记录 + 产物目录。运行中的先取消再删。 */
+  async deleteRun(runId) {
+    if (this.active && this.active.id === runId) throw new Error('这次运行还在跑，先取消再删')
+    const state = await readState()
+    const index = state.runs.findIndex((item) => item.id === runId)
+    if (index < 0) throw new Error(`找不到运行 ${runId}`)
+    const [run] = state.runs.splice(index, 1)
+    await writeState(state)
+    if (run.artifacts && run.artifacts.dir) {
+      await fsp.rm(run.artifacts.dir, { recursive: true, force: true })
+    }
+    return { removed: runId }
+  }
+
+  /** 按原样再跑一次：用例来自 cases.json，阶段模板与参数来自运行记录。 */
+  async rerun(runId) {
+    const state = await readState()
+    const run = state.runs.find((item) => item.id === runId)
+    if (!run) throw new Error(`找不到运行 ${runId}`)
+    const file = run.artifacts && run.artifacts.cases
+    if (!file) throw new Error('这次运行没有留下用例快照，不能重跑')
+    const cases = JSON.parse(await fsp.readFile(file, 'utf8'))
+    if (!Array.isArray(cases) || cases.length === 0) throw new Error('用例快照是空的')
+    const stages = {}
+    for (const stage of STAGES) {
+      const saved = run.stages && run.stages[stage.id]
+      if (saved && saved.template) stages[stage.id] = { template: saved.template, config: saved.config }
+    }
+    const result = await this.start({
+      name: `${run.name}（重跑）`,
+      templateId: run.templateId,
+      cases,
+      stages: Object.keys(stages).length > 0 ? stages : undefined,
+    })
+    return { ...result, source: runId }
+  }
+
+  /** 任务详情：记录 + 阶段 + 日志。 */
+  async runDetail(runId) {
+    const state = await readState()
+    const run = state.runs.find((item) => item.id === runId)
+    if (!run) throw new Error(`找不到运行 ${runId}`)
+    return { run, log: run.log || [] }
   }
 
   async saveTemplate(input) {
@@ -722,6 +782,22 @@ export function apply(ctx, config = {}) {
           if (req.method === 'GET' && routePath === '/report') {
             const text = await service.readArtifact(url.searchParams.get('run') || '', 'report')
             sendJson(res, 200, { ok: true, text })
+            return
+          }
+          if (req.method === 'GET' && routePath === '/runs/detail') {
+            const detail = await service.runDetail(url.searchParams.get('id') || '')
+            sendJson(res, 200, { ok: true, ...detail })
+            return
+          }
+          if (req.method === 'POST' && routePath === '/runs/rerun') {
+            const body = await readBody(req)
+            const result = await service.rerun(String(body.id || url.searchParams.get('id') || ''))
+            sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+          if (req.method === 'DELETE' && routePath === '/runs') {
+            const result = await service.deleteRun(url.searchParams.get('id') || '')
+            sendJson(res, 200, { ok: true, ...result })
             return
           }
           if (req.method === 'GET' && routePath === '/rows') {

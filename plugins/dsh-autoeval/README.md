@@ -10,11 +10,16 @@ Markdown 报告。
 
 ## 界面
 
-- 左侧栏新增一个 **AutoEval** 图标（`sidebar.panellist`，order 20），点开是主面板（`main` 槽位，key `autoeval`）。
-- 面板三个页签：**运行** / **历史** / **报告**。
-  - 运行：选评测模板 → 四个阶段各挑一个执行模板、改参数 → 贴用例 JSON → 开始运行，带阶段进度条。
-  - 历史：每次运行的名称、时间、状态、通过率、P50 耗时，点「查看报告」。
-  - 报告：直接看落盘的 Markdown。
+左侧栏新增一个 **AutoEval** 图标（`sidebar.panellist`，order 20），点开是主面板（`main` 槽位，key `autoeval`），四个页签：
+
+| 页签 | 干什么 |
+| --- | --- |
+| **运行** | 选评测模板 → 四个阶段各挑执行模板、改参数 → 贴用例 JSON → 开始运行；运行中显示阶段进度条，结束后给通过率/P50 摘要 |
+| **评测任务** | 管理已经提交的评测任务：搜索（名称 / id / 模板）、按状态筛（全部 / 运行中 / 完成 / 失败 / 已取消）；每行可展开看阶段、耗时、产物目录和日志；操作有查看报告、重跑、删除（运行中的给取消） |
+| **任务模板** | 管理当前支持的评测模板：内置模板只读（可复制），自定义模板可新建、编辑、复制、删除；编辑器里逐阶段挑执行模板、改参数 JSON、填自定义命令 |
+| **报告** | 直接看落盘的 Markdown，可刷新 |
+
+「运行」页的「存为模板」会把当前四个阶段的配置带进模板编辑器，改完名字保存即可。
 
 ## 四个阶段与执行模板
 
@@ -69,9 +74,12 @@ python3 ./llm-judge.py     # 自己读 stdin、算分，把带 score 的数组�
 | GET | `/state` | 阶段目录 + 模板 + 历史运行 + 当前运行进度 |
 | POST | `/run` | `{ name, templateId, cases, stages }` → `{ runId }`，后台跑 |
 | POST | `/cancel` | 取消当前运行 |
+| GET | `/runs/detail?id=<id>` | 单次任务的阶段、参数与日志 |
+| POST | `/runs/rerun` | `{ id }` 按原用例与阶段配置重跑 |
+| DELETE | `/runs?id=<id>` | 删掉一次任务（记录 + 产物目录） |
 | GET | `/report?run=<id>` | 读报告正文 |
 | GET | `/rows?run=<id>` | 读 `rows.jsonl` |
-| POST | `/templates` | 存一份自定义模板 |
+| POST | `/templates` | 存一份自定义模板（同 id 覆盖） |
 | DELETE | `/templates?id=<id>` | 删掉自定义模板 |
 
 agent 侧另有两个工具：`autoeval_run`、`autoeval_status`。
@@ -80,11 +88,14 @@ agent 侧另有两个工具：`autoeval_run`、`autoeval_status`。
 
 ```
 $DSH_HOME/storages/autoeval/            （默认 ~/.dsh）
-├── state.json                          模板 + 最近 30 次运行
+├── state.json                          模板 + 最近 30 次运行（含阶段配置）
 └── runs/<runId>/
+    ├── cases.json                        本次提交的用例快照（重跑靠它）
     ├── report.md     或 report.json
     └── rows.jsonl                        逐条结果（含材料与来源）
 ```
+
+删除任务时整个 `runs/<runId>/` 一起删。
 
 ## 安装
 
@@ -108,7 +119,7 @@ dsh-autoeval/
 ├── client.js             浏览器：侧栏图标 + 主面板
 ├── locale/{zh,en}.json   插件管理器里的标题与说明
 ├── icon.svg              插件图标
-├── test/small-set.json   6 条小测试集
+├── test/                 小测试集 + 宿主/面板回归测试
 └── README.md
 ```
 
@@ -116,11 +127,11 @@ dsh-autoeval/
 
 ```bash
 cd plugins/dsh-autoeval
-node --test          # 16 个用例：宿主流水线 10 + 浏览器面板 6
+node --test          # 23 个用例：宿主流水线 13 + 浏览器面板 10
 ```
 
-- `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、错误路径、模板增删；数据写在临时 `DSH_HOME` 里。
-- `test/client.test.mjs`：用迷你 React 渲染面板，检查侧栏/主面板注册、四阶段渲染、点「开始运行」发出的 `/run` body、历史页与报告页。
+- `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、任务详情/重跑/删除、错误路径、模板增删；数据写在临时 `DSH_HOME` 里。
+- `test/client.test.mjs`：用迷你 React 渲染面板，检查侧栏/主面板注册、四阶段渲染、点「开始运行」发出的 `/run` body、四个页签的渲染、任务页的筛选/展开/重跑/删除、模板页的新建与保存。
 
 ## 已知限制
 

@@ -16,7 +16,16 @@ const { STAGES, BUILTIN_TEMPLATES } = await import(path.join(root, 'index.js'))
 const STATE = {
   ok: true,
   stages: STAGES,
-  templates: BUILTIN_TEMPLATES,
+  templates: [
+    ...BUILTIN_TEMPLATES,
+    {
+      id: 'my-coverage',
+      name: '我的覆盖模板',
+      description: '自建：只判信息点',
+      builtin: false,
+      stages: BUILTIN_TEMPLATES[0].stages,
+    },
+  ],
   runs: [
     {
       id: 'run-fixture',
@@ -98,6 +107,9 @@ globalThis.fetch = async (url, options = {}) => {
   if (url.endsWith('/run')) return reply({ ok: true, runId: 'run-stub' })
   if (url.endsWith('/cancel')) return reply({ ok: true })
   if (url.includes('/report')) return reply({ ok: true, text: '# stub report' })
+  if (url.includes('/runs/detail')) return reply({ ok: true, run: STATE.runs[0], log: [{ at: '2026-11-05T04:32:27.686Z', stage: 'scraping', message: '完成，用时 30940ms' }] })
+  if (url.includes('/runs?')) return reply({ ok: true, removed: 'run-fixture' })
+  if (url.includes('/runs/rerun')) return reply({ ok: true, runId: 'run-rerun' })
   return reply({ ok: false, error: `unexpected ${url}` }, 404)
 }
 
@@ -193,11 +205,13 @@ test('点「开始运行」把用例和阶段配置 POST 到 /run', async () => 
   assert.equal(body.stages.scraping.template, 'websearch')
 })
 
+globalThis.window.confirm = () => true
+
 test('历史页与报告页', async () => {
   const main = registered.find((item) => item.options.name === 'main')
   let view = render(main.component, {})
   const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
-  assert.equal(tabs.length, 3)
+  assert.equal(tabs.length, 4)
   tabs[1].props.onClick()       // 切到历史页
   view = render(main.component, {})
   assert.ok(texts(view).includes('小测试集'), '历史页没有记录')
@@ -209,4 +223,95 @@ test('历史页与报告页', async () => {
   assert.ok(calls.some((call) => call.url.includes('/report?run=')))
   view = render(main.component, {})
   assert.ok(texts(view).includes('stub report'))
+})
+
+test('任务页：表格、筛选、展开详情', async () => {
+  const main = registered.find((item) => item.options.name === 'main')
+  let view = render(main.component, {})
+  const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
+  assert.equal(tabs.length, 4, '应该是 4 个页签')
+  tabs[1].props.onClick()
+  view = render(main.component, {})
+  const text = texts(view)
+  assert.ok(text.includes('小测试集'), '任务表没有记录')
+  assert.ok(findAll(view, (node) => String(node.props.className).includes('ae-search')).length === 1, '缺少搜索框')
+  assert.ok(findAll(view, (node) => node.props.className === 'ae-select').length === 1, '缺少状态筛选')
+  const links = findAll(view, (node) => String(node.props.className || '').startsWith('ae-link'))
+  assert.ok(links.length >= 3, '行内操作太少')
+
+  // 展开详情 → 请求 /runs/detail
+  const before = calls.length
+  const toggle = findAll(view, (node) => node.props.className === 'ae-row-toggle')[0]
+  assert.ok(toggle, '缺少展开按钮')
+  await toggle.props.onClick()
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/detail')), '没有请求 /runs/detail')
+  pending = false
+  view = render(main.component, {})
+  assert.ok(texts(view).includes('日志'), '详情里没有日志')
+})
+
+test('任务页：重跑与删除', async () => {
+  const main = registered.find((item) => item.options.name === 'main')
+  let view = render(main.component, {})
+  const rerunButton = findAll(view, (node) => node.props.className === 'ae-link' && node.children.includes('重跑'))[0]
+  assert.ok(rerunButton, '缺少重跑按钮')
+  let before = calls.length
+  await rerunButton.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.ok(calls.slice(before).some((call) => call.url.includes('/runs/rerun')), '没有请求 /runs/rerun')
+
+  // 重跑成功后会跳回运行页，重新切回任务页再找删除
+  view = render(main.component, {})
+  const tabList = findAll(view, (node) => node.props.className === 'ae-tab')
+  tabList[1].props.onClick()
+  view = render(main.component, {})
+  const deleteButton = findAll(view, (node) => node.props.className === 'ae-link ae-danger')[0]
+  assert.ok(deleteButton, '缺少删除按钮')
+  before = calls.length
+  await deleteButton.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const deleted = calls.slice(before).find((call) => call.method === 'DELETE' && call.url.includes('/runs?'))
+  assert.ok(deleted, '没有 DELETE /runs')
+  assert.ok(deleted.url.includes('run-fixture'))
+})
+
+test('模板页：内置只读、自定义可编辑删除', async () => {
+  const main = registered.find((item) => item.options.name === 'main')
+  let view = render(main.component, {})
+  const tabs = findAll(view, (node) => node.props.className === 'ae-tab')
+  tabs[2].props.onClick()
+  view = render(main.component, {})
+  const text = texts(view)
+  assert.ok(text.includes('WebSearchTool 检索覆盖'), '没有内置模板卡片')
+  assert.ok(text.includes('我的覆盖模板'), '没有自定义模板卡片')
+  const badges = findAll(view, (node) => node.props.className === 'ae-badge')
+  assert.equal(badges.length, 2)
+  assert.equal(badges[0].props['data-kind'], 'builtin')
+  assert.equal(badges[1].props['data-kind'], 'custom')
+  // 自定义卡片才有删除
+  const dangers = findAll(view, (node) => node.props.className === 'ae-link ae-danger')
+  assert.equal(dangers.length, 1)
+})
+
+test('模板页：新建并保存自定义模板', async () => {
+  const main = registered.find((item) => item.options.name === 'main')
+  let view = render(main.component, {})
+  const newButton = findAll(view, (node) => node.props.className === 'ae-btn ae-btn-primary')[0]
+  assert.ok(newButton, '缺少新建按钮')
+  await newButton.props.onClick()
+  view = render(main.component, {})
+  const text = texts(view)
+  assert.ok(text.includes('新建任务模板'), '没有进入编辑器')
+  assert.equal(findAll(view, (node) => node.props.className === 'ae-stage-edit').length, 4, '编辑器里不是四个阶段')
+
+  const saveButton = findAll(view, (node) => node.props.className === 'ae-btn ae-btn-primary')[0]
+  const before = calls.length
+  await saveButton.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/templates'))
+  assert.ok(posted, '没有 POST /templates')
+  const body = JSON.parse(posted.body)
+  assert.match(body.id, /^[a-z0-9][a-z0-9-]*$/)
+  assert.deepEqual(Object.keys(body.stages).sort(), ['annotation', 'metrics', 'reporting', 'scraping'])
+  assert.equal(body.stages.reporting.template, 'markdown')
 })
