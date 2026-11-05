@@ -62,6 +62,25 @@ window.__ModuleLoader__.load({
       'detail.rowMaterial': '材料',
       'detail.caseSnapshot': '用例快照',
       'detail.loading': '加载中…',
+      'detail.noLog': '这个阶段还没有日志。',
+      'detail.sum.cases': '用例数',
+      'detail.sum.material': '带材料',
+      'detail.sum.sources': '来源数',
+      'detail.sum.errors': '抓取失败',
+      'detail.sum.scored': '计分行',
+      'detail.sum.passed': '通过',
+      'detail.sum.total': '用例总数',
+      'detail.sum.passRate': '通过率',
+      'detail.sum.avgCoverage': '平均覆盖',
+      'detail.sum.scrapeErrors': '抓取失败行',
+      'detail.sum.format': '报告格式',
+      'detail.sum.chars': '报告字数',
+      'detail.sum.rows': '结果行数',
+      'detail.sum.groups': '分组',
+      'detail.sum.count': '样本数',
+      'detail.sum.avgMs': '平均耗时',
+      'detail.sum.p50Ms': 'P50 耗时',
+      'detail.sum.p95Ms': 'P95 耗时',
 
       'tpl.empty': '还没有自定义模板。点「新建模板」做一个。',
       'tpl.builtin': '内置',
@@ -185,6 +204,25 @@ window.__ModuleLoader__.load({
       'detail.rowMaterial': 'Material',
       'detail.caseSnapshot': 'Cases snapshot',
       'detail.loading': 'Loading…',
+      'detail.noLog': 'No log for this stage yet.',
+      'detail.sum.cases': 'Cases',
+      'detail.sum.material': 'With material',
+      'detail.sum.sources': 'Sources',
+      'detail.sum.errors': 'Scrape errors',
+      'detail.sum.scored': 'Scored',
+      'detail.sum.passed': 'Passed',
+      'detail.sum.total': 'Total cases',
+      'detail.sum.passRate': 'Pass rate',
+      'detail.sum.avgCoverage': 'Avg coverage',
+      'detail.sum.scrapeErrors': 'Scrape errors',
+      'detail.sum.format': 'Format',
+      'detail.sum.chars': 'Chars',
+      'detail.sum.rows': 'Rows',
+      'detail.sum.groups': 'Groups',
+      'detail.sum.count': 'Count',
+      'detail.sum.avgMs': 'Avg latency',
+      'detail.sum.p50Ms': 'P50 latency',
+      'detail.sum.p95Ms': 'P95 latency',
 
       'tpl.empty': 'No custom template yet. Use "New template".',
       'tpl.builtin': 'built-in',
@@ -346,13 +384,20 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
-.ae-steps { display: flex; flex-direction: column; gap: 6px; }
-.ae-step { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
-.ae-step-name { color: var(--dsw-alias-label-primary, #1f1f1f); }
-.ae-step-meta { margin-left: auto; font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b);
-  font-variant-numeric: tabular-nums; }
-.ae-step[data-status="running"] .ae-step-meta { color: var(--dsw-alias-brand-primary, #247bbf); }
-.ae-step[data-status="failed"] .ae-step-meta { color: var(--dsw-alias-state-error-primary, #c0392b); }
+.ae-acc { display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12));
+  border-radius: 10px; overflow: hidden; }
+.ae-acc-item { border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.06)); }
+.ae-acc-item:first-child { border-top: 0; }
+.ae-acc-head { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
+  padding: 9px 12px; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px;
+  color: var(--dsw-alias-label-primary, #1f1f1f); text-align: left; }
+.ae-acc-head:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.03)); }
+.ae-acc-title { flex: 1 1 auto; }
+.ae-acc-meta { font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b); font-variant-numeric: tabular-nums; }
+.ae-acc-body { display: flex; flex-direction: column; gap: 6px; padding: 2px 12px 12px 32px; }
+.ae-acc-item[data-status="running"] .ae-acc-title { color: var(--dsw-alias-brand-primary, #247bbf); }
+.ae-acc-item[data-status="failed"] .ae-acc-title { color: var(--dsw-alias-state-error-primary, #c0392b); }
+.ae-caret { color: var(--dsw-alias-label-secondary, #6b6b6b); font-size: 10px; width: 10px; }
 .ae-log { margin: 0; max-height: 200px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: pre-wrap; }
 .ae-pre { margin: 0; max-height: 460px; overflow: auto; padding: 12px; border-radius: 10px;
@@ -429,6 +474,7 @@ window.__ModuleLoader__.load({
       const [templateDraft, setTemplateDraft] = React.useState(null)
       const [taskQuery, setTaskQuery] = React.useState('')
       const [taskStatus, setTaskStatus] = React.useState('all')
+      const [openStages, setOpenStages] = React.useState({})
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -930,6 +976,107 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ae-metric-v' }, value))))
       }
 
+      // 阶段摘要里每个字段的显示名：没登记过的直接用字段名
+      const SUMMARY_KEYS = {
+        cases: 'detail.sum.cases',
+        material: 'detail.sum.material',
+        sources: 'detail.sum.sources',
+        errors: 'detail.sum.errors',
+        scored: 'detail.sum.scored',
+        passed: 'detail.sum.passed',
+        total: 'detail.sum.total',
+        passRate: 'detail.sum.passRate',
+        avgCoverage: 'detail.sum.avgCoverage',
+        scrapeErrors: 'detail.sum.scrapeErrors',
+        format: 'detail.sum.format',
+        chars: 'detail.sum.chars',
+        rows: 'detail.sum.rows',
+        groups: 'detail.sum.groups',
+        count: 'detail.sum.count',
+        avgMs: 'detail.sum.avgMs',
+        p50Ms: 'detail.sum.p50Ms',
+        p95Ms: 'detail.sum.p95Ms',
+      }
+
+      function summaryPairs(summary) {
+        if (!summary || typeof summary !== 'object') return []
+        const out = []
+        for (const [key, value] of Object.entries(summary)) {
+          if (value == null) continue
+          // 老运行记录里可能还带着 stages 快照，列表里不展示
+          if (key === 'stages') continue
+          const label = SUMMARY_KEYS[key] ? t(SUMMARY_KEYS[key]) : key
+          if (key === 'latency' && typeof value === 'object') {
+            out.push([t('detail.sum.p50Ms'), duration(value.p50Ms)])
+            out.push([t('detail.sum.p95Ms'), duration(value.p95Ms)])
+            continue
+          }
+          if (typeof value === 'object') {
+            out.push([`${label}`, JSON.stringify(value).slice(0, 160)])
+            continue
+          }
+          const text = key === 'passRate' || key === 'avgCoverage' ? pct(value) : String(value)
+          out.push([label, text])
+        }
+        return out
+      }
+
+      // 各阶段的可折叠列表：表头给状态与耗时，展开看模板、参数、摘要、该阶段日志
+      function renderStages(run, log) {
+        return h('div', { className: 'ae-acc' },
+          ...Object.entries(run.stages || {}).map(([key, value]) => {
+            const stageRunning = value.status === 'running'
+            const open = openStages[key] === undefined
+              ? (stageRunning || value.status === 'failed')
+              : openStages[key]
+            const stageLog = (log || []).filter((line) => line.stage === key)
+            const progress = stageRunning && active && active.progress && active.progress.stage === key
+              ? active.progress
+              : null
+            const pairs = summaryPairs(value.summary)
+            return h('div', {
+              key, className: 'ae-acc-item', 'data-status': value.status, 'data-open': String(open),
+            },
+            h('button', {
+              type: 'button', className: 'ae-acc-head',
+              'aria-expanded': String(open),
+              onClick: () => setOpenStages({ ...openStages, [key]: !open }),
+            },
+            h('span', { className: 'ae-caret' }, open ? '▾' : '▸'),
+            h('span', { className: 'ae-acc-title' }, t(`stage.${key}`)),
+            h('span', {
+              className: 'ae-state', 'data-state': statusState(value.status),
+            }, t(`label.${value.status}`)),
+            progress ? h('span', { className: 'ae-card-note' }, `${progress.done}/${progress.total}`) : null,
+            h('span', { className: 'ae-acc-meta' }, value.durationMs == null ? '' : duration(value.durationMs))),
+            progress
+              ? h('div', { className: 'ae-progress', style: { margin: '0 12px 8px' } },
+                h('i', { style: { width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` } }))
+              : null,
+            open
+              ? h('div', { className: 'ae-acc-body' },
+                h('div', { className: 'ae-detail-row' },
+                  h('span', { className: 'ae-detail-key' }, t('field.template')),
+                  h('span', null, value.template || '-')),
+                value.config && Object.keys(value.config).length > 0
+                  ? h('div', { className: 'ae-detail-row' },
+                    h('span', { className: 'ae-detail-key' }, t('field.params')),
+                    h('span', { className: 'ae-mono' }, JSON.stringify(value.config)))
+                  : null,
+                ...pairs.map(([label, text], index) => h('div', {
+                  className: 'ae-detail-row', key: `${key}-sum-${index}`,
+                },
+                h('span', { className: 'ae-detail-key' }, label),
+                h('span', { className: 'ae-mono' }, text))),
+                value.error ? h('div', { className: 'ae-error' }, value.error) : null,
+                stageLog.length > 0
+                  ? h('pre', { className: 'ae-log' },
+                    stageLog.map((line) => `${String(line.at || '').slice(11, 19)}  ${line.message}`).join('\n'))
+                  : h('div', { className: 'ae-card-note' }, t('detail.noLog')))
+              : null)
+          }))
+      }
+
       function renderTaskDetail() {
         const run = polled
         const log = (detail && detail.log) || []
@@ -956,14 +1103,7 @@ window.__ModuleLoader__.load({
               : null),
           renderMetrics(run.metrics),
           h('div', { className: 'ae-card-title', style: { marginTop: '4px' } }, t('detail.stages')),
-          h('div', { className: 'ae-steps' },
-            ...Object.entries(run.stages || {}).map(([key, value]) => h('div', {
-              key, className: 'ae-step', 'data-status': value.status,
-            },
-            h('span', { className: 'ae-step-name' },
-              `${t(`stage.${key}`)}${value.template ? ` · ${value.template}` : ''}`),
-            h('span', { className: 'ae-step-meta' },
-              `${t(`label.${value.status}`)}${value.durationMs == null ? '' : ` · ${duration(value.durationMs)}`}`)))),
+          renderStages(run, log),
           run.artifacts && run.artifacts.dir
             ? h('div', { className: 'ae-detail-row' },
               h('span', { className: 'ae-detail-key' }, t('detail.artifacts')),

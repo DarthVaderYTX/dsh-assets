@@ -55,13 +55,51 @@ const STATE = {
         scrapeErrors: 0, latency: { count: 6, avgMs: 4906, p50Ms: 4470, p95Ms: 7514 },
       },
       stages: {
-        scraping: { status: 'done', durationMs: 30940, template: 'websearch', config: { maxResults: 5 } },
-        annotation: { status: 'done', durationMs: 1, template: 'coverage-keyword', config: {} },
-        metrics: { status: 'done', durationMs: 0, template: 'standard', config: {} },
-        reporting: { status: 'done', durationMs: 1, template: 'markdown', config: {} },
+        scraping: {
+          status: 'done', durationMs: 30940, template: 'websearch', config: { maxResults: 5 },
+          summary: { cases: 6, material: 6, sources: 30, errors: 0 },
+        },
+        annotation: {
+          status: 'done', durationMs: 1, template: 'coverage-keyword', config: {},
+          summary: { cases: 6, scored: 6, passed: 4 },
+        },
+        metrics: {
+          status: 'done', durationMs: 0, template: 'standard', config: {},
+          summary: {
+            total: 6, scored: 6, passed: 4, passRate: 0.6667, avgCoverage: 0.6667, scrapeErrors: 0,
+            latency: { count: 6, avgMs: 4906, p50Ms: 4470, p95Ms: 7514 },
+          },
+        },
+        reporting: {
+          status: 'done', durationMs: 1, template: 'markdown', config: {},
+          summary: { format: 'markdown', chars: 1200, rows: 6 },
+        },
       },
       artifacts: { dir: '/tmp/autoeval/runs/run-fixture', report: '/tmp/r.md', rows: '/tmp/r.jsonl' },
       log: [],
+    },
+    {
+      id: 'run-failed',
+      name: '抓取挂了的一次',
+      templateId: 'websearch-tool',
+      status: 'failed',
+      startedAt: '2026-11-05T05:00:00.000Z',
+      finishedAt: '2026-11-05T05:00:09.000Z',
+      durationMs: 9000,
+      caseCount: 2,
+      error: '检索服务 503',
+      metrics: null,
+      stages: {
+        scraping: {
+          status: 'failed', durationMs: 8990, template: 'websearch', config: { maxResults: 5 },
+          summary: null, error: '检索服务 503',
+        },
+        annotation: { status: 'pending', durationMs: null, template: 'coverage-keyword', config: {}, summary: null },
+        metrics: { status: 'pending', durationMs: null, template: 'standard', config: {}, summary: null },
+        reporting: { status: 'pending', durationMs: null, template: 'markdown', config: {}, summary: null },
+      },
+      artifacts: { dir: '/tmp/autoeval/runs/run-failed' },
+      log: [{ at: '2026-11-05T05:00:09.000Z', stage: 'scraping', message: '失败：检索服务 503' }],
     },
   ],
   active: null,
@@ -139,9 +177,12 @@ globalThis.fetch = async (url, options = {}) => {
   if (url.endsWith('/run')) return reply({ ok: true, runId: 'run-stub' })
   if (url.endsWith('/cancel')) return reply({ ok: true })
   if (url.includes('/runs/detail')) {
+    const id = decodeURIComponent((url.match(/id=([^&]+)/) || [])[1] || '')
+    const found = STATE.runs.find((item) => item.id === id) || STATE.runs[0]
+    if (found.log && found.log.length > 0) return reply({ ok: true, run: found, log: found.log })
     return reply({
       ok: true,
-      run: STATE.runs[0],
+      run: found,
       log: [
         { at: '2026-11-05T04:32:27.686Z', stage: 'scraping', message: '开始（模板 websearch）' },
         { at: '2026-11-05T04:32:57.600Z', stage: 'scraping', message: '完成，用时 30940ms' },
@@ -189,6 +230,21 @@ const mod = captured.factory((name) => {
 
 const mainComponent = () => registered.find((item) => item.options.name === 'main').component
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
+
+// 不管当前在哪个页面，都回到任务列表
+function ensureTaskList() {
+  let view = render(mainComponent(), {})
+  const back = findAll(view, byClass('ae-back'))[0]
+  if (back) {
+    back.props.onClick()
+    view = render(mainComponent(), {})
+  }
+  if (findAll(view, hasClass('ae-row-toggle')).length === 0) {
+    findAll(view, byClass('ae-tab'))[0].props.onClick()
+    view = render(mainComponent(), {})
+  }
+  return view
+}
 
 // 首次渲染 + 等 /state 落地
 async function boot() {
@@ -248,7 +304,7 @@ test('任务列表：表格、搜索、状态筛选', () => {
   assert.equal(findAll(view, hasClass('ae-search')).length, 1, '缺搜索框')
   assert.equal(findAll(view, byClass('ae-select')).length, 1, '缺状态筛选')
   assert.equal(findAll(view, clickable('提交任务')).length, 1, '缺提交任务按钮')
-  assert.equal(findAll(view, hasClass('ae-row-toggle')).length, 1, '任务名不可点')
+  assert.equal(findAll(view, hasClass('ae-row-toggle')).length, 2, '任务名不可点')
 })
 
 test('点进任务：概览给指标与阶段，另有逐条结果与报告', async () => {
@@ -277,6 +333,48 @@ test('点进任务：概览给指标与阶段，另有逐条结果与报告', as
   findAll(view, byClass('ae-subtab'))[2].props.onClick()
   view = render(mainComponent(), {})
   assert.ok(texts(view).includes('AutoEval 报告'), '报告没渲染')
+})
+
+test('任务详情：阶段是可折叠列表', async () => {
+  let view = ensureTaskList()
+  const open = findAll(view, hasClass('ae-row-toggle'))[0]
+  await open.props.onClick()
+  await settle()
+  view = render(mainComponent(), {})
+
+  const items = findAll(view, byClass('ae-acc-item'))
+  assert.equal(items.length, 4, '不是四个阶段')
+  assert.equal(findAll(view, byClass('ae-acc-body')).length, 0, '已完成的阶段默认应收起')
+
+  // 展开标注阶段：能看到执行模板、参数与摘要
+  findAll(view, byClass('ae-acc-head'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  const text = texts(view)
+  assert.equal(findAll(view, byClass('ae-acc-body')).length, 1, '展开后应只有一块正文')
+  assert.ok(text.includes('coverage-keyword'), '展开后没有执行模板')
+  assert.ok(text.includes('计分行'), '展开后没有阶段摘要')
+  assert.ok(text.includes('通过'), '摘要里没有通过数')
+
+  // 再点一次收起
+  findAll(view, byClass('ae-acc-head'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-acc-body')).length, 0, '再点一次应该收起')
+})
+
+test('失败任务的失败阶段默认展开', async () => {
+  let view = ensureTaskList()
+  const failed = findAll(view, hasClass('ae-row-toggle'))[1]
+  await failed.props.onClick()
+  await settle()
+  view = render(mainComponent(), {})
+
+  const items = findAll(view, byClass('ae-acc-item'))
+  assert.equal(items.length, 4)
+  assert.equal(items[0].props['data-open'], 'true', '失败阶段应默认展开')
+  assert.equal(items[1].props['data-open'], 'false', '未开始的阶段应收起')
+  const text = texts(view)
+  assert.ok(text.includes('检索服务 503'), '展开后应看到错误')
+  assert.ok(text.includes('失败：检索服务 503'), '展开后应看到该阶段日志')
 })
 
 test('任务详情可以返回列表', () => {

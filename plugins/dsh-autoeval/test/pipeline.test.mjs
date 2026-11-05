@@ -111,6 +111,14 @@ test('用内置模板跑完四个阶段并出指标与报告', async () => {
   assert.equal(run.status, 'done', JSON.stringify(run.error || run.log))
   for (const stage of STAGES) assert.equal(run.stages[stage.id].status, 'done')
 
+  // 折叠列表用的阶段摘要
+  assert.deepEqual(Object.keys(run.stages.scraping.summary).sort(), ['cases', 'errors', 'material', 'sources'])
+  assert.equal(run.stages.scraping.summary.cases, cases.length)
+  assert.equal(run.stages.scraping.summary.errors, 0)
+  assert.ok(run.stages.scraping.summary.sources > 0, '来源数为 0')
+  assert.equal(run.stages.annotation.summary.passed, run.metrics.passed)
+  assert.equal(run.stages.reporting.summary.rows, cases.length)
+
   const metrics = run.metrics
   assert.equal(metrics.total, cases.length)
   assert.equal(metrics.scored, cases.length)

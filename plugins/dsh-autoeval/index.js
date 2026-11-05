@@ -440,6 +440,22 @@ async function stageReporting(ctx, payload, config, signal) {
   return { text: buildMarkdown(payload, config), format: 'markdown' }
 }
 
+/** 每个阶段跑完给一份能直接看的摘要，面板的折叠列表就展示这个。 */
+function summarizeStage(stageId, cases) {
+  if (stageId === 'scraping') {
+    const withMaterial = cases.filter((item) => item.material && String(item.material).trim()).length
+    const errors = cases.filter((item) => item.error).length
+    const sources = cases.reduce((sum, item) => sum + ((item.sources && item.sources.length) || 0), 0)
+    return { cases: cases.length, material: withMaterial, sources, errors }
+  }
+  if (stageId === 'annotation') {
+    const scored = cases.filter((item) => typeof item.score === 'number').length
+    const passed = cases.filter((item) => item.score === 1).length
+    return { cases: cases.length, scored, passed }
+  }
+  return { cases: cases.length }
+}
+
 const RUNNERS = {
   scraping: stageScraping,
   annotation: stageAnnotation,
@@ -583,15 +599,17 @@ class AutoEvalService {
         stageRun.durationMs = Date.now() - stageStartedAt
         stageRun.status = 'done'
         if (stage.id === 'reporting') {
-          stageRun.summary = { format: result.format, chars: result.text.length }
+          stageRun.summary = { format: result.format, chars: result.text.length, rows: current.length }
           await this.writeArtifacts(run, current, result)
         } else if (stage.id === 'metrics') {
-          stageRun.summary = result
+          // summary 只留指标本身：面板折叠列表要显示它，stages 快照太吵
+          const { stages: _snapshot, ...metricsOnly } = result
+          stageRun.summary = metricsOnly
           this.active.metrics = result
           run.metrics = result
         } else {
           current = result
-          stageRun.summary = { cases: current.length }
+          stageRun.summary = summarizeStage(stage.id, current)
         }
         this.progress = { stage: stage.id, done: current.length, total: current.length }
         run.log.push({ at: nowIso(), stage: stage.id, message: `完成，用时 ${stageRun.durationMs}ms` })
