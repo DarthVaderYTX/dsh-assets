@@ -287,7 +287,25 @@ async function writeWorkspaceConfig(input) {
 }
 
 /** 某个阶段某个执行模板的可配字段（面板用它生成表单）。 */
+/** 四个预置阶段：可以删掉自定义阶段、可以在它们之间插，但这四个之间的先后固定。 */
+export const PRESET_STAGE_IDS = ['scraping', 'annotation', 'metrics', 'reporting']
+
+/** 自定义阶段目前只有一种执行模块：自定义命令。 */
+export const CUSTOM_STAGE = {
+  module: 'custom',
+  fields: [
+    {
+      key: 'command',
+      type: 'command',
+      label: '命令',
+      default: '',
+      hint: 'stdin 收 {stage, cases, config, stages, metrics}，stdout 吐 {cases: [...]}',
+    },
+  ],
+}
+
 export function fieldsOf(stageId, presetId) {
+  if (stageId === 'custom') return CUSTOM_STAGE.fields
   return FIELDS[`${stageId}.${presetId}`] || []
 }
 
@@ -356,14 +374,26 @@ const BUILTIN_TEMPLATES = [
 
 /** 阶段目录对外的一份，带 schema：面板不用自己维护字段表。 */
 export function stageCatalog() {
-  return STAGES.map((stage) => ({
+  return STAGES.map((stage, index) => ({
     id: stage.id,
+    kind: 'preset',
+    order: index,
     presets: stage.presets.map((preset) => ({
       id: preset.id,
       config: preset.config,
       fields: fieldsOf(stage.id, preset.id),
     })),
   }))
+}
+
+/** 新增自定义阶段时面板要用的定义。 */
+export function customStageCatalog() {
+  return {
+    kind: 'custom',
+    module: CUSTOM_STAGE.module,
+    fields: CUSTOM_STAGE.fields,
+    config: { command: '' },
+  }
 }
 
 function presetOf(stage, template) {
@@ -727,6 +757,73 @@ async function stageReporting(ctx, payload, config, signal) {
   return { text: buildMarkdown(payload, config), format: 'markdown' }
 }
 
+/** 多组时把各组的报告拼成一份：开头一段组间对比，后面每组一节。 */
+function combineReports(run, reports) {
+  if (reports.length === 1) return reports[0].text
+  const lines = [`# AutoEval 报告 · ${run.name}`, '']
+  const comparison = run.comparison
+  if (comparison && comparison.treatments.length > 0) {
+    lines.push('## 组间对比')
+    lines.push('')
+    lines.push('| 指标 | Control | ' + comparison.treatments.map((item) => item.name).join(' | ') + ' |')
+    lines.push('| --- | --- | ' + comparison.treatments.map(() => '--- |').join(''))
+    for (const row of comparison.rows) {
+      lines.push(`| ${row.label} | ${row.control} | ${row.treatments.map((item) => item.text).join(' | ')} |`)
+    }
+    lines.push('')
+  }
+  for (const report of reports) {
+    const body = String(report.text || '').split('\n')
+    if (body[0] && body[0].startsWith('# ')) body.shift()
+    lines.push(`## ${report.group.name}（${report.group.kind}）`)
+    lines.push('')
+    lines.push(body.join('\n').replace(/^\n+/, ''))
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
+/** 组间对比：Control 打底，每个 Treatment 算差值。 */
+function buildComparison(groups) {
+  const control = groups.find((group) => group.kind === 'control')
+  const treatments = groups.filter((group) => group.kind === 'treatment')
+  if (!control || !control.metrics || treatments.length === 0) return null
+  const pick = (metrics) => ({
+    passRate: metrics.passRate,
+    avgCoverage: metrics.avgCoverage,
+    caseCount: metrics.total,
+    scored: metrics.scored,
+  })
+  const keys = [
+    { key: 'passRate', label: '通过率', pct: true },
+    { key: 'avgCoverage', label: '平均覆盖', pct: true },
+    { key: 'scored', label: '有分数的行', pct: false },
+  ]
+  const rows = keys.map((item) => ({
+    key: item.key,
+    label: item.label,
+    control: formatMetric(pick(control.metrics)[item.key], item.pct),
+    treatments: treatments.map((group) => {
+      const value = pick(group.metrics || {})[item.key]
+      const base = pick(control.metrics)[item.key]
+      const delta = typeof value === 'number' && typeof base === 'number' ? value - base : null
+      const sign = delta == null ? '' : delta > 0 ? '+' : ''
+      const text = formatMetric(value, item.pct)
+      return { text: delta == null ? text : `${text}（${sign}${item.pct ? `${(delta * 100).toFixed(1)}pp` : delta}）` }
+    }),
+  }))
+  return {
+    control: { id: control.id, name: control.name },
+    treatments: treatments.map((group) => ({ id: group.id, name: group.name })),
+    rows,
+  }
+}
+
+function formatMetric(value, pct) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return pct ? `${(value * 100).toFixed(1)}%` : String(value)
+}
+
 /** 每个阶段跑完给一份能直接看的摘要，面板的折叠列表就展示这个。 */
 function summarizeStage(stageId, cases) {
   if (stageId === 'scraping') {
@@ -743,11 +840,43 @@ function summarizeStage(stageId, cases) {
   return { cases: cases.length }
 }
 
+/** 自定义阶段：把当前用例交给命令，收回来的 cases 继续往下传。 */
+async function stageCustom(ctx, payload, config, signal) {
+  if (signal.aborted) throw new Error('已取消')
+  const result = await runCommand(
+    config.command,
+    {
+      stage: payload.stageId,
+      cases: payload.cases,
+      config,
+      stages: payload.stages,
+      metrics: payload.metrics,
+      group: payload.group,
+    },
+    await commandTimeout(),
+  )
+  const next = Array.isArray(result) ? result : result && result.cases
+  if (!Array.isArray(next)) {
+    throw new Error(`自定义阶段 ${payload.stageId} 要把 {cases: [...]} 写到 stdout`)
+  }
+  return next
+}
+
+/** 报告的 query 列：取第一个带 queryField 的阶段配置。 */
+function queryFieldOf(stages) {
+  for (const stage of stages) {
+    const field = stage.config && stage.config.queryField
+    if (field) return field
+  }
+  return 'query'
+}
+
 const RUNNERS = {
   scraping: stageScraping,
   annotation: stageAnnotation,
   metrics: stageMetrics,
   reporting: stageReporting,
+  custom: stageCustom,
 }
 
 // ---------------------------------------------------------------- 存储
@@ -800,16 +929,31 @@ function fieldComment(field) {
 /** 一个模板写成 YAML 的样子，带字段说明注释，方便直接手改。 */
 export function templateToYaml(template) {
   const comments = {}
-  for (const stage of STAGES) {
-    const entry = (template.stages || {})[stage.id]
-    if (!entry) continue
-    for (const field of fieldsOf(stage.id, entry.template)) {
-      comments[`stages.${stage.id}.config.${field.key}`] = fieldComment(field)
+  const stages = (template.stages || []).map((stage, index) => {
+    const moduleId = stage.module || 'custom'
+    const fieldStage = stage.kind === 'custom' ? 'custom' : stage.id
+    for (const field of fieldsOf(fieldStage, moduleId)) {
+      comments[`stages.${index}.config.${field.key}`] = fieldComment(field)
     }
-  }
+    const entry = { id: stage.id, module: moduleId }
+    if (stage.kind === 'custom' && stage.name) entry.name = stage.name
+    entry.config = stage.config || {}
+    return entry
+  })
+  const groups = (template.groups || []).map((group) => {
+    const entry = { id: group.id, kind: group.kind, name: group.name }
+    const overrides = {}
+    for (const [stageId, patch] of Object.entries(group.overrides || {})) {
+      overrides[stageId] = { module: patch.module, config: patch.config || {} }
+    }
+    entry.overrides = overrides
+    return entry
+  })
   const head = [
     `# AutoEval 任务模板：${template.name || template.id}`,
     `# 文件：templates/${template.id}.yaml（文件名就是模板 id）`,
+    '# 阶段按 stages 里的顺序执行；四个预置阶段（scraping / annotation / metrics / reporting）',
+    '# 之间的先后不能改，可以在它们之间插自定义阶段。groups 里必须有且只有一个 control。',
     '# 可以直接改这个文件，面板「任务模板 → YAML」能读回来；保存时按下面的注释校验。',
     '',
   ].join('\n')
@@ -818,32 +962,127 @@ export function templateToYaml(template) {
       id: template.id,
       name: template.name || template.id,
       description: template.description || '',
-      stages: template.stages || {},
+      stages,
+      groups,
     },
     { comments },
   )}`
 }
 
-/** 校验并归一化一个模板，返回能落盘的结构。 */
+/** 校验并归一化一个模板，返回能落盘的结构。
+ *  v2 的 stages 是数组（顺序即执行顺序），也接受 v1 的 {scraping: {template, config}} 对象。 */
 export function normalizeTemplate(input) {
   const id = String(input && input.id ? input.id : '').trim()
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
     throw new Error('模板 id 只能用小写字母、数字和「-」，且不超过 64 个字符')
   }
   const name = String((input && input.name) || id).trim() || id
-  const stages = {}
-  for (const stage of STAGES) {
-    const raw = input && input.stages ? input.stages[stage.id] : undefined
-    if (!raw) throw new Error(`模板缺少阶段 ${stage.id}`)
-    const presetId = String(raw.template || '')
-    const preset = stage.presets.find((item) => item.id === presetId)
-    if (!preset) throw new Error(`阶段 ${stage.id} 没有执行模板 ${presetId}`)
-    stages[stage.id] = {
-      template: presetId,
-      config: validateConfig(stage.id, presetId, raw.config || {}),
-    }
+  const stages = stageListOf(input).map(normalizeStageEntry)
+  validateStageOrder(stages)
+  const groups = normalizeGroups(input && input.groups, stages)
+  return { id, name, description: String((input && input.description) || ''), stages, groups }
+}
+
+/** v1 只有对象形式的 stages，这里按预置顺序摊成数组。 */
+function stageListOf(input) {
+  const raw = input && input.stages
+  if (Array.isArray(raw)) return raw
+  if (raw && typeof raw === 'object') {
+    return PRESET_STAGE_IDS
+      .filter((stageId) => raw[stageId])
+      .map((stageId) => ({ id: stageId, module: raw[stageId].module || raw[stageId].template, config: raw[stageId].config }))
   }
-  return { id, name, description: String((input && input.description) || ''), stages }
+  throw new Error('模板缺少 stages')
+}
+
+function normalizeStageEntry(raw) {
+  const stageId = String((raw && raw.id) || '').trim()
+  if (!stageId) throw new Error('阶段要有 id')
+  if (PRESET_STAGE_IDS.includes(stageId)) {
+    const def = STAGES.find((item) => item.id === stageId)
+    const moduleId = String((raw && (raw.module || raw.template)) || def.presets[0].id)
+    if (!def.presets.some((item) => item.id === moduleId)) {
+      throw new Error(`阶段 ${stageId} 没有执行模块 ${moduleId}`)
+    }
+    return { id: stageId, kind: 'preset', module: moduleId, config: validateConfig(stageId, moduleId, (raw && raw.config) || {}) }
+  }
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(stageId)) {
+    throw new Error(`自定义阶段 id 只能用小写字母、数字和「-」：${stageId}`)
+  }
+  const moduleId = String((raw && raw.module) || 'custom')
+  if (moduleId !== 'custom') throw new Error(`自定义阶段 ${stageId} 目前只能用「自定义命令」模块`)
+  return {
+    id: stageId,
+    kind: 'custom',
+    name: String((raw && raw.name) || stageId),
+    module: moduleId,
+    config: validateConfig('custom', 'custom', (raw && raw.config) || {}),
+  }
+}
+
+function validateStageOrder(stages) {
+  const ids = stages.map((stage) => stage.id)
+  const dupes = ids.filter((id, index) => ids.indexOf(id) !== index)
+  if (dupes.length > 0) throw new Error(`阶段 ${dupes[0]} 重复了`)
+  const presets = stages.filter((stage) => stage.kind === 'preset').map((stage) => stage.id)
+  const missing = PRESET_STAGE_IDS.filter((id) => !presets.includes(id))
+  if (missing.length > 0) throw new Error(`预置阶段不能删：${missing.join(' / ')}`)
+  if (presets.join('>') !== PRESET_STAGE_IDS.join('>')) {
+    throw new Error(`预置阶段之间的先后不能改，只能是 ${PRESET_STAGE_IDS.join(' → ')}`)
+  }
+}
+
+/** 组：必须正好一个 Control，后面可以跟任意多个 Treatment。 */
+function normalizeGroups(input, stages) {
+  const raw = Array.isArray(input) && input.length > 0 ? input : [{ id: 'control', kind: 'control' }]
+  const byId = new Map(stages.map((stage) => [stage.id, stage]))
+  const out = []
+  const seen = new Set()
+  for (const item of raw) {
+    const kind = item && item.kind === 'treatment' ? 'treatment' : 'control'
+    const groupId = String((item && item.id) || '').trim() || (kind === 'control' ? 'control' : `treatment-${out.length}`)
+    if (!/^[a-z0-9][a-z0-9-]{0,32}$/.test(groupId)) {
+      throw new Error(`组 id 只能用小写字母、数字和「-」：${groupId}`)
+    }
+    if (seen.has(groupId)) throw new Error(`组 ${groupId} 重复了`)
+    seen.add(groupId)
+    const overrides = {}
+    for (const [stageId, patch] of Object.entries((item && item.overrides) || {})) {
+      const stage = byId.get(stageId)
+      if (!stage) throw new Error(`组 ${groupId} 覆盖了模板里没有的阶段 ${stageId}`)
+      const moduleId = String((patch && patch.module) || stage.module)
+      if (stage.kind === 'preset') {
+        const def = STAGES.find((entry) => entry.id === stageId)
+        if (!def.presets.some((entry) => entry.id === moduleId)) {
+          throw new Error(`组 ${groupId} 的 ${stageId} 没有执行模块 ${moduleId}`)
+        }
+      } else if (moduleId !== 'custom') {
+        throw new Error(`组 ${groupId} 的自定义阶段 ${stageId} 只能用「自定义命令」模块`)
+      }
+      overrides[stageId] = {
+        module: moduleId,
+        config: validateConfig(stage.kind === 'custom' ? 'custom' : stageId, moduleId, (patch && patch.config) || {}),
+      }
+    }
+    out.push({
+      id: groupId,
+      kind,
+      name: String((item && item.name) || (kind === 'control' ? 'Control' : groupId)),
+      overrides,
+    })
+  }
+  const controls = out.filter((group) => group.kind === 'control')
+  if (controls.length !== 1) throw new Error('必须正好有一个 Control 组')
+  return [controls[0], ...out.filter((group) => group.kind !== 'control')]
+}
+
+/** 某个组实际要跑的阶段：模板阶段 + 该组的覆盖。 */
+export function effectiveStages(template, group) {
+  return template.stages.map((stage) => {
+    const patch = group && group.overrides ? group.overrides[stage.id] : null
+    if (!patch) return stage
+    return { ...stage, module: patch.module || stage.module, config: patch.config || stage.config }
+  })
 }
 
 function validateConfig(stageId, presetId, config) {
@@ -913,7 +1152,16 @@ async function readTemplates() {
     try {
       text = await fsp.readFile(file, 'utf8')
     } catch (error) {
-      out.push({ id: base, name: base, description: '', builtin: false, broken: String(error.message), file, stages: {} })
+      out.push({
+        id: base,
+        name: base,
+        description: '',
+        builtin: false,
+        broken: String(error.message),
+        file,
+        stages: [],
+        groups: [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }],
+      })
       continue
     }
     let doc = null
@@ -931,7 +1179,8 @@ async function readTemplates() {
       builtin: false,
       broken,
       file,
-      stages: (doc && doc.stages) || {},
+      stages: (doc && doc.stages) || [],
+      groups: (doc && doc.groups) || [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }],
     })
   }
   return out
@@ -957,7 +1206,11 @@ class AutoEvalService {
     const config = await readWorkspaceConfig()
     return {
       stages: stageCatalog(),
-      templates: [...BUILTIN_TEMPLATES, ...files],
+      customStage: customStageCatalog(),
+      templates: [
+        ...BUILTIN_TEMPLATES.map((item) => ({ ...normalizeTemplate(item), builtin: true })),
+        ...files,
+      ],
       querysets: (await readQuerysets()).map(summarizeQueryset),
       runs: state.runs,
       active: this.active ? this.snapshot() : null,
@@ -992,17 +1245,7 @@ class AutoEvalService {
       cases = queryset.cases
     }
     if (cases.length === 0) throw new Error('用例为空：至少给一条用例')
-    // 只给 templateId 时按模板里的阶段配置补全，没给模板就各自用第一个内置模板
-    const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
-    // 面板提交一律按模板跑：带了已知模板就忽略外面塞进来的阶段配置，
-    // 免得任务和模板悄悄漂移。重跑走 stageSource: 'record'，保留当次记录。
-    const supplied = input.stageSource === 'record' || !chosen ? input.stages : undefined
-    const stages = {}
-    for (const stage of STAGES) {
-      const provided = supplied ? supplied[stage.id] : undefined
-      const fallback = !provided && chosen && chosen.stages ? chosen.stages[stage.id] : undefined
-      stages[stage.id] = normalizeStageConfig(stage.id, provided || fallback)
-    }
+    const template = await this.templateFor(input)
     const id = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const run = {
       id,
@@ -1012,13 +1255,10 @@ class AutoEvalService {
       startedAt: nowIso(),
       finishedAt: null,
       status: 'running',
-      stages: Object.fromEntries(
-        STAGES.map((stage) => [
-          stage.id,
-          // 把这次用的模板与参数一起存下来，重跑和任务详情都靠它
-          { status: 'pending', durationMs: null, error: null, summary: null, template: stages[stage.id].template, config: stages[stage.id].config },
-        ]),
-      ),
+      groups: [],
+      stages: {},
+      // 把这次用的模板整份存下来，重跑和任务详情都靠它
+      templateSnapshot: template,
       caseCount: cases.length,
       metrics: null,
       artifacts: null,
@@ -1034,7 +1274,7 @@ class AutoEvalService {
     const controller = new AbortController()
     this.controller = controller
     // 后台跑，HTTP 立刻返回 runId
-    void this.execute(run, cases, stages, controller.signal).catch(() => {})
+    void this.execute(run, cases, template, controller.signal).catch(() => {})
     return { runId: id }
   }
 
@@ -1044,57 +1284,101 @@ class AutoEvalService {
     return { cancelled: true }
   }
 
-  async execute(run, cases, stages, signal) {
-    let current = cases
+  async execute(run, cases, template, signal) {
     const startedAt = Date.now()
+    const reports = []
     try {
-      for (const stage of STAGES) {
+      for (const group of template.groups) {
         if (signal.aborted) throw new Error('已取消')
-        const stageRun = this.active.stages[stage.id]
-        const stageStartedAt = Date.now()
-        stageRun.status = 'running'
-        this.progress = { stage: stage.id, done: 0, total: current.length }
-        run.log.push({ at: nowIso(), stage: stage.id, message: `开始（模板 ${stages[stage.id].template}）` })
-        const result = await RUNNERS[stage.id](
-          this.ctx,
-          {
-            template: stages[stage.id].template,
-            cases: current,
-            stages: this.active.stages,
-            run: { ...run, queryField: stages.scraping.config.queryField, finishedAt: nowIso() },
-            metrics: this.active.metrics,
-            progress: (done, total) => { this.progress = { stage: stage.id, done, total } },
-          },
-          stages[stage.id].config,
-          signal,
-        )
-        stageRun.durationMs = Date.now() - stageStartedAt
-        stageRun.status = 'done'
-        if (stage.id === 'reporting') {
-          stageRun.summary = { format: result.format, chars: result.text.length, rows: current.length }
-          await this.writeArtifacts(run, current, result)
-        } else if (stage.id === 'metrics') {
-          // summary 只留指标本身：面板折叠列表要显示它，stages 快照太吵
-          const { stages: _snapshot, ...metricsOnly } = result
-          stageRun.summary = metricsOnly
-          this.active.metrics = result
-          run.metrics = result
-        } else {
-          current = result
-          stageRun.summary = summarizeStage(stage.id, current)
+        const stages = effectiveStages(template, group)
+        const groupRun = {
+          id: group.id,
+          name: group.name,
+          kind: group.kind,
+          status: 'running',
+          stages: {},
+          metrics: null,
+          report: null,
         }
-        this.progress = { stage: stage.id, done: current.length, total: current.length }
-        run.log.push({ at: nowIso(), stage: stage.id, message: `完成，用时 ${stageRun.durationMs}ms` })
+        for (const stage of stages) {
+          groupRun.stages[stage.id] = {
+            name: stage.kind === 'custom' ? (stage.name || stage.id) : stage.id,
+            kind: stage.kind,
+            template: stage.module,
+            config: stage.config,
+            status: 'pending',
+            durationMs: null,
+            error: null,
+            summary: null,
+          }
+        }
+        run.groups.push(groupRun)
+        // 兼容旧面板：stages 指向第一组（Control）
+        if (run.groups.length === 1) run.stages = groupRun.stages
+        let current = cases
+        for (const stage of stages) {
+          if (signal.aborted) throw new Error('已取消')
+          const stageRun = groupRun.stages[stage.id]
+          const stageStartedAt = Date.now()
+          stageRun.status = 'running'
+          this.progress = { stage: stage.id, group: group.id, done: 0, total: current.length }
+          run.log.push({ at: nowIso(), group: group.id, stage: stage.id, message: `开始（模块 ${stage.module}）` })
+          const runner = stage.kind === 'custom' ? RUNNERS.custom : RUNNERS[stage.id]
+          const result = await runner(
+            this.ctx,
+            {
+              stageId: stage.id,
+              template: stage.module,
+              cases: current,
+              stages: groupRun.stages,
+              run: { ...run, groups: undefined, queryField: queryFieldOf(stages), finishedAt: nowIso() },
+              metrics: groupRun.metrics,
+              group: { id: group.id, name: group.name, kind: group.kind },
+              progress: (done, total) => { this.progress = { stage: stage.id, group: group.id, done, total } },
+            },
+            stage.config,
+            signal,
+          )
+          stageRun.durationMs = Date.now() - stageStartedAt
+          stageRun.status = 'done'
+          if (stage.kind === 'preset' && stage.id === 'reporting') {
+            stageRun.summary = { format: result.format, chars: result.text.length, rows: current.length }
+            groupRun.report = { format: result.format, text: result.text }
+            reports.push({ group, text: result.text, format: result.format })
+          } else if (stage.kind === 'preset' && stage.id === 'metrics') {
+            // summary 只留指标本身：面板折叠列表要显示它，stages 快照太吵
+            const { stages: _snapshot, ...metricsOnly } = result
+            stageRun.summary = metricsOnly
+            groupRun.metrics = result
+          } else {
+            current = result
+            stageRun.summary = summarizeStage(stage.kind === 'custom' ? 'custom' : stage.id, current)
+          }
+          this.progress = { stage: stage.id, group: group.id, done: current.length, total: current.length }
+          run.log.push({ at: nowIso(), group: group.id, stage: stage.id, message: `完成，用时 ${stageRun.durationMs}ms` })
+        }
+        groupRun.status = 'done'
+        groupRun.caseCount = current.length
+        // 报告要用各阶段加工后的最终用例，只在内存里放一会儿
+        groupRun._cases = current
       }
+      run.metrics = run.groups[0] ? run.groups[0].metrics : null
+      run.comparison = buildComparison(run.groups)
       run.status = 'done'
+      await this.writeArtifacts(run, cases, reports)
     } catch (error) {
       run.status = signal.aborted ? 'cancelled' : 'failed'
       run.error = String(error && error.message ? error.message : error)
-      for (const stage of STAGES) {
-        const stageRun = this.active.stages[stage.id]
-        if (stageRun.status === 'running') {
-          stageRun.status = 'failed'
-          stageRun.error = run.error
+      for (const groupRun of run.groups) {
+        if (groupRun.status === 'running') {
+          groupRun.status = 'failed'
+          groupRun.error = run.error
+        }
+        for (const stageRun of Object.values(groupRun.stages)) {
+          if (stageRun.status === 'running') {
+            stageRun.status = 'failed'
+            stageRun.error = run.error
+          }
         }
       }
       run.log.push({ at: nowIso(), stage: null, message: `失败：${run.error}` })
@@ -1102,6 +1386,7 @@ class AutoEvalService {
       run.finishedAt = nowIso()
       run.durationMs = Date.now() - startedAt
       const state = await readState()
+      for (const group of run.groups || []) delete group._cases
       const finished = { ...run, cases: undefined }
       delete finished.cases
       state.runs.unshift(finished)
@@ -1115,19 +1400,30 @@ class AutoEvalService {
     }
   }
 
-  async writeArtifacts(run, cases, report) {
+  async writeArtifacts(run, cases, reports) {
     const dir = path.join(dataDir(), 'runs', run.id)
     await fsp.mkdir(dir, { recursive: true })
-    const reportName = report.format === 'json' ? 'report.json' : 'report.md'
-    await fsp.writeFile(path.join(dir, reportName), report.text, 'utf8')
-    await fsp.writeFile(
-      path.join(dir, 'rows.jsonl'),
-      cases.map((item) => JSON.stringify(item)).join('\n') + '\n',
-      'utf8',
-    )
+    const format = (reports[0] && reports[0].format) || 'markdown'
+    const name = format === 'json' ? 'report.json' : 'report.md'
+    const text = format === 'json'
+      ? JSON.stringify(
+        { run: { id: run.id, name: run.name, templateId: run.templateId }, groups: reports.map((item) => ({ group: item.group, text: item.text })) },
+        null,
+        2,
+      )
+      : combineReports(run, reports)
+    await fsp.writeFile(path.join(dir, name), text, 'utf8')
+    const rows = []
+    for (const group of run.groups || []) {
+      const list = Array.isArray(group._cases) ? group._cases : cases
+      for (const item of list) {
+        rows.push(JSON.stringify(reports.length > 1 ? { group: group.id, ...item } : item))
+      }
+    }
+    await fsp.writeFile(path.join(dir, 'rows.jsonl'), rows.join('\n') + '\n', 'utf8')
     run.artifacts = {
       dir,
-      report: path.join(dir, reportName),
+      report: path.join(dir, name),
       rows: path.join(dir, 'rows.jsonl'),
       cases: path.join(dir, 'cases.json'),
     }
@@ -1158,6 +1454,39 @@ class AutoEvalService {
   }
 
   /** 按原样再跑一次：用例来自 cases.json，阶段模板与参数来自运行记录。 */
+  /** 这次运行要用哪个模板：显式快照 > 模板文件 > 提交时塞进来的阶段配置。 */
+  async templateFor(input) {
+    if (input.stageSource === 'record' && input.templateSnapshot) {
+      return normalizeTemplate(input.templateSnapshot)
+    }
+    const chosen = [...BUILTIN_TEMPLATES, ...(await readTemplates())].find((item) => item.id === input.templateId)
+    if (chosen) return normalizeTemplate(chosen)
+    if (input.stages) {
+      return normalizeTemplate({
+        id: String(input.templateId || 'custom'),
+        stages: input.stages,
+        groups: input.groups,
+      })
+    }
+    throw new Error(`没有这个模板：${input.templateId || '(空)'}`)
+  }
+
+  /** 重跑：优先用当次记录的模板快照，老记录就按阶段表反推。 */
+  async templateForRun(run) {
+    if (run.templateSnapshot) return normalizeTemplate(run.templateSnapshot)
+    const stages = Array.isArray(run.stages)
+      ? run.stages
+      : Object.entries(run.stages || {}).map(([stageId, entry]) => ({
+        id: stageId,
+        module: entry.template,
+        config: entry.config,
+      }))
+    const groups = Array.isArray(run.groups) && run.groups.length > 0
+      ? run.groups.map((group) => ({ id: group.id, kind: group.kind, name: group.name }))
+      : undefined
+    return normalizeTemplate({ id: run.templateId || 'custom', stages, groups })
+  }
+
   async rerun(runId) {
     const state = await readState()
     const run = state.runs.find((item) => item.id === runId)
@@ -1166,16 +1495,12 @@ class AutoEvalService {
     if (!file) throw new Error('这次运行没有留下用例快照，不能重跑')
     const cases = JSON.parse(await fsp.readFile(file, 'utf8'))
     if (!Array.isArray(cases) || cases.length === 0) throw new Error('用例快照是空的')
-    const stages = {}
-    for (const stage of STAGES) {
-      const saved = run.stages && run.stages[stage.id]
-      if (saved && saved.template) stages[stage.id] = { template: saved.template, config: saved.config }
-    }
+    const template = await this.templateForRun(run)
     const result = await this.start({
       name: `${run.name}（重跑）`,
       templateId: run.templateId,
       cases,
-      stages: Object.keys(stages).length > 0 ? stages : undefined,
+      templateSnapshot: template,
       stageSource: 'record',
     })
     return { ...result, source: runId }

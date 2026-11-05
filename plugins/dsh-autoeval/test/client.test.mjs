@@ -766,6 +766,7 @@ test('模板列表点进详情：内置只读', () => {
   assert.equal(findAll(view, byClass('ae-btn ae-btn-primary')).length, 0, '内置模板不该有保存')
   assert.ok(findAll(view, clickable('复制')).length >= 1, '内置模板缺复制')
   assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '模板详情不是四个阶段')
+  assert.equal(findAll(view, byClass('ae-group-edit')).length, 1, '默认应该有一个 Control 组')
 })
 
 test('自定义模板可以改字段并保存', async () => {
@@ -917,6 +918,83 @@ test('模板页可以新建', () => {
   const idInput = findAll(view, (node) => String(node.props.className || '') === 'ae-input'
     && String(node.props.value || '').startsWith('template-'))[0]
   assert.ok(idInput, '新建模板没有 id 输入框')
+})
+
+test('模板编辑：预置阶段不能互换，自定义阶段可以插入再删掉', async () => {
+  let view = ensureTaskList()
+  view = openTab(view, '任务模板')
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '编辑态应该是四个阶段')
+
+  // 预置阶段之间的上下移禁止
+  const stageCards = findAll(view, byClass('ae-stage-edit'))
+  const upButtons = findAll(stageCards[1], (node) => String(node.props.className || '') === 'ae-btn ae-btn-xs')
+  assert.equal(upButtons[0].props.disabled, true, '预置阶段不该能跟上一个预置阶段换')
+
+  // 加一个自定义阶段
+  findAll(view, clickable('新增阶段'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 5, '没加上自定义阶段')
+  assert.ok(texts(view).includes('自定义阶段 1'), '自定义阶段没露面')
+
+  const cardsAfter = findAll(view, byClass('ae-stage-edit'))
+  const customUp = findAll(cardsAfter[4], (node) => String(node.props.className || '') === 'ae-btn ae-btn-xs')[0]
+  assert.equal(customUp.props.disabled, false, '自定义阶段应该能上移')
+  customUp.props.onClick()
+  view = render(mainComponent(), {})
+  const titles = findAll(view, byClass('ae-card-title')).map((node) => texts(node))
+  assert.ok(titles.some((text) => text.startsWith('4. 自定义阶段')), '上移后位置不对')
+
+  // 删掉它
+  const cardsBeforeDelete = findAll(view, byClass('ae-stage-edit'))
+  findAll(cardsBeforeDelete[3], (node) => String(node.props.className || '') === 'ae-btn ae-btn-xs')
+    .find((node) => texts(node) === '删除').props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '没删掉自定义阶段')
+})
+
+test('模板编辑：可以加 Treatment 组并覆盖阶段参数', async () => {
+  let view = ensureTaskList()
+  view = openTab(view, '任务模板')
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  assert.equal(findAll(view, byClass('ae-group-edit')).length, 1, '默认只有一个 Control')
+
+  findAll(view, clickable('新增 Treatment 组'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const groups = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groups.length, 2, '没加上 Treatment')
+  assert.ok(texts(groups[1]).includes('Control') === false)
+
+  // 勾上第一个阶段的覆盖
+  const checks = findAll(groups[1], byClass('ae-check'))
+  assert.equal(checks.length, 4, '每个阶段一行覆盖开关')
+  findAll(checks[0], (node) => node.props.type === 'checkbox')[0]
+    .props.onChange({ target: { checked: true } })
+  view = render(mainComponent(), {})
+  const groupsAfter = findAll(view, byClass('ae-group-edit'))
+  assert.equal(groupsAfter.length, 2, '覆盖之后组数量变了')
+  assert.ok(texts(groupsAfter[1]).includes('覆盖 Scraping'), '覆盖标题不对')
+
+  const before = calls.length
+  findAll(view, byClass('ae-btn ae-btn-primary'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const modal = findAll(view, byClass('ae-modal'))[0]
+  assert.ok(texts(modal).includes('Treatment 1'), '确认框没列出 Treatment')
+  await findAll(view, clickable('确认'))[0].props.onClick()
+  await settle()
+  const posted = calls.slice(before).find((call) => call.method === 'POST' && call.url.endsWith('/templates'))
+  assert.ok(posted, '没有保存')
+  const body = JSON.parse(posted.body)
+  assert.equal(body.groups.length, 2)
+  assert.equal(body.groups[1].kind, 'treatment')
+  assert.ok(body.groups[1].overrides.scraping, '覆盖没带上')
+  assert.equal(body.stages.length, 4)
 })
 
 test('任务列表可以重跑与删除', async () => {

@@ -18,6 +18,27 @@ window.__ModuleLoader__.load({
       'tab.templates': '任务模板',
       'tab.querysets': 'Queryset',
       'qs.unit': '个 Queryset',
+      'tpl.stageOrderHint': '阶段按这里的顺序执行；四个预置阶段之间的先后固定，可以插自定义阶段',
+      'tpl.addStage': '新增阶段',
+      'tpl.addTreatment': '新增 Treatment 组',
+      'tpl.presetStage': '预置',
+      'tpl.customStage': '自定义',
+      'tpl.customModule': '自定义命令',
+      'tpl.stageName': '阶段名称',
+      'tpl.module': '模块',
+      'run.comparison': '组间对比',
+      'run.metric': '指标',
+      'tpl.noOverride': '没有覆盖任何阶段',
+      'tpl.groups': '对照组与实验组',
+      'tpl.groupHint': '必须有一个 Control 组；Treatment 组可以加多个，每组能给任意阶段换模块、改参数',
+      'tpl.groupName': '组名称',
+      'tpl.control': 'Control 组',
+      'tpl.treatment': 'Treatment',
+      'tpl.overrides': '覆盖',
+      'stage.custom': '自定义阶段',
+      'action.moveUp': '上移',
+      'action.moveDown': '下移',
+
       'qs.cases': '条用例',
       'qs.hint': '从 JSONL / CSV / XLSX 或飞书表格、智能表格导入，也可以直接编辑用例',
       'qs.empty': '还没有 Queryset，点右上角「导入 Queryset」。',
@@ -247,6 +268,27 @@ window.__ModuleLoader__.load({
       'tab.templates': 'Templates',
       'tab.querysets': 'Queryset',
       'qs.unit': 'querysets',
+      'tpl.stageOrderHint': 'Stages run in this order; the four preset stages keep their relative order, custom stages can be interleaved',
+      'tpl.addStage': 'Add stage',
+      'tpl.addTreatment': 'Add treatment',
+      'tpl.presetStage': 'Preset',
+      'tpl.customStage': 'Custom',
+      'tpl.customModule': 'Custom command',
+      'tpl.stageName': 'Stage name',
+      'tpl.module': 'Module',
+      'run.comparison': 'Group comparison',
+      'run.metric': 'Metric',
+      'tpl.noOverride': 'No stage overridden',
+      'tpl.groups': 'Control and treatment groups',
+      'tpl.groupHint': 'Exactly one Control group; add as many Treatments as you like, and each can override any stage module or parameter',
+      'tpl.groupName': 'Group name',
+      'tpl.control': 'Control',
+      'tpl.treatment': 'Treatment',
+      'tpl.overrides': 'Override',
+      'stage.custom': 'Custom stage',
+      'action.moveUp': 'Move up',
+      'action.moveDown': 'Move down',
+
       'qs.cases': 'cases',
       'qs.hint': 'Import from JSONL / CSV / XLSX, Feishu Sheets or Bitable; cases stay editable',
       'qs.empty': 'No queryset yet — hit “Import queryset”.',
@@ -558,6 +600,13 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-group-edit { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  border: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.18)); }
+.ae-override { display: flex; flex-direction: column; gap: 6px; }
+.ae-override-body { padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.ae-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ae-row-actions { display: flex; gap: 4px; margin-left: auto; }
+.ae-btn-xs { padding: 2px 8px; font-size: 12px; line-height: 18px; }
 .ae-qs-card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: pointer;
   border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #fff);
   border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
@@ -695,6 +744,7 @@ window.__ModuleLoader__.load({
       const [taskQuery, setTaskQuery] = React.useState('')
       const [taskStatus, setTaskStatus] = React.useState('all')
       const [openStages, setOpenStages] = React.useState({})
+      const [stageGroup, setStageGroup] = React.useState('')
       const [templateTab, setTemplateTab] = React.useState('form')
       const [templateYaml, setTemplateYaml] = React.useState('')
       const [yamlBusy, setYamlBusy] = React.useState(false)
@@ -729,19 +779,67 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function cloneStages(stages, catalog) {
-        const out = {}
-        for (const stage of catalog || []) {
-          const chosen = (stages && stages[stage.id]) || {}
-          const preset = stage.presets.find((item) => item.id === chosen.template) || stage.presets[0]
-          const config = { ...preset.config, ...(chosen.config || {}) }
-          out[stage.id] = {
-            template: preset.id,
+      function catalogStage(stageId) {
+        return (state.stages || []).find((item) => item.id === stageId) || null
+      }
+
+      function moduleList(stageId) {
+        const stage = catalogStage(stageId)
+        if (stage) return stage.presets
+        const custom = state.customStage || { module: 'custom', config: { command: '' }, fields: [] }
+        return [{ id: custom.module, config: custom.config, fields: custom.fields }]
+      }
+
+      function moduleOf(stageId, moduleId) {
+        const list = moduleList(stageId)
+        return list.find((item) => item.id === moduleId) || list[0]
+      }
+
+      /** 模板里的阶段：数组，顺序就是执行顺序；v1 的对象形式也认。 */
+      function stagesFromTemplate(template) {
+        const raw = template && template.stages
+        const list = Array.isArray(raw)
+          ? raw
+          : (state.stages || [])
+            .filter((stage) => raw && raw[stage.id])
+            .map((stage) => ({
+              id: stage.id,
+              module: raw[stage.id].module || raw[stage.id].template,
+              config: raw[stage.id].config,
+            }))
+        return list.map((item) => {
+          const stageId = String(item.id)
+          const moduleId = String(item.module || 'custom')
+          const preset = moduleOf(stageId, moduleId)
+          const config = { ...(preset ? preset.config : {}), ...(item.config || {}) }
+          return {
+            id: stageId,
+            kind: catalogStage(stageId) ? 'preset' : 'custom',
+            name: item.name || stageId,
+            module: moduleId,
             config,
             configText: JSON.stringify(config, null, 2),
           }
-        }
-        return out
+        })
+      }
+
+      function groupsFromTemplate(template) {
+        const raw = (template && template.groups) || []
+        const list = raw.length > 0 ? raw : [{ id: 'control', kind: 'control', name: 'Control', overrides: {} }]
+        return list.map((group, index) => ({
+          id: group.id || (index === 0 ? 'control' : `treatment-${index}`),
+          kind: group.kind === 'treatment' ? 'treatment' : 'control',
+          name: group.name || (index === 0 ? 'Control' : group.id),
+          overrides: Object.fromEntries(Object.entries(group.overrides || {}).map(([stageId, patch]) => {
+            const preset = moduleOf(stageId, patch.module)
+            const config = { ...(preset ? preset.config : {}), ...(patch.config || {}) }
+            return [stageId, {
+              module: patch.module || (preset ? preset.id : 'custom'),
+              config,
+              configText: JSON.stringify(config, null, 2),
+            }]
+          })),
+        }))
       }
 
       // 提交任务只认模板：draft 里只记选了哪个模板，阶段配置一律取自模板本身
@@ -843,13 +941,17 @@ window.__ModuleLoader__.load({
           [t('submit.template'), `${template.name}（${template.id}）`],
           ...caseRows,
         ]
-        const stageRows = (state.stages || []).map((stage) => {
-          const entry = (template.stages && template.stages[stage.id]) || {}
-          const config = entry.config && Object.keys(entry.config).length > 0
-            ? JSON.stringify(entry.config)
-            : ''
-          return `${t(`stage.${stage.id}`)} · ${entry.template || '-'}${config ? ` ${config}` : ''}`
+        const templateStages = stagesFromTemplate(template)
+        const stageRows = templateStages.map((stage) => {
+          const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
+          const label = stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
+          return `${label} · ${stage.module}${config ? ` ${config}` : ''}`
         })
+        for (const group of groupsFromTemplate(template)) {
+          const names = Object.keys(group.overrides)
+          const prefix = group.kind === 'control' ? t('tpl.control') : group.name
+          stageRows.push(`${prefix}${names.length > 0 ? ` · ${t('tpl.overrides')}：${names.join('、')}` : ''}`)
+        }
         setConfirmDialog({
           kind: 'run',
           title: t('confirm.runTitle'),
@@ -947,12 +1049,14 @@ window.__ModuleLoader__.load({
             id: template.id,
             name: template.name,
             description: template.description || '',
-            stages: cloneStages(template.stages, state.stages),
+            stages: stagesFromTemplate(template),
+            groups: groupsFromTemplate(template),
           },
           id: template.id,
           name: template.name,
           description: template.description || '',
-          stages: cloneStages(template.stages, state.stages),
+          stages: stagesFromTemplate(template),
+          groups: groupsFromTemplate(template),
         })
         setEditingDraft(false)
         setTemplateTab(template.broken ? 'yaml' : 'form')
@@ -1032,7 +1136,8 @@ window.__ModuleLoader__.load({
               id: saved.id,
               name: saved.name,
               description: saved.description || '',
-              stages: cloneStages(saved.stages, state.stages),
+              stages: stagesFromTemplate(saved),
+              groups: groupsFromTemplate(saved),
             })
             setNotice(t('tpl.saved'))
             await loadTemplateYaml(saved.id)
@@ -1055,7 +1160,10 @@ window.__ModuleLoader__.load({
           id: `template-${Date.now().toString(36)}`,
           name: '',
           description: '',
-          stages: cloneStages({}, state.stages),
+          stages: stagesFromTemplate({
+            stages: (state.stages || []).map((stage) => ({ id: stage.id, module: stage.presets[0].id })),
+          }),
+          groups: groupsFromTemplate(null),
         })
         setEditingDraft(true)
         setTemplateTab('form')
@@ -1071,28 +1179,118 @@ window.__ModuleLoader__.load({
           id: `${source.id}-copy`,
           name: `${source.name} ${t('tpl.copySuffix')}`,
           description: source.description || '',
-          stages: cloneStages(source.stages, state.stages),
+          stages: stagesFromTemplate(source),
+          groups: groupsFromTemplate(source),
         })
       }
 
-      function setTemplateStage(stageId, patch) {
+      function updateStages(mapper) {
         setTemplateDraft((current) => {
           if (!current) return current
-          return {
-            ...current,
-            stages: { ...current.stages, [stageId]: { ...current.stages[stageId], ...patch } },
-          }
+          return { ...current, stages: mapper(current.stages || []) }
         })
       }
 
-      function pickStagePreset(stageId, presetId) {
-        const stage = (state.stages || []).find((item) => item.id === stageId)
-        const preset = stage && stage.presets.find((item) => item.id === presetId)
-        setTemplateStage(stageId, {
-          template: presetId,
-          config: { ...(preset ? preset.config : {}) },
-          configText: JSON.stringify(preset ? preset.config : {}, null, 2),
+      function setStageAt(index, patch) {
+        updateStages((list) => list.map((item, at) => (at === index ? { ...item, ...patch } : item)))
+      }
+
+      /** 预置阶段之间不能换位置，跟自定义阶段换可以。 */
+      function canSwap(index, delta) {
+        const list = templateDraft.stages || []
+        const a = list[index]
+        const b = list[index + delta]
+        if (!a || !b) return false
+        return !(a.kind === 'preset' && b.kind === 'preset')
+      }
+
+      function moveStageAt(index, delta) {
+        if (!canSwap(index, delta)) return
+        updateStages((list) => {
+          const next = [...list]
+          const target = index + delta
+          const tmp = next[index]
+          next[index] = next[target]
+          next[target] = tmp
+          return next
         })
+      }
+
+      function addCustomStage() {
+        const used = new Set((templateDraft.stages || []).map((item) => item.id))
+        let index = 1
+        while (used.has(`custom-${index}`)) index += 1
+        const id = `custom-${index}`
+        updateStages((list) => [...list, {
+          id,
+          kind: 'custom',
+          name: `${t('stage.custom')} ${index}`,
+          module: 'custom',
+          config: { command: '' },
+          configText: JSON.stringify({ command: '' }, null, 2),
+        }])
+      }
+
+      function removeStageAt(index) {
+        const stage = (templateDraft.stages || [])[index]
+        if (!stage || stage.kind === 'preset') return
+        updateStages((list) => list.filter((item, at) => at !== index))
+        setTemplateDraft((current) => {
+          if (!current) return current
+          const groups = (current.groups || []).map((group) => {
+            const overrides = { ...group.overrides }
+            delete overrides[stage.id]
+            return { ...group, overrides }
+          })
+          return { ...current, groups }
+        })
+      }
+
+      function pickStageModule(index, moduleId) {
+        const stage = (templateDraft.stages || [])[index]
+        if (!stage) return
+        const preset = moduleOf(stage.id, moduleId)
+        const config = { ...(preset ? preset.config : {}) }
+        setStageAt(index, { module: moduleId, config, configText: JSON.stringify(config, null, 2) })
+      }
+
+      function updateGroups(mapper) {
+        setTemplateDraft((current) => {
+          if (!current) return current
+          return { ...current, groups: mapper(current.groups || []) }
+        })
+      }
+
+      function setGroupAt(index, patch) {
+        updateGroups((list) => list.map((item, at) => (at === index ? { ...item, ...patch } : item)))
+      }
+
+      function addTreatment() {
+        const used = new Set((templateDraft.groups || []).map((item) => item.id))
+        let index = 1
+        while (used.has(`treatment-${index}`)) index += 1
+        updateGroups((list) => [...list, {
+          id: `treatment-${index}`,
+          kind: 'treatment',
+          name: `${t('tpl.treatment')} ${index}`,
+          overrides: {},
+        }])
+      }
+
+      function removeGroupAt(index) {
+        const group = (templateDraft.groups || [])[index]
+        if (!group || group.kind === 'control') return
+        updateGroups((list) => list.filter((item, at) => at !== index))
+      }
+
+      function setOverride(groupIndex, stageId, next) {
+        updateGroups((list) => list.map((group, at) => {
+          if (at !== groupIndex) return group
+          const overrides = { ...group.overrides }
+          if (next === null) delete overrides[stageId]
+          else overrides[stageId] = next
+          return { ...group, overrides }
+        }))
       }
 
       function applyTemplateToDraft(template) {
@@ -1109,22 +1307,36 @@ window.__ModuleLoader__.load({
           setError(t('tpl.badId'))
           return
         }
-        const stages = {}
-        for (const stage of (state.stages || [])) {
-          const entry = current.stages[stage.id]
-          const parsed = readJson(entry.configText || '{}')
-          if (!parsed.ok) {
-            setError(`${stage.id} / ${t('error.params')}：${parsed.error}`)
-            return
-          }
-          stages[stage.id] = { template: entry.template, config: parsed.value }
-        }
+        const stages = (current.stages || []).map((stage) => ({
+          id: stage.id,
+          kind: stage.kind,
+          name: stage.name,
+          module: stage.module,
+          config: { ...(stage.config || {}) },
+        }))
+        const groups = (current.groups || []).map((group) => ({
+          id: group.id,
+          kind: group.kind,
+          name: group.name,
+          overrides: Object.fromEntries(Object.entries(group.overrides || {}).map(([stageId, patch]) => [
+            stageId,
+            { module: patch.module, config: { ...(patch.config || {}) } },
+          ])),
+        }))
         setError('')
-        const stageRows = (state.stages || []).map((stage) => {
-          const entry = stages[stage.id]
-          const config = entry.config && Object.keys(entry.config).length > 0 ? JSON.stringify(entry.config) : ''
-          return `${t(`stage.${stage.id}`)} · ${entry.template}${config ? ` ${config}` : ''}`
+        const stageRows = stages.map((stage, index) => {
+          const config = Object.keys(stage.config || {}).length > 0 ? JSON.stringify(stage.config) : ''
+          const label = stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
+          return `${index + 1}. ${label} · ${stage.module}${config ? ` ${config}` : ''}`
         })
+        for (const group of groups) {
+          const names = Object.keys(group.overrides).map((stageId) => {
+            const stage = stages.find((item) => item.id === stageId)
+            if (!stage) return stageId
+            return stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stageId}`)
+          })
+          stageRows.push(`${group.name}${names.length > 0 ? ` · ${t('tpl.overrides')}：${names.join('、')}` : ''}`)
+        }
         setConfirmDialog({
           kind: 'template',
           title: t('confirm.templateTitle'),
@@ -1135,14 +1347,13 @@ window.__ModuleLoader__.load({
             [t('tpl.desc'), current.description || '-'],
           ],
           stages: stageRows,
-          payload: { id, name: current.name || id, description: current.description || '', stages },
+          payload: { id, name: current.name || id, description: current.description || '', stages, groups },
           draft: current,
         })
       }
 
       async function saveTemplateConfirmed(payload, current) {
         setConfirmDialog(null)
-        const { id, stages } = payload
         setError('')
         try {
           await api('/templates', {
@@ -1150,16 +1361,20 @@ window.__ModuleLoader__.load({
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(payload),
           })
+          const snapshot = {
+            id: payload.id,
+            name: payload.name,
+            description: payload.description,
+            stages: payload.stages.map((stage) => ({ ...stage, config: { ...(stage.config || {}) } })),
+            groups: payload.groups.map((group) => ({ ...group, overrides: { ...group.overrides } })),
+          }
           setTemplateDraft({
             ...current,
             mode: 'edit',
             readonly: false,
-            original: {
-              id,
-              name: current.name || id,
-              description: current.description || '',
-              stages: cloneStages(stages, state.stages),
-            },
+            stages: stagesFromTemplate(snapshot),
+            groups: groupsFromTemplate(snapshot),
+            original: snapshot,
           })
           setEditingDraft(false)
           setNotice(t('label.saved'))
@@ -1186,7 +1401,8 @@ window.__ModuleLoader__.load({
             id: original.id,
             name: original.name,
             description: original.description,
-            stages: cloneStages(original.stages, state.stages),
+            stages: stagesFromTemplate(original),
+            groups: groupsFromTemplate(original),
           })
         }
         setEditingDraft(false)
@@ -1241,40 +1457,163 @@ window.__ModuleLoader__.load({
           },
         }, t(`tab.${key}`))))
 
-      function stageChips(stage, entry, disabled) {
-        return h('div', { className: 'ae-chips' },
-          ...stage.presets.map((preset) => h('button', {
-            key: preset.id, type: 'button', className: 'ae-chip', disabled,
-            'data-active': String(entry.template === preset.id),
-            onClick: () => {
-              if (!disabled) pickStagePreset(stage.id, preset.id)
-            },
-          }, t(`preset.${stage.id}.${preset.id}`) || preset.id)))
+      function moduleLabel(stageId, moduleId) {
+        if (!catalogStage(stageId)) return t('tpl.customModule')
+        const key = `preset.${stageId}.${moduleId}`
+        const label = t(key)
+        return label === key ? moduleId : label
       }
 
-      function stageEditor(stage, entry, readonly) {
-        return h('div', { className: 'ae-stage-edit', key: stage.id },
+      function moduleChips(stageId, moduleId, disabled, onPick) {
+        return h('div', { className: 'ae-chips' },
+          ...moduleList(stageId).map((preset) => h('button', {
+            key: preset.id,
+            type: 'button',
+            className: 'ae-chip',
+            disabled,
+            'data-active': String(moduleId === preset.id),
+            onClick: () => { if (!disabled) onPick(preset.id) },
+          }, moduleLabel(stageId, preset.id))))
+      }
+
+      function stageLabel(stage) {
+        return stage.kind === 'custom' ? (stage.name || stage.id) : t(`stage.${stage.id}`)
+      }
+
+      function patchStageConfig(index, stage, key, next) {
+        const config = { ...(stage.config || {}), [key]: next }
+        setStageAt(index, { config, configText: JSON.stringify(config, null, 2) })
+      }
+
+      function fieldText(field, config) {
+        const value = config && config[field.key] !== undefined ? config[field.key] : field.default
+        if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '-'
+        if (value === undefined || value === null || value === '') return '-'
+        return String(value)
+      }
+
+      function renderStageRow(stage, index, editing) {
+        const fields = (moduleOf(stage.id, stage.module) || {}).fields || []
+        const body = editing
+          ? [
+            moduleChips(stage.id, stage.module, false, (moduleId) => pickStageModule(index, moduleId)),
+            ...fields.map((field) => renderFieldInput(
+              field,
+              (stage.config || {})[field.key],
+              (next) => patchStageConfig(index, stage, field.key, next),
+              false,
+            )),
+          ]
+          : [
+            h('div', { className: 'ae-detail-row' },
+              h('span', { className: 'ae-detail-key' }, t('tpl.module')),
+              h('span', { className: 'ae-mono' }, moduleLabel(stage.id, stage.module))),
+            ...fields.map((field) => h('div', { className: 'ae-detail-row', key: field.key },
+              h('span', { className: 'ae-detail-key' }, field.label || field.key),
+              h('span', { className: 'ae-mono' }, fieldText(field, stage.config)))),
+          ]
+        return h('div', { className: 'ae-stage-edit', key: `${stage.id}-${index}` },
           h('div', { className: 'ae-card-head' },
-            h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
-            h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
-          stageChips(stage, entry, readonly),
-          entry.template === 'custom'
-            ? h('input', {
-              className: 'ae-input', type: 'text', spellCheck: false, disabled: readonly,
-              placeholder: 'python3 ./my-judge.py', value: entry.config.command || '',
-              onChange: (event) => {
-                const config = { ...entry.config, command: event.target.value }
-                setTemplateStage(stage.id, { config, configText: JSON.stringify(config, null, 2) })
-              },
-            })
+            h('div', { className: 'ae-card-title' }, `${index + 1}. ${stageLabel(stage)}`),
+            h('span', {
+              className: 'ae-badge',
+              'data-kind': stage.kind === 'preset' ? 'builtin' : 'custom',
+            }, stage.kind === 'preset' ? t('tpl.presetStage') : t('tpl.customStage')),
+            editing
+              ? h('div', { className: 'ae-row-actions' },
+                h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-xs',
+                  title: t('action.moveUp'), disabled: !canSwap(index, -1),
+                  onClick: () => moveStageAt(index, -1),
+                }, '↑'),
+                h('button', {
+                  type: 'button', className: 'ae-btn ae-btn-xs',
+                  title: t('action.moveDown'), disabled: !canSwap(index, 1),
+                  onClick: () => moveStageAt(index, 1),
+                }, '↓'),
+                stage.kind === 'custom'
+                  ? h('button', {
+                    type: 'button', className: 'ae-btn ae-btn-xs',
+                    onClick: () => removeStageAt(index),
+                  }, t('action.delete'))
+                  : null)
+              : null),
+          editing && stage.kind === 'custom'
+            ? h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.stageName')),
+              h('input', {
+                className: 'ae-input', type: 'text', value: stage.name || '',
+                onChange: (event) => setStageAt(index, { name: event.target.value }),
+              }))
             : null,
-          h('div', { className: 'ae-field' },
-            h('label', { className: 'ae-label' }, t('field.params')),
-            h('textarea', {
-              className: 'ae-textarea', rows: 4, spellCheck: false, disabled: readonly,
-              value: entry.configText,
-              onChange: (event) => setTemplateStage(stage.id, { configText: event.target.value }),
-            })))
+          ...body)
+      }
+
+      function renderGroupCard(group, index, editing, stages) {
+        const isControl = group.kind === 'control'
+        return h('div', { className: 'ae-group-edit', key: `${group.id}-${index}`, 'data-kind': group.kind },
+          h('div', { className: 'ae-card-head' },
+            h('div', { className: 'ae-card-title' }, `${isControl ? t('tpl.control') : t('tpl.treatment')} · ${group.name || group.id}`),
+            h('span', {
+              className: 'ae-badge',
+              'data-kind': isControl ? 'builtin' : 'custom',
+            }, group.kind),
+            editing && !isControl
+              ? h('button', {
+                type: 'button', className: 'ae-btn ae-btn-xs',
+                onClick: () => removeGroupAt(index),
+              }, t('action.delete'))
+              : null),
+          editing
+            ? h('div', { className: 'ae-field' },
+              h('label', { className: 'ae-label' }, t('tpl.groupName')),
+              h('input', {
+                className: 'ae-input', type: 'text', value: group.name || '',
+                onChange: (event) => setGroupAt(index, { name: event.target.value }),
+              }))
+            : null,
+          ...stages.map((stage) => {
+            const patch = group.overrides[stage.id]
+            return h('div', { className: 'ae-override', key: stage.id },
+              h('label', { className: 'ae-check' },
+                h('input', {
+                  type: 'checkbox', checked: Boolean(patch), disabled: !editing,
+                  onChange: (event) => {
+                    if (!editing) return
+                    if (event.target.checked) {
+                      setOverride(index, stage.id, {
+                        module: stage.module,
+                        config: { ...(stage.config || {}) },
+                        configText: JSON.stringify(stage.config || {}, null, 2),
+                      })
+                    } else {
+                      setOverride(index, stage.id, null)
+                    }
+                  },
+                }),
+                h('span', null, `${t('tpl.overrides')} ${stageLabel(stage)}`)),
+              patch
+                ? h('div', { className: 'ae-override-body' },
+                  moduleChips(stage.id, patch.module, !editing, (moduleId) => {
+                    const preset = moduleOf(stage.id, moduleId)
+                    setOverride(index, stage.id, {
+                      module: moduleId,
+                      config: { ...(preset ? preset.config : {}) },
+                      configText: JSON.stringify(preset ? preset.config : {}, null, 2),
+                    })
+                  }),
+                  ...((moduleOf(stage.id, patch.module) || {}).fields || []).map((field) => renderFieldInput(
+                    field,
+                    (patch.config || {})[field.key],
+                    (next) => setOverride(index, stage.id, {
+                      ...patch,
+                      config: { ...(patch.config || {}), [field.key]: next },
+                      configText: JSON.stringify({ ...(patch.config || {}), [field.key]: next }, null, 2),
+                    }),
+                    !editing,
+                  )))
+                : null)
+          }))
       }
 
       // ---------------------------------------------------------- 任务列表
@@ -1563,9 +1902,44 @@ window.__ModuleLoader__.load({
       }
 
       // 各阶段的可折叠列表：表头给状态与耗时，展开看模板、参数、摘要、该阶段日志
+      function groupStages(run) {
+        const groups = Array.isArray(run.groups) ? run.groups : []
+        if (groups.length === 0) return run.stages || {}
+        const picked = groups.find((item) => item.id === stageGroup)
+        return (picked && picked.stages) || groups[0].stages || {}
+      }
+
+      function renderGroupTabs(run) {
+        const groups = Array.isArray(run.groups) ? run.groups : []
+        if (groups.length <= 1) return null
+        return h('div', { className: 'ae-chips', style: { marginBottom: '8px' } },
+          ...groups.map((group) => h('button', {
+            key: group.id, type: 'button', className: 'ae-chip',
+            'data-active': String(group.id === stageGroup),
+            onClick: () => setStageGroup(group.id),
+          }, `${group.name}（${group.kind}）`)))
+      }
+
+      function renderComparison(run) {
+        const comparison = run.comparison
+        if (!comparison || !Array.isArray(comparison.rows) || comparison.rows.length === 0) return null
+        return h('div', { className: 'ae-card' },
+          h('div', { className: 'ae-card-title' }, t('run.comparison')),
+          h('table', { className: 'ae-table' },
+            h('thead', null, h('tr', null,
+              h('th', null, t('run.metric')),
+              h('th', null, comparison.control.name),
+              ...comparison.treatments.map((item) => h('th', { key: item.id }, item.name)))),
+            h('tbody', null, ...comparison.rows.map((row) => h('tr', { key: row.key },
+              h('td', null, row.label),
+              h('td', null, row.control),
+              ...row.treatments.map((item, index) => h('td', { key: `${row.key}-${index}` }, item.text)))))))
+      }
+
       function renderStages(run, log) {
+        const stages = groupStages(run)
         return h('div', { className: 'ae-acc' },
-          ...Object.entries(run.stages || {}).map(([key, value]) => {
+          ...Object.entries(stages || {}).map(([key, value]) => {
             const stageRunning = value.status === 'running'
             const open = openStages[key] === undefined
               ? (stageRunning || value.status === 'failed')
@@ -1584,7 +1958,9 @@ window.__ModuleLoader__.load({
               onClick: () => setOpenStages({ ...openStages, [key]: !open }),
             },
             h('span', { className: 'ae-caret' }, open ? '▾' : '▸'),
-            h('span', { className: 'ae-acc-title' }, t(`stage.${key}`)),
+            h('span', { className: 'ae-acc-title' }, value.name && value.kind === 'custom'
+              ? value.name
+              : t(`stage.${key}`)),
             h('span', {
               className: 'ae-state', 'data-state': statusState(value.status),
             }, t(`label.${value.status}`)),
@@ -1644,6 +2020,7 @@ window.__ModuleLoader__.load({
               : null),
           renderMetrics(run.metrics),
           h('div', { className: 'ae-card-title', style: { marginTop: '4px' } }, t('detail.stages')),
+          renderGroupTabs(run),
           renderStages(run, log),
           run.artifacts && run.artifacts.dir
             ? h('div', { className: 'ae-detail-row' },
@@ -1654,6 +2031,8 @@ window.__ModuleLoader__.load({
           h('pre', { className: 'ae-log' },
             log.length === 0 ? '-'
               : log.map((line) => `${String(line.at || '').slice(11, 19)}  ${line.stage || '-'}  ${line.message}`).join('\n')))
+
+        const comparisonCard = renderComparison(run)
 
         const rowTable = rows.length === 0
           ? h('div', { className: 'ae-empty' }, t('detail.noRows'))
@@ -1715,7 +2094,8 @@ window.__ModuleLoader__.load({
                 key, type: 'button', className: 'ae-subtab', 'data-active': String(detailTab === key),
                 onClick: () => setDetailTab(key),
               }, t(`detail.${key}`)))),
-            body))
+            body,
+            detailTab === 'summary' ? comparisonCard : null))
       }
 
       // ---------------------------------------------------------- 提交任务
@@ -1983,12 +2363,12 @@ window.__ModuleLoader__.load({
 
       /** 只读展示：字段值排成行，跟编辑态共用同一份数据。 */
       function renderStageReadonly(stage, entry) {
-        const preset = stage.presets.find((item) => item.id === entry.template)
+        const preset = moduleOf(stage.id, entry.module)
         const fields = (preset && preset.fields) || []
         return h('div', { className: 'ae-stage-edit', key: stage.id },
           h('div', { className: 'ae-card-head' },
-            h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
-            h('div', { className: 'ae-card-note' }, entry.template || '-')),
+            h('div', { className: 'ae-card-title' }, stageLabel(entry)),
+            h('div', { className: 'ae-card-note' }, entry.module || '-')),
           fields.length === 0
             ? h('div', { className: 'ae-card-note' }, t('tpl.noParams'))
             : h('div', null, ...fields.map((field) => {
@@ -2016,27 +2396,31 @@ window.__ModuleLoader__.load({
             },
           }, t(`tpl.tab.${tab}`))))
 
+        const stageList = current.stages || []
+        const groupList = current.groups || []
         const formView = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
-          ...(state.stages || []).map((stage) => renderStageReadonly(stage, current.stages[stage.id] || {})))
+          h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
+          ...stageList.map((stage, index) => renderStageRow(stage, index, false)),
+          h('div', { className: 'ae-card-title', style: { marginTop: '10px' } }, t('tpl.groups')),
+          h('div', { className: 'ae-card-note' }, t('tpl.groupHint')),
+          ...groupList.map((group, index) => renderGroupCard(group, index, false, stageList)))
 
         const formEdit = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-title' }, t('tpl.config')),
-          ...(state.stages || []).map((stage) => {
-            const entry = current.stages[stage.id] || {}
-            const preset = stage.presets.find((item) => item.id === entry.template)
-            return h('div', { className: 'ae-stage-edit', key: stage.id },
-              h('div', { className: 'ae-card-head' },
-                h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
-                h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
-              stageChips(stage, entry, readonly),
-              ...((preset && preset.fields) || []).map((field) => renderFieldInput(
-                field,
-                entry.config ? entry.config[field.key] : undefined,
-                (next) => setTemplateStage(stage.id, { config: { ...(entry.config || {}), [field.key]: next } }),
-                !editing,
-              )))
-          }))
+          h('div', { className: 'ae-card-note' }, t('tpl.stageOrderHint')),
+          ...stageList.map((stage, index) => renderStageRow(stage, index, editing)),
+          editing
+            ? h('div', { className: 'ae-actions' },
+              h('button', { type: 'button', className: 'ae-btn', onClick: addCustomStage }, t('tpl.addStage')))
+            : null,
+          h('div', { className: 'ae-card-title', style: { marginTop: '10px' } }, t('tpl.groups')),
+          h('div', { className: 'ae-card-note' }, t('tpl.groupHint')),
+          ...groupList.map((group, index) => renderGroupCard(group, index, editing, stageList)),
+          editing
+            ? h('div', { className: 'ae-actions' },
+              h('button', { type: 'button', className: 'ae-btn', onClick: addTreatment }, t('tpl.addTreatment')))
+            : null)
 
         const yamlPane = h('div', { className: 'ae-card' },
           h('div', { className: 'ae-card-head' },

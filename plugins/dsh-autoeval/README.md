@@ -14,16 +14,16 @@ Markdown 报告。
 
 | 页签 | 列表 | 点进去 |
 | --- | --- | --- |
-| **评测任务** | 已提交的评测任务：搜索（名称 / id / 模板）、按状态筛（全部 / 运行中 / 完成 / 失败 / 已取消）；右上角「提交任务」进提交表单；每行可重跑、删除，运行中的可取消 | 任务详情：概览（指标卡 + **四个阶段的可折叠列表** + 产物目录 + 日志）+ 逐条结果（每条用例的分数 / 覆盖 / 缺失信息点 / 来源数，可展开看材料）+ 报告（落盘的 Markdown）；顶部可重跑或删除 |
+| **评测任务** | 已提交的评测任务：搜索（名称 / id / 模板）、按状态筛（全部 / 运行中 / 完成 / 失败 / 已取消）；右上角「提交任务」进提交表单；每行可重跑、删除，运行中的可取消 | 任务详情：概览（指标卡 + **按组切换的阶段可折叠列表** + 组间对比 + 产物目录 + 日志）+ 逐条结果（每条用例的分数 / 覆盖 / 缺失信息点 / 来源数，可展开看材料）+ 报告（落盘的 Markdown）；顶部可重跑或删除 |
 | **Queryset** | 管理评测用的 query 集合：卡片显示名称、条数、来源、更新时间；点进去看用例列表（只读），点「编辑」可改名称、说明和用例（一行一条 JSON） | 支持从 **JSONL / CSV / XLSX（含表头）/ 飞书表格 / 飞书智能表格** 导入：选来源 → 贴内容或选文件（飞书贴链接）→「解析」看预览与 `query` 列 → 存成 Queryset；已有的集可以「重新导入」覆盖用例。提交任务时可以直接选一个 Queryset，不用再粘 JSON |
-| **任务模板** | 当前支持的评测模板，卡片式列出并标出内置 / 自定义；配置坏掉的模板带红标 | 模板详情：默认**只读查看**（id、名称、说明、四个阶段的执行模板与参数值），点「编辑」才可改；编辑态有两个子页签——**表单**（字段按 schema 生成控件：数字带范围、枚举多选、命令输入框）和 **YAML**（直接改配置文件）；「保存」落盘，「取消」或直接返回会把未保存的修改丢掉，回到打开时的样子。内置模板没有「编辑」，只能复制 |
+| **任务模板** | 当前支持的评测模板，卡片式列出并标出内置 / 自定义；配置坏掉的模板带红标 | 模板详情：默认**只读查看**（id、名称、说明、**阶段列表（顺序即执行顺序）**与每阶段模块/参数、Control 与 Treatment 组），点「编辑」才可改；编辑态能加/删/上下移阶段、加删 Treatment 组、给任意组覆盖任意阶段的模块和参数；编辑态有两个子页签——**表单**（字段按 schema 生成控件：数字带范围、枚举多选、命令输入框）和 **YAML**（直接改配置文件）；「保存」落盘，「取消」或直接返回会把未保存的修改丢掉，回到打开时的样子。内置模板没有「编辑」，只能复制 |
 
 阶段的可折叠列表：每条一行，表头给阶段名、状态、该阶段耗时，跑着的时候还带 `已完成/总数` 与进度条；展开看这一阶段用的执行模板、参数、跑完的摘要（抓取的用例数/带材料/来源数/失败数、标注的计分行与通过数、指标的通过率与 P50/P95、报告的字数与结果行数）以及该阶段的日志。运行中或失败的阶段默认展开，其余收起。
 
 「提交任务」和「保存模板」都会先弹一层确认，确认了才真的动：
 
-- **提交任务**：点「运行」先出确认框，列出任务名、模板（名称 + id）、用例数，以及四个阶段各自会用的执行模板与参数，点「确认」才开跑
-- **保存模板**：点「保存」先出确认框，列出模板 id / 名称 / 描述与四个阶段的配置，点「确认」才重写 `templates/<id>.yaml`
+- **提交任务**：点「运行」先出确认框，列出任务名、模板（名称 + id）、用例数、各阶段会用的模块与参数，以及 Control / Treatment 组各自的覆盖，点「确认」才开跑
+- **保存模板**：点「保存」先出确认框，列出模板 id / 名称 / 描述、阶段顺序与各阶段配置、各组覆盖，点「确认」才重写 `templates/<id>.yaml`
 - **保存 YAML**：同样先确认，顺带说明会按这段 YAML 重写文件
 
 取消就是取消，不发请求也不改文件。agent 侧的 `autoeval_run` / `autoeval_status` 走的是工具调用，不经过面板这层确认。
@@ -94,25 +94,41 @@ id: websearch-fast
 name: 检索覆盖（快检）
 description: 每条只取 3 条结果，间隔 0
 stages:
-  scraping:
-    template: websearch
+  - id: scraping
+    module: websearch
     config:
       maxResults: 3  # 数字 1~20，默认 5
       queryField: query  # 字符串，默认 "query"，用例里存检索词的字段名
       intervalMs: 0  # 数字 0~5000，ms，默认 250
-  annotation:
-    template: coverage-keyword
+  - id: rerank  # 自定义阶段：插在抓取之后、标注之前，只跑自定义命令
+    name: 重排
+    module: custom
+    config:
+      command: python3 ./rerank.py
+  - id: annotation
+    module: coverage-keyword
     config:
       pointsField: infoPoints  # 字符串，默认 "infoPoints"
       minCoverage: 1  # 数字 0~1，默认 1
-  metrics:
-    template: standard
+  - id: metrics
+    module: standard
     config:
       latencyField: latencyMs  # 字符串，默认 "latencyMs"
-  reporting:
-    template: markdown
+  - id: reporting
+    module: markdown
     config:
       sections: [summary, cases]  # 列表，可选：summary / stages / cases / failures
+groups:
+  - id: control
+    kind: control
+    name: 对照组
+  - id: t1
+    kind: treatment
+    name: 多取两条结果
+    overrides:
+      scraping:
+        module: websearch
+        config: { maxResults: 5, queryField: query, intervalMs: 0 }
 ```
 
 注释里的类型和范围不是手写的——保存时按字段 schema 生成，改字段表注释会跟着变。
@@ -136,14 +152,57 @@ stages:
 
 这份字段表就是 `STAGES` 里每份 preset 的 `fields`，`/state` 会原样发给面板，**表单控件是从它生成的**：数字字段出带 `min/max/step` 的数字框，列表字段出多选 chips，命令字段出等宽输入框，字符串出文本框。
 
+自定义阶段目前只有一种模块：`custom`（自定义命令）。契约是把当前用例从 stdin 交给命令，命令把加工后的用例吐回来：
+
+```bash
+# stdin:  { stage, cases, config, stages, metrics, group }
+# stdout: { cases: [...] }   或直接一个数组
+node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{
+  const p=JSON.parse(d);
+  process.stdout.write(JSON.stringify({cases:p.cases.map(c=>({...c,reranked:true}))}))
+})'
+```
+
 ### 两种改法
 
 - **改文件**：`templates/<id>.yaml` 直接编辑，下次打开面板就生效。写坏了不会静默吞掉——列表里标「配置有问题」，点进去默认停在 YAML 页签，把 `broken` 里的行号和原因读出来改掉即可。
 - **用面板**：模板详情有「表单」和「YAML」两个子页签。表单改字段，保存时宿主重新渲染成 YAML 落盘；YAML 页签能直接改文件内容再保存。两条路写的是同一个文件，不会各改各的。
 
-保存时会校验：模板 id 只能用小写字母/数字/`-`；四个阶段必须齐全；字段类型、数字范围、枚举取值、自定义命令非空，任何一项不对就带着具体字段名报错，不会写坏文件。不认识的额外字段会原样保留（方便你挂自定义参数），但不参与校验。
+保存时会校验：模板 id 只能用小写字母/数字/`-`；**四个预置阶段必须都在且相对顺序固定**（`scraping → annotation → metrics → reporting`，中间可以插自定义阶段）；自定义阶段的 id 不能与预置阶段重名、命令不能为空；**必须有且只有一个 `control` 组**，`overrides` 只能指向模板里已有的阶段；字段类型、数字范围、枚举取值也都会校验。任何一项不对就带着具体字段名报错，不会写坏文件。不认识的额外字段会原样保留（方便你挂自定义参数），但不参与校验。
 
 支持的 YAML 子集：块状映射与序列、`- key: value`、行内 `[a, b]` 与 `{a: b}`、单双引号字符串、数字/布尔/null、`#` 注释、`|` 与 `>` 文本块。锚点/别名、多文档这类高级写法不支持，遇到直接报错而不是猜。
+
+## 阶段编排与分组
+
+四个阶段（Scraping / Annotation / Metrics / Reporting）是**预置阶段**：不能删，相互之间的先后也固定。除此之外还能自己加阶段：
+
+- **加**：模板编辑页底部「新增阶段」，新阶段是个 `custom` 模块，填名字和命令即可，可以插在任意两个阶段之间
+- **排**：每个阶段卡片右侧的 ↑ / ↓ 上下移。两个预置阶段之间换不了（按钮置灰），预置和自定义之间可以换
+- **删**：自定义阶段能删，删掉时顺带把各组对它的覆盖一起清掉
+
+### 分组：Control + Treatment
+
+每个模板必须有一个 `control` 组，Treatment 组可选、可多个。组之间的差异体现在**对阶段的覆盖**上：每组都能给任意阶段换模块、改参数，没覆盖的阶段继承模板本身。
+
+```yaml
+groups:
+  - { id: control, kind: control, name: 对照组 }
+  - id: t1
+    kind: treatment
+    name: 多取两条结果
+    overrides:
+      scraping:
+        module: websearch
+        config: { maxResults: 5, queryField: query, intervalMs: 0 }
+```
+
+跑一次任务时：先跑 Control 的全部阶段，再依次跑每个 Treatment 的全部阶段（用例是同一批）。产物里：
+
+- `rows.jsonl` 每行多一个 `group` 字段（多组时才会加，单组保持原样）
+- `report.md` 开头是一张组间对比表（通过率 / 平均覆盖 / 有分数的行，Treatment 后面跟与 Control 的差值），后面每组一节
+- 任务详情页可以按组切阶段列表，概览下面有组间对比表格
+
+对比口径跟指标卡一致：通过率的分母是「有分数的行」，每组单独算，不混在一起。
 
 ## 四个阶段与执行模板
 
@@ -196,14 +255,14 @@ python3 ./llm-judge.py     # 自己读 stdin、算分，把带 score 的数组�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/state` | 阶段目录 + 模板 + 历史运行 + 当前运行进度 |
-| POST | `/run` | `{ name, templateId, cases }` → `{ runId }`，后台跑；给已知 `templateId` 时阶段配置取自模板 |
+| POST | `/run` | `{ name, templateId, cases }` 或 `{ name, templateId, querysetId }` → `{ runId }`，后台跑；阶段与分组配置取自模板 |
 | POST | `/cancel` | 取消当前运行 |
 | GET | `/runs/detail?id=<id>` | 单次任务的阶段、参数与日志 |
 | POST | `/runs/rerun` | `{ id }` 按原用例与阶段配置重跑 |
 | DELETE | `/runs?id=<id>` | 删掉一次任务（记录 + 产物目录） |
 | GET | `/report?run=<id>` | 读报告正文 |
 | GET | `/rows?run=<id>` | 读 `rows.jsonl` |
-| POST | `/templates` | 存一份自定义模板（JSON → 渲染成 YAML 落盘，同 id 覆盖） |
+| POST | `/templates` | 存一份自定义模板（`{id, name, description, stages: [...], groups: [...]}` → 渲染成 YAML 落盘，同 id 覆盖） |
 | GET | `/templates/raw?id=<id>` | 读模板 YAML 原文 |
 | POST | `/templates/raw` | `{ yaml }` 直接把一段 YAML 存成模板 |
 | POST | `/templates/preview` | `{ id, name, stages }` → 只渲染 YAML 不落盘（新建模板时预览用） |
@@ -263,7 +322,7 @@ dsh-autoeval/
 
 ```bash
 cd plugins/dsh-autoeval
-node --test          # 60 个用例：宿主流水线 24 + 浏览器面板 25 + 导入解析 11
+node --test          # 65 个用例：宿主流水线 27 + 浏览器面板 27 + 导入解析 11
 ```
 
 - `test/pipeline.test.mjs`：假 ctx + 假 `web` 服务跑完整四阶段、自定义命令、模板优先级、模板 YAML 落盘与回读、老 state.json 模板迁移、工作区配置与裁剪、Queryset的导入/增删改/按集跑、坏配置拦截、任务详情/重跑/删除；数据写在临时 `DSH_HOME` 里。
