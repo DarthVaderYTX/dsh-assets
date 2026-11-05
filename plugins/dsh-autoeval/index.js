@@ -779,7 +779,7 @@ function combineReports(run, reports) {
     lines.push('## 组间对比')
     lines.push('')
     lines.push('| 指标 | Control | ' + comparison.treatments.map((item) => item.name).join(' | ') + ' |')
-    lines.push('| --- | --- | ' + comparison.treatments.map(() => '--- |').join(''))
+    lines.push('| --- | --- | ' + comparison.treatments.map(() => '---').join(' | ') + ' |')
     for (const row of comparison.rows) {
       lines.push(`| ${row.label} | ${row.control} | ${row.treatments.map((item) => item.text).join(' | ')} |`)
     }
