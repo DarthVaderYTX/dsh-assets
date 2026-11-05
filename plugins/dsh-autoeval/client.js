@@ -19,8 +19,14 @@ window.__ModuleLoader__.load({
       'tab.querysets': 'Queryset',
       'qs.unit': '个 Queryset',
       'tpl.defaultsHint': '这里是每个阶段的默认模块与参数，提交任务时再按 Control / Treatment 各组调整',
+      'tpl.dragHint': '按住拖动调整顺序',
+      'tpl.orderLocked': '预置阶段之间的先后固定，不能把其中一个拖到另一个后面',
+      'tpl.stageOrderHint': '拖动左侧 ⠿ 调整顺序（也可以用 ↑ ↓）；四个预置阶段之间的先后固定，可以插自定义阶段',
       'submit.groupHint': 'Control 固定一个；Treatment 可以加多个，每组各阶段的模块和参数都能单独改',
       'tpl.defaultsHint': 'Defaults for each stage; adjust them per Control / Treatment group when you submit a run',
+      'tpl.dragHint': 'Drag to reorder',
+      'tpl.orderLocked': 'Preset stages keep their relative order: you cannot drag one past another',
+      'tpl.stageOrderHint': 'Drag the ⠿ handle to reorder (or use ↑ ↓); the four preset stages keep their relative order and custom stages can be interleaved',
       'submit.groupHint': 'One Control is fixed; add as many Treatments as you like, each with its own stage modules and parameters',
       'tpl.stageOrderHint': '阶段按这里的顺序执行；四个预置阶段之间的先后固定，可以插自定义阶段',
       'tpl.addStage': '新增阶段',
@@ -604,6 +610,11 @@ window.__ModuleLoader__.load({
 .ae-metric-k { font-size: 11px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .ae-metric-v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary, #1f1f1f); margin-top: 2px; }
+.ae-drag { cursor: grab; color: var(--dsw-alias-text-l3, rgba(0,0,0,.35)); font-size: 14px;
+  line-height: 1; padding: 2px 4px; border-radius: 4px; user-select: none; }
+.ae-drag:active { cursor: grabbing; }
+.ae-stage-edit[data-dragging="true"] { opacity: .45; }
+.ae-stage-edit[data-dropping="true"] { outline: 2px dashed var(--dsw-alias-brand-primary, #4b7bec); outline-offset: 1px; }
 .ae-group-edit { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px;
   border: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.18)); }
 .ae-override { display: flex; flex-direction: column; gap: 6px; }
@@ -750,6 +761,8 @@ window.__ModuleLoader__.load({
       const [openStages, setOpenStages] = React.useState({})
       const [stageGroup, setStageGroup] = React.useState('')
       const [submitGroups, setSubmitGroups] = React.useState(null)
+      const [dragStage, setDragStage] = React.useState(-1)
+      const [dragOverStage, setDragOverStage] = React.useState(-1)
       const [templateTab, setTemplateTab] = React.useState('form')
       const [templateYaml, setTemplateYaml] = React.useState('')
       const [yamlBusy, setYamlBusy] = React.useState(false)
@@ -1230,6 +1243,35 @@ window.__ModuleLoader__.load({
         return !(a.kind === 'preset' && b.kind === 'preset')
       }
 
+      /** 拖到 to 位置后，预置阶段的相对先后是否还成立。 */
+      function canMoveTo(from, to) {
+        const list = templateDraft.stages || []
+        if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return false
+        const next = [...list]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        const order = next
+          .filter((stage) => stage.kind === 'preset')
+          .map((stage) => (state.stages || []).findIndex((item) => item.id === stage.id))
+        for (let index = 1; index < order.length; index += 1) {
+          if (order[index] < order[index - 1]) return false
+        }
+        return true
+      }
+
+      function moveStageTo(from, to) {
+        if (!canMoveTo(from, to)) {
+          setNotice(t('tpl.orderLocked'))
+          return
+        }
+        updateStages((list) => {
+          const next = [...list]
+          const [moved] = next.splice(from, 1)
+          next.splice(to, 0, moved)
+          return next
+        })
+      }
+
       function moveStageAt(index, delta) {
         if (!canSwap(index, delta)) return
         updateStages((list) => {
@@ -1592,8 +1634,47 @@ window.__ModuleLoader__.load({
               h('span', { className: 'ae-detail-key' }, field.label || field.key),
               h('span', { className: 'ae-mono' }, fieldText(field, stage.config)))),
           ]
-        return h('div', { className: 'ae-stage-edit', key: `${stage.id}-${index}` },
+        const dragging = dragStage === index
+        const dropping = dragOverStage === index && dragStage >= 0 && dragStage !== index
+        return h('div', {
+          className: 'ae-stage-edit',
+          key: `${stage.id}-${index}`,
+          draggable: editing,
+          'data-dragging': String(dragging),
+          'data-dropping': String(dropping),
+          onDragStart: (event) => {
+            if (!editing) return
+            setDragStage(index)
+            if (event && event.dataTransfer) {
+              event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData('text/plain', stage.id)
+            }
+          },
+          onDragOver: (event) => {
+            if (!editing || dragStage < 0) return
+            if (event && event.preventDefault) event.preventDefault()
+            if (dragOverStage !== index) setDragOverStage(index)
+          },
+          onDragLeave: () => {
+            if (dragOverStage === index) setDragOverStage(-1)
+          },
+          onDrop: (event) => {
+            if (!editing) return
+            if (event && event.preventDefault) event.preventDefault()
+            const from = dragStage
+            setDragStage(-1)
+            setDragOverStage(-1)
+            if (from >= 0) moveStageTo(from, index)
+          },
+          onDragEnd: () => {
+            setDragStage(-1)
+            setDragOverStage(-1)
+          },
+        },
           h('div', { className: 'ae-card-head' },
+            editing
+              ? h('span', { className: 'ae-drag', title: t('tpl.dragHint'), 'aria-hidden': 'true' }, '⠿')
+              : null,
             h('div', { className: 'ae-card-title' }, `${index + 1}. ${stageLabel(stage)}`),
             h('span', {
               className: 'ae-badge',

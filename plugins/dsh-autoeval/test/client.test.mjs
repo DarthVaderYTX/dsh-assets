@@ -982,6 +982,50 @@ test('模板编辑：预置阶段可以删掉，也能从新增区加回来', as
   assert.ok(titles.some((text) => text === '2. Annotation · 标注'), '加回来的位置不对')
 })
 
+test('模板编辑：阶段列表可以拖拽排序，预置阶段不能互相越过', async () => {
+  let view = ensureTaskList()
+  view = openTab(view, '任务模板')
+  findAll(view, byClass('ae-template-card'))[1].props.onClick()
+  view = render(mainComponent(), {})
+  findAll(view, clickable('编辑'))[0].props.onClick()
+  view = render(mainComponent(), {})
+
+  // 每张阶段卡片都是可拖的，并且带手柄
+  const cards = findAll(view, byClass('ae-stage-edit'))
+  assert.equal(cards.length, 4, '编辑态应该是四个阶段')
+  assert.ok(cards.every((card) => card.props.draggable === true), '阶段卡片应该可拖')
+  assert.ok(findAll(view, byClass('ae-drag')).length >= 4, '缺少拖拽手柄')
+
+  // 加一个自定义阶段，把它拖到最前面
+  findAll(view, clickable('+ 自定义阶段'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  let list = findAll(view, byClass('ae-stage-edit'))
+  assert.equal(list.length, 5)
+  const dragStart = (node) => node.props.onDragStart({ dataTransfer: { setData() {}, effectAllowed: '' } })
+  const dropOn = (node) => node.props.onDrop({ preventDefault() {} })
+
+  dragStart(list[4])
+  view = render(mainComponent(), {})
+  dropOn(findAll(view, byClass('ae-stage-edit'))[0])
+  view = render(mainComponent(), {})
+  let titles = findAll(view, byClass('ae-card-title')).map((node) => texts(node))
+  assert.ok(titles.some((text) => text.startsWith('1. 自定义阶段')), '拖到最前面没生效')
+
+  // 把 Scraping 拖到 Annotation 后面：两个预置阶段换位，应该被挡住
+  list = findAll(view, byClass('ae-stage-edit'))
+  const scrapingIndex = list.findIndex((node) => texts(node).includes('Scraping'))
+  const annotationIndex = list.findIndex((node) => texts(node).includes('Annotation'))
+  dragStart(list[scrapingIndex])
+  view = render(mainComponent(), {})
+  dropOn(findAll(view, byClass('ae-stage-edit'))[annotationIndex])
+  view = render(mainComponent(), {})
+  titles = findAll(view, byClass('ae-card-title')).map((node) => texts(node))
+  const scrapingTitle = titles.find((text) => text.includes('Scraping'))
+  const annotationTitle = titles.find((text) => text.includes('Annotation'))
+  assert.ok(scrapingTitle < annotationTitle, '预置阶段被换位了')
+  assert.ok(texts(view).includes('预置阶段之间的先后固定'), '被挡住时没有提示')
+})
+
 test('提交任务：可以加 Treatment 并独立配置各阶段的模块与参数', async () => {
   let view = ensureTaskList()
   findAll(view, clickable('提交任务'))[0].props.onClick()
