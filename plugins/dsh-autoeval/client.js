@@ -101,7 +101,9 @@ window.__ModuleLoader__.load({
       'submit.name': '任务名称',
       'submit.cases': '用例集（JSON 数组）',
       'submit.casesHint': '每条至少要有 id 和 query；infoPoints 是判分用的信息点。',
-      'submit.template': '从模板开始',
+      'submit.template': '用哪个任务模板',
+      'submit.templateHint': '阶段配置取自模板本身；要改配置先去「任务模板」里改模板。',
+      'submit.pickTemplate': '先选一个任务模板。',
       'submit.progress': '运行中',
 
       'field.template': '执行模板',
@@ -243,7 +245,9 @@ window.__ModuleLoader__.load({
       'submit.name': 'Task name',
       'submit.cases': 'Cases (JSON array)',
       'submit.casesHint': 'Each case needs at least id and query; infoPoints drives scoring.',
-      'submit.template': 'Start from template',
+      'submit.template': 'Template to run',
+      'submit.templateHint': 'Stage config comes from the template; edit the template first if it needs changes.',
+      'submit.pickTemplate': 'Pick a template first.',
       'submit.progress': 'Running',
 
       'field.template': 'Stage template',
@@ -509,12 +513,12 @@ window.__ModuleLoader__.load({
         return out
       }
 
+      // 提交任务只认模板：draft 里只记选了哪个模板，阶段配置一律取自模板本身
       function defaultDraft(data) {
         const template = (data.templates || []).find((item) => item.builtin) || (data.templates || [])[0]
         return {
-          templateId: template ? template.id : 'custom',
+          templateId: template ? template.id : '',
           name: template ? template.name : 'AutoEval 运行',
-          stages: cloneStages(template ? template.stages : {}, data.stages),
         }
       }
 
@@ -579,22 +583,17 @@ window.__ModuleLoader__.load({
           setError(`${t('error.cases')}${cases.ok ? '' : `：${cases.error}`}`)
           return
         }
-        const stages = {}
-        for (const stage of (state.stages || [])) {
-          const entry = draft.stages[stage.id]
-          const parsed = readJson(entry.configText || '{}')
-          if (!parsed.ok) {
-            setError(`${stage.id} / ${t('error.params')}：${parsed.error}`)
-            return
-          }
-          stages[stage.id] = { template: entry.template, config: parsed.value }
+        const template = templates.find((item) => item.id === draft.templateId)
+        if (!template) {
+          setError(t('submit.pickTemplate'))
+          return
         }
         setBusy(true)
         try {
           const result = await api('/run', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name: draft.name, templateId: draft.templateId, cases: cases.value, stages }),
+            body: JSON.stringify({ name: draft.name, templateId: template.id, cases: cases.value }),
           })
           setSubmitting(false)
           setView('tasks')
@@ -705,35 +704,6 @@ window.__ModuleLoader__.load({
         })
       }
 
-      function draftToTemplate() {
-        setError('')
-        setNotice('')
-        setView('templates')
-        setTemplateDraft({
-          mode: 'new',
-          readonly: false,
-          id: `template-${Date.now().toString(36)}`,
-          name: draft.name,
-          description: '',
-          stages: Object.fromEntries(
-            Object.entries(draft.stages).map(([key, value]) => [
-              key,
-              { template: value.template, config: value.config, configText: value.configText },
-            ]),
-          ),
-        })
-      }
-
-      function setStage(stageId, patch) {
-        setDraft((current) => {
-          if (!current) return current
-          return {
-            ...current,
-            stages: { ...current.stages, [stageId]: { ...current.stages[stageId], ...patch } },
-          }
-        })
-      }
-
       function setTemplateStage(stageId, patch) {
         setTemplateDraft((current) => {
           if (!current) return current
@@ -744,24 +714,18 @@ window.__ModuleLoader__.load({
         })
       }
 
-      function pickStagePreset(stageId, presetId, target) {
+      function pickStagePreset(stageId, presetId) {
         const stage = (state.stages || []).find((item) => item.id === stageId)
         const preset = stage && stage.presets.find((item) => item.id === presetId)
-        const patch = {
+        setTemplateStage(stageId, {
           template: presetId,
           config: { ...(preset ? preset.config : {}) },
           configText: JSON.stringify(preset ? preset.config : {}, null, 2),
-        }
-        if (target === 'template') setTemplateStage(stageId, patch)
-        else setStage(stageId, patch)
+        })
       }
 
       function applyTemplateToDraft(template) {
-        setDraft({
-          templateId: template.id,
-          name: template.name,
-          stages: cloneStages(template.stages, state.stages),
-        })
+        setDraft({ templateId: template.id, name: template.name })
         setNotice('')
         setError('')
       }
@@ -850,32 +814,30 @@ window.__ModuleLoader__.load({
           },
         }, t(`tab.${key}`))))
 
-      function stageChips(stage, entry, target, disabled) {
+      function stageChips(stage, entry, disabled) {
         return h('div', { className: 'ae-chips' },
           ...stage.presets.map((preset) => h('button', {
             key: preset.id, type: 'button', className: 'ae-chip', disabled,
             'data-active': String(entry.template === preset.id),
             onClick: () => {
-              if (!disabled) pickStagePreset(stage.id, preset.id, target)
+              if (!disabled) pickStagePreset(stage.id, preset.id)
             },
           }, t(`preset.${stage.id}.${preset.id}`) || preset.id)))
       }
 
-      function stageEditor(stage, entry, target, readonly) {
+      function stageEditor(stage, entry, readonly) {
         return h('div', { className: 'ae-stage-edit', key: stage.id },
           h('div', { className: 'ae-card-head' },
             h('div', { className: 'ae-card-title' }, t(`stage.${stage.id}`)),
             h('div', { className: 'ae-card-note' }, t(`stage.hint.${stage.id}`))),
-          stageChips(stage, entry, target, readonly),
+          stageChips(stage, entry, readonly),
           entry.template === 'custom'
             ? h('input', {
               className: 'ae-input', type: 'text', spellCheck: false, disabled: readonly,
               placeholder: 'python3 ./my-judge.py', value: entry.config.command || '',
               onChange: (event) => {
                 const config = { ...entry.config, command: event.target.value }
-                const patch = { config, configText: JSON.stringify(config, null, 2) }
-                if (target === 'template') setTemplateStage(stage.id, patch)
-                else setStage(stage.id, patch)
+                setTemplateStage(stage.id, { config, configText: JSON.stringify(config, null, 2) })
               },
             })
             : null,
@@ -884,11 +846,7 @@ window.__ModuleLoader__.load({
             h('textarea', {
               className: 'ae-textarea', rows: 4, spellCheck: false, disabled: readonly,
               value: entry.configText,
-              onChange: (event) => {
-                const patch = { configText: event.target.value }
-                if (target === 'template') setTemplateStage(stage.id, patch)
-                else setStage(stage.id, patch)
-              },
+              onChange: (event) => setTemplateStage(stage.id, { configText: event.target.value }),
             })))
       }
 
@@ -1180,6 +1138,20 @@ window.__ModuleLoader__.load({
       // ---------------------------------------------------------- 提交任务
       function renderSubmit() {
         const progress = active && active.progress
+        const selected = templates.find((item) => item.id === draft.templateId)
+        const preview = selected
+          ? h('div', null,
+            ...(state.stages || []).map((stage) => {
+              const entry = (selected.stages && selected.stages[stage.id]) || {}
+              const config = entry.config && Object.keys(entry.config).length > 0
+                ? JSON.stringify(entry.config)
+                : ''
+              return h('div', { className: 'ae-detail-row', key: stage.id },
+                h('span', { className: 'ae-detail-key' }, t(`stage.${stage.id}`)),
+                h('span', { className: 'ae-mono' },
+                  `${entry.template || '-'}${config ? `  ${config}` : ''}`))
+            }))
+          : null
         return h('div', { className: 'ae-page' },
           h('style', null, STYLE),
           head, tabs, messages,
@@ -1200,16 +1172,16 @@ window.__ModuleLoader__.load({
                   key: template.id, type: 'button', className: 'ae-chip',
                   'data-active': String(draft.templateId === template.id),
                   onClick: () => applyTemplateToDraft(template),
-                }, template.name))))),
-          h('div', { className: 'ae-card' },
-            h('div', { className: 'ae-card-title' }, t('tpl.config')),
-            ...(state.stages || []).map((stage) => stageEditor(stage, draft.stages[stage.id], 'draft', false))),
+                }, template.name))),
+              h('div', { className: 'ae-card-note' }, t('submit.templateHint'))),
+            h('div', { className: 'ae-label', style: { marginTop: '4px' } }, t('tpl.config')),
+            preview || h('div', { className: 'ae-empty' }, t('submit.pickTemplate'))),
           h('div', { className: 'ae-card' },
             h('div', { className: 'ae-card-head' },
               h('div', { className: 'ae-card-title' }, t('submit.cases')),
               h('div', { className: 'ae-card-note' }, t('submit.casesHint'))),
             h('textarea', {
-              className: 'ae-textarea', rows: 10, spellCheck: false, value: casesText,
+              className: 'ae-textarea', rows: 12, spellCheck: false, value: casesText,
               onChange: (event) => setCasesText(event.target.value),
             })),
           progress
@@ -1221,10 +1193,10 @@ window.__ModuleLoader__.load({
             : null,
           h('div', { className: 'ae-actions' },
             h('button', {
-              type: 'button', className: 'ae-btn ae-btn-primary', disabled: busy || Boolean(active),
+              type: 'button', className: 'ae-btn ae-btn-primary',
+              disabled: busy || Boolean(active) || !selected,
               onClick: () => { void submit() },
-            }, t('action.run')),
-            h('button', { type: 'button', className: 'ae-btn', onClick: () => draftToTemplate() }, t('action.saveAsTemplate'))))
+            }, t('action.run'))))
       }
 
       // ---------------------------------------------------------- 模板列表
@@ -1298,7 +1270,7 @@ window.__ModuleLoader__.load({
               }))),
           h('div', { className: 'ae-card' },
             h('div', { className: 'ae-card-title' }, t('tpl.config')),
-            ...(state.stages || []).map((stage) => stageEditor(stage, current.stages[stage.id], 'template', readonly))),
+            ...(state.stages || []).map((stage) => stageEditor(stage, current.stages[stage.id], readonly))),
           h('div', { className: 'ae-actions' },
             readonly
               ? null

@@ -393,7 +393,11 @@ test('提交任务：表单 → POST /run', async () => {
   view = render(mainComponent(), {})
   const text = texts(view)
   assert.ok(text.includes('提交评测任务'), '没有进入提交页')
-  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 4, '提交页不是四个阶段')
+  // 提交页不给改阶段：只有模板选择 + 只读预览
+  assert.equal(findAll(view, byClass('ae-stage-edit')).length, 0, '提交页不该有阶段编辑器')
+  assert.equal(findAll(view, hasClass('ae-textarea')).length, 1, '应该只有用例一个输入框')
+  const chips = findAll(view, byClass('ae-chip'))
+  assert.equal(chips.length, 2, '模板选项数量不对')
 
   const before = calls.length
   const runButton = findAll(view, byClass('ae-btn ae-btn-primary'))[0]
@@ -404,8 +408,20 @@ test('提交任务：表单 → POST /run', async () => {
   assert.ok(posted, '没有 POST /run')
   const body = JSON.parse(posted.body)
   assert.ok(Array.isArray(body.cases) && body.cases.length > 0, '用例为空')
-  assert.deepEqual(Object.keys(body.stages).sort(), ['annotation', 'metrics', 'reporting', 'scraping'])
-  assert.equal(body.stages.scraping.template, 'websearch')
+  assert.equal(body.templateId, 'websearch-tool')
+  assert.equal(body.stages, undefined, '提交时不该自带阶段配置')
+})
+
+test('提交任务：换模板只换引用，预览跟着变', async () => {
+  let view = ensureTaskList()
+  findAll(view, clickable('提交任务'))[0].props.onClick()
+  view = render(mainComponent(), {})
+  const chips = findAll(view, byClass('ae-chip'))
+  chips[1].props.onClick()
+  view = render(mainComponent(), {})
+  const text = texts(view)
+  assert.ok(text.includes('我的覆盖模板'), '预览没跟着换模板')
+  assert.equal(findAll(view, byClass('ae-chip')).filter((node) => node.props['data-active'] === 'true').length, 1)
 })
 
 test('模板列表点进详情：内置只读', () => {

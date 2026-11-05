@@ -245,6 +245,21 @@ test('删除运行会连产物目录一起删掉', async () => {
   assert.equal(missing.ok, false)
 })
 
+test('带已知模板提交时忽略外部塞进来的阶段配置', async () => {
+  const started = await call('POST', '/autoeval-api/run', {
+    name: '模板优先',
+    templateId: 'websearch-tool',
+    cases: cases.slice(0, 1),
+    stages: { scraping: { template: 'inline' }, annotation: { template: 'custom', config: { command: 'exit 1' } } },
+  })
+  assert.equal(started.ok, true)
+  const state = await waitForIdle()
+  const run = state.runs.find((item) => item.id === started.runId)
+  assert.equal(run.status, 'done', JSON.stringify(run.error || run.log))
+  assert.equal(run.stages.scraping.template, 'websearch', '阶段配置没按模板走')
+  assert.equal(run.stages.annotation.template, 'coverage-keyword')
+})
+
 test('空用例与非法的阶段模板都被拒绝', async () => {
   const empty = await call('POST', '/autoeval-api/run', { cases: [] })
   assert.equal(empty.ok, false)

@@ -526,9 +526,12 @@ class AutoEvalService {
     const saved = await readState()
     // 只给 templateId 时按模板里的阶段配置补全，没给模板就各自用第一个内置模板
     const chosen = [...BUILTIN_TEMPLATES, ...saved.templates].find((item) => item.id === input.templateId)
+    // 面板提交一律按模板跑：带了已知模板就忽略外面塞进来的阶段配置，
+    // 免得任务和模板悄悄漂移。重跑走 stageSource: 'record'，保留当次记录。
+    const supplied = input.stageSource === 'record' || !chosen ? input.stages : undefined
     const stages = {}
     for (const stage of STAGES) {
-      const provided = input.stages ? input.stages[stage.id] : undefined
+      const provided = supplied ? supplied[stage.id] : undefined
       const fallback = !provided && chosen && chosen.stages ? chosen.stages[stage.id] : undefined
       stages[stage.id] = normalizeStageConfig(stage.id, provided || fallback)
     }
@@ -703,6 +706,7 @@ class AutoEvalService {
       templateId: run.templateId,
       cases,
       stages: Object.keys(stages).length > 0 ? stages : undefined,
+      stageSource: 'record',
     })
     return { ...result, source: runId }
   }
