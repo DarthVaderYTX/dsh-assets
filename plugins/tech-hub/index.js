@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
-export const name = 'techhub';
+export const name = 'tech-hub';
 export const inject = ['webServer', 'skills'];
 
 const PLUGIN_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -547,7 +547,7 @@ export function apply(ctx) {
           kind: 'directory',
           path: SKILL_DIRECTORY,
         },
-        metadata: { plugin: 'techhub' },
+        metadata: { plugin: 'tech-hub' },
       });
     } catch (error) {
       console.error('[techhub] failed to register agent skill:', error);
