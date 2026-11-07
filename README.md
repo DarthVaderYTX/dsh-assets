@@ -108,7 +108,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `work-clock` | plugin | [plugins/work-clock](plugins/work-clock) | 浮窗工作时钟：打卡工时（下班 = 打卡 + 9 小时）、天气、今日飞书日程，临近日程 10/5/1 分钟与午餐/晚餐/会议开始时提醒 |
 | `dsh-autoeval` | plugin | [plugins/dsh-autoeval](plugins/dsh-autoeval) | 左侧栏 AutoEval 面板：四阶段评测流水线（Scraping 抓取 → Annotation 标注 → Metrics 指标 → Reporting 报告），模板只排阶段（四个预置阶段相对顺序固定、可插自定义阶段、拖拽排序），各阶段用哪个执行模块、参数多少在提交任务时为每个组单独决定；提交任务时配 Control + 多个 Treatment 组，每组独立设定各阶段的实现与参数、可折叠查看，报告出组间对比；三个页签分别是「评测任务」（按模板提交——模板用带关键词过滤的下拉选、筛选、重跑、删除，点进去看指标、可折叠的分阶段进度、逐条结果与报告）、「Queryset」（JSONL / CSV / XLSX / 飞书表格 / 飞书智能表格导入，可增删改；依赖本机 lark-cli 读飞书）与「任务模板」（模板即 `templates/<id>.yaml`，点进去默认只读、点「编辑」才改，内置只能复制；提交任务与保存模板都会先二次确认）；插件有独立工作区（`storages/autoeval`：config.yaml + templates/ + querysets/ + runs/），面板顶部显示路径并可复制/打开/改配置；内置 WebSearchTool 检索覆盖模板，报告与逐条结果落盘 |
 | `dsh-pet` | plugin | [plugins/dsh-pet](plugins/dsh-pet) | 悬浮像素宠物：十二个品种（狸花猫 / 白猫 / 黑猫 / 金渐层 / 老虎 / 狮子 / 金毛 / 萨摩耶 / 哈士奇 / 鹦鹉 / 绵羊 / 山羊），48×54 全代码绘制，正面与侧面三档转身、呼吸、眨眼、抖耳、摇尾、打盹、发疯都按品种性格逐帧重画；可拖到窗口任意位置，点一下会跳、冒爱心、说专属台词 |
-| `human-intelligence` | plugin | [plugins/human-intelligence](plugins/human-intelligence) | 左侧栏多模态人工标注工作台：文本/图片/视频标注任务与数据集分离管理，预设/自定义标注工具，网页排序，任务级多选配置，数据列表搜索/过滤/排序，随插件注册/注销的 human-intelligence 运行时 skill |
+| `human-intelligence` | plugin | [plugins/human-intelligence](plugins/human-intelligence) | 左侧栏多模态人工标注工作台：文本/图片/视频标注任务与数据集分离管理，预设/自定义标注工具，网页排序，任务级多选配置，数据列表搜索/过滤/排序；自带标准 SKILL.md，插件加载时注册、卸载时注销 |
 | `tech-hub` | plugin | [plugins/tech-hub](plugins/tech-hub) | 评测任务工作台：数据集、任务模板、任务三页管理；模板支持全局参数、串行阶段、对外输出映射与阶段输入引用；任务按 Control/Treatment 分组并发执行，阶段产出 input 描述文件与 output，可查看日志/输出、打开目录、导出 ZIP；workspace 级项目导入导出（任务与 runs 可选）；内置主题、语言、可编辑文档和随插件自动注册的 `tech-hub` skill |
 
 ## 存放约定

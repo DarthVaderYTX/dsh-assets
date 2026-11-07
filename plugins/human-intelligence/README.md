@@ -14,7 +14,7 @@
   - 预设工具由插件的任务模块生成，共 8 个，覆盖三种模态。
   - 自定义工具保存在 Host `tools` 中，可删除；删除工具不会影响其已创建的任务与标注数据。
   - 新建任务时从工具选择器挑选工具，工具的名称、模态、任务类型和默认标签会带入任务；同时选择该模态下的数据集。
-- **运行时 Skill**：插件通过 Host `skills` 服务注册 `human-intelligence` skill，模型与用户均可调用；skill 说明数据格式、任务配置和全部数据集/任务/工具/标注/导出操作，并随插件卸载自动注销。
+- **运行时 Skill**：skill 正文使用标准 `skills/human-intelligence/SKILL.md`（YAML frontmatter + Markdown），由 Host 在插件 apply 时解析并通过 `skills` 服务注册；模型与用户均可调用，并随插件卸载自动注销。
 - **三种数据模态**
   - 文本：批量粘贴导入；分类/实体/评分任务一行一条，网页排序支持 JSON 或空行分组。
   - 图片：多选上传 PNG / JPG / WebP / GIF / AVIF / BMP。
@@ -80,7 +80,9 @@ src/client/
   bootstrap.js           组合注册表并注册左侧栏与主面板
 src/host/
   annotation-service.js  Host 领域服务：任务、数据集、标注状态/结果、工具的唯一读写入口
-  skill.js               随插件注册/注销的 human-intelligence 运行时 skill 内容
+  skill.js               读取并解析标准 SKILL.md，随插件注册/注销运行时 skill
+skills/human-intelligence/
+  SKILL.md               YAML frontmatter + Markdown 的 skill 正文
 build.mjs                将模块按依赖顺序打包成 client.js
 index.js                 Host HTTP 适配器：路由、媒体上传与 Range 读取
 ```
