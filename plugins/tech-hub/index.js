@@ -17,7 +17,7 @@ export const name = 'tech-hub';
 export const inject = ['webServer', 'skills'];
 
 const PLUGIN_ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_DIRECTORY = path.join(PLUGIN_ROOT, 'skills', 'techhub');
+const SKILL_DIRECTORY = path.join(PLUGIN_ROOT, 'skills', 'tech-hub');
 const SKILL_PATH = path.join(SKILL_DIRECTORY, 'SKILL.md');
 const API_PREFIX = '/techhub/api';
 const STORE_VERSION = 1;
@@ -26,7 +26,7 @@ const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 const MAX_RUNS = 20;
 const THEME_IDS = new Set(['default', 'blue', 'emerald', 'amber', 'violet', 'rose']);
 const LANGUAGE_IDS = new Set(['auto', 'zh', 'en']);
-const SKILL_NAME = 'techhub';
+const SKILL_NAME = 'tech-hub';
 const SKILL_DESCRIPTION =
   'Operate the TechHub evaluation plugin: manage datasets, templates, tasks, runs, workspace bundles, themes, language and documentation.';
 const SKILL_WHEN_TO_USE =
@@ -569,7 +569,7 @@ export function apply(ctx) {
         }
       };
     },
-    'techhub: agent skill',
+    'tech-hub: agent skill',
   );
 
   function workspaceManifestPath() {

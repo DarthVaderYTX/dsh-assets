@@ -8,7 +8,7 @@ A DSH plugin for managing evaluation work in three connected pages:
 
 ## Agent guide
 
-The agent-facing operations manual is the standard skill [skills/techhub/SKILL.md](skills/techhub/SKILL.md). It is also registered with the DSH skill registry as the runtime skill **`techhub`** whenever the plugin starts; disabling or uninstalling the plugin removes the skill. It documents the full CRUD model, validation rules, API endpoints, run lifecycle, result layout and safety rules for managing datasets, templates and tasks without replacing unrelated data.
+The agent-facing operations manual is the standard skill [skills/tech-hub/SKILL.md](skills/tech-hub/SKILL.md). It is also registered with the DSH skill registry as the runtime skill **`tech-hub`** whenever the plugin starts; disabling or uninstalling the plugin removes the skill. It documents the full CRUD model, validation rules, API endpoints, run lifecycle, result layout and safety rules for managing datasets, templates and tasks without replacing unrelated data.
 
 The plugin's **Docs** page renders this Markdown automatically in read-only mode; choose **Edit documentation** to modify it, then save. Saves are stored as a profile-local override at:
 
@@ -16,7 +16,7 @@ The plugin's **Docs** page renders this Markdown automatically in read-only mode
 <DSH_PROFILE_DIR>/techhub/AGENT_GUIDE.md
 ```
 
-The bundled `skills/techhub/SKILL.md` is used when the override does not exist.
+The bundled `skills/tech-hub/SKILL.md` is used when the override does not exist.
 
 The host serves the guide at:
 

@@ -1,11 +1,11 @@
 ---
-name: techhub
+name: tech-hub
 description: Operate the TechHub evaluation plugin: manage datasets, templates, tasks, runs, workspace bundles, themes, language and documentation.
 ---
 
 # TechHub Agent 使用指南
 
-这份文档同时作为 DSH 运行时 skill **`techhub`** 注册。插件启动或安装时会自动注册该 skill；插件关闭或卸载时会自动移除。
+这份文档同时作为 DSH 运行时 skill **`tech-hub`** 注册。插件启动或安装时会自动注册该 skill；插件关闭或卸载时会自动移除。
 
 这份文档面向需要管理 TechHub 数据的 agent。目标是让 agent 在不破坏现有数据的前提下，正确创建、修改、删除数据集、任务模板和任务，并能启动、监控和导出实验运行。
 
@@ -828,7 +828,7 @@ TechHub 的 **Docs** 页面可以直接读取、编辑并保存这份文档。
 <DSH_PROFILE_DIR>/techhub/AGENT_GUIDE.md
 ```
 
-如果这个文件不存在，插件使用内置的 `skills/techhub/SKILL.md`。覆盖文件不会被插件升级覆盖。
+如果这个文件不存在，插件使用内置的 `skills/tech-hub/SKILL.md`。覆盖文件不会被插件升级覆盖。
 
 对应 API：
 
