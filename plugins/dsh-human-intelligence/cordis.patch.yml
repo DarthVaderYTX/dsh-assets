@@ -1,0 +1,4 @@
+- insert:
+    - id: human-intelligence
+      name: 'dsh-human-intelligence'
+      config: {}

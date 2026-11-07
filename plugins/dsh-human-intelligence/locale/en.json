@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "HumanIntelligence",
+    "description": "A data annotation workbench for text, image, and video data with per-modality and per-task annotation modules."
+  }
+}
