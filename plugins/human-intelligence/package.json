@@ -1,5 +1,5 @@
 {
-  "name": "dsh-human-intelligence",
+  "name": "human-intelligence",
   "version": "1.0.0",
   "private": true,
   "description": "HumanIntelligence — a multi-modal data annotation workbench for text, image, and video data.",

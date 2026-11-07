@@ -1,8 +1,8 @@
 # HumanIntelligence
 
-`dsh-human-intelligence` 是一个带左侧栏入口的 DSH 数据标注工作台插件，支持 **文本**、**图片**、**视频** 三种数据模态的人工标注。每种模态由独立模块管理，模态下的每种任务类型也由独立模块管理；工作台把模态统一收归到「标注工具」Tab，通过统一的任务契约组合它们。
+`human-intelligence` 是一个带左侧栏入口的 DSH 数据标注工作台插件，支持 **文本**、**图片**、**视频** 三种数据模态的人工标注。每种模态由独立模块管理，模态下的每种任务类型也由独立模块管理；工作台把模态统一收归到「标注工具」Tab，通过统一的任务契约组合它们。
 
-本插件由 `dsh-assets` 仓库的 `plugins/dsh-human-intelligence` 目录管理，并直接从该目录作为本地 link 装入 DSH profile；后续源码、构建产物与运行时 skill 都以这里为准。
+本插件由 `dsh-assets` 仓库的 `plugins/human-intelligence` 目录管理，并直接从该目录作为本地 link 装入 DSH profile；后续源码、构建产物与运行时 skill 都以这里为准。
 
 ## 功能
 
