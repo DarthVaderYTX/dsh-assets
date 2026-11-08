@@ -283,10 +283,10 @@ async function requestViaProxy(target, headers, proxy, timeout) {
     `Accept-Language: ${headers['accept-language'] || 'en'}`,
     'Accept-Encoding: identity',
     'Connection: close',
-    '',
-    '',
+    headers.referer ? `Referer: ${headers.referer}` : '',
+    headers.origin ? `Origin: ${headers.origin}` : '',
   ]
-  socket.write(lines.join('\r\n'))
+  socket.write(`${lines.filter(Boolean).join('\r\n')}\r\n\r\n`)
   return parseResponse(await response)
 }
 
@@ -348,10 +348,10 @@ function requestDirect(target, headers, timeout) {
 }
 
 /**
- * Fetch JSON from an HTTPS URL, using the detected HTTP proxy when present.
- * Redirects are followed up to four times.
+ * Fetch a text/HTML response from an HTTPS URL, using the detected HTTP proxy
+ * when present. Redirects are followed up to four times.
  */
-export async function fetchJson(url, headers = {}, timeoutMs = 9000) {
+export async function fetchText(url, headers = {}, timeoutMs = 9000) {
   const proxy = await getProxy()
   let current = new URL(url)
   for (let redirect = 0; redirect < 5; redirect += 1) {
@@ -368,11 +368,17 @@ export async function fetchJson(url, headers = {}, timeoutMs = 9000) {
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`HTTP ${response.status}`)
     }
-    try {
-      return JSON.parse(response.text)
-    } catch {
-      throw new Error('Invalid JSON response')
-    }
+    return response.text
   }
   throw new Error('Too many redirects')
+}
+
+/** Fetch and parse JSON from an HTTPS URL. */
+export async function fetchJson(url, headers = {}, timeoutMs = 9000) {
+  const text = await fetchText(url, headers, timeoutMs)
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error('Invalid JSON response')
+  }
 }

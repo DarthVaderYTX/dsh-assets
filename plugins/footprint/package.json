@@ -1,6 +1,6 @@
 {
   "name": "footprint",
-  "version": "1.0.9",
+  "version": "1.1.1",
   "private": true,
   "description": "FootPrint: a CesiumJS 3D globe in the left sidebar that locates any place, introduces it, and recommends nearby sights.",
   "type": "module",
@@ -15,6 +15,7 @@
     "client.js",
     "http.js",
     "data/places.js",
+    "providers/**",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",

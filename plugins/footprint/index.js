@@ -10,6 +10,7 @@ import {
   searchCurated,
 } from './data/places.js'
 import { fetchJson as requestJson } from './http.js'
+import { getSocialRecommendations, listProviders } from './providers/index.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const VENDOR_ROOT = path.join(HERE, 'vendor', 'cesium')
@@ -775,7 +776,12 @@ export function apply(ctx) {
               ok: true,
               cesium: true,
               curated: PLACES.length,
+              providers: listProviders(),
             })
+            return
+          }
+          if (req.method === 'GET' && route === '/providers') {
+            sendJson(res, 200, { ok: true, providers: listProviders() })
             return
           }
           if (req.method === 'GET' && route === '/search') {
@@ -813,7 +819,11 @@ export function apply(ctx) {
               return
             }
             const key = `${lang}|${input.id}|${input.name}|${round(input.lat, 4)}|${round(input.lon, 4)}`
-            const place = await getCached(placeCache, key, PLACE_TTL, () => buildPlace(input, lang))
+            const place = await getCached(placeCache, key, PLACE_TTL, async () => {
+              const base = await buildPlace(input, lang)
+              const social = await getSocialRecommendations(base, lang)
+              return social.length ? { ...base, social } : base
+            })
             sendJson(res, 200, { ok: true, lang, place })
             return
           }

@@ -54,6 +54,12 @@ window.__ModuleLoader__.load({
       'attractions.count': '个去处',
       'attractions.empty': '附近暂时没有可推荐的景点，先在地球上看看周边吧。',
       'attractions.focus': '在地球上查看',
+      'social.title': '社交媒体推荐',
+      'social.count': '条推荐',
+      'social.view': '查看全部',
+      'social.reviews': '条蜂评',
+      'social.notes': '篇游记',
+      'social.external': '打开原页面',
       'source.wikipedia': '资料与图片来自 Wikipedia',
       'source.guide': 'FootPrint 内置旅行导览',
       'source.view': '在 Wikipedia 查看',
@@ -124,6 +130,12 @@ window.__ModuleLoader__.load({
       'attractions.count': 'nearby',
       'attractions.empty': 'No nearby sights to recommend yet. Explore the surroundings on the globe.',
       'attractions.focus': 'Show on globe',
+      'social.title': 'Social recommendations',
+      'social.count': 'recommendations',
+      'social.view': 'View all',
+      'social.reviews': 'reviews',
+      'social.notes': 'travel notes',
+      'social.external': 'Open original page',
       'source.wikipedia': 'Text and images from Wikipedia',
       'source.guide': 'FootPrint built-in travel guide',
       'source.view': 'View on Wikipedia',
@@ -298,6 +310,28 @@ window.__ModuleLoader__.load({
 .fp-attraction-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-primary, #e7edf5); }
 .fp-attraction-distance { margin-left: auto; flex: 0 0 auto; font-size: 9.5px; color: var(--dsw-alias-label-secondary, #7d8da2); font-variant-numeric: tabular-nums; }
 .fp-attraction-desc { margin: 4px 0 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary, #93a2b5); }
+.fp-social-block { margin-top: 17px; }
+.fp-social-section { margin-top: 9px; }
+.fp-social-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; min-width: 0; }
+.fp-social-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 650; letter-spacing: .02em; color: #2b1d08; background: #f4c14d; }
+.fp-social-count { font-size: 10px; color: var(--dsw-alias-label-secondary, #7d8da2); }
+.fp-social-all { margin-left: auto; flex: 0 0 auto; font-size: 10px; color: var(--dsw-alias-brand-primary, #6ba0ff); text-decoration: none; white-space: nowrap; }
+.fp-social-all:hover { text-decoration: underline; }
+.fp-social-list { display: flex; flex-direction: column; gap: 7px; }
+.fp-social-card { width: 100%; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 9px; align-items: start; padding: 8px; border-radius: 11px; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.1)); background: var(--dsw-alias-bg-layer-1, #121a24); color: inherit; text-align: left; cursor: pointer; font: inherit; text-decoration: none; position: relative; transition: border-color .14s ease, transform .14s ease, background .14s ease; }
+.fp-social-card:hover { border-color: rgba(244,193,77,.55); transform: translateY(-1px); }
+.fp-social-card[data-active="true"] { border-color: rgba(244,193,77,.8); box-shadow: 0 0 0 1px rgba(244,193,77,.25); background: linear-gradient(140deg, rgba(244,193,77,.13), var(--dsw-alias-bg-layer-1, #121a24)); }
+.fp-social-thumb, .fp-social-thumb-fallback { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; display: block; background: var(--dsw-alias-bg-layer-2, rgba(255,255,255,.05)); }
+.fp-social-thumb-fallback { display: grid; place-items: center; background: linear-gradient(135deg, rgba(244,193,77,.28), rgba(99,230,213,.16)); color: rgba(255,255,255,.8); font-size: 17px; font-weight: 700; }
+.fp-social-body { min-width: 0; }
+.fp-social-title-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.fp-social-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-primary, #e7edf5); }
+.fp-social-rating { margin-left: auto; flex: 0 0 auto; font-size: 10px; font-weight: 650; color: var(--fp-amber); font-variant-numeric: tabular-nums; }
+.fp-social-meta { display: block; margin-top: 2px; font-size: 9.5px; color: var(--dsw-alias-label-secondary, #7d8da2); font-variant-numeric: tabular-nums; }
+.fp-social-desc { margin: 4px 0 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary, #93a2b5); }
+.fp-social-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.fp-social-tag { border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.1)); border-radius: 999px; padding: 1px 6px; font-size: 9px; line-height: 1.4; color: var(--dsw-alias-label-secondary, #7d8da2); }
+.fp-social-note { margin: 6px 1px 0; font-size: 9px; line-height: 1.45; color: var(--dsw-alias-label-secondary, #6f8095); }
 .fp-muted { margin: 5px 0 0; font-size: 11px; line-height: 1.55; color: var(--dsw-alias-label-secondary, #93a2b5); }
 .fp-source { margin-top: 16px; padding-top: 10px; border-top: 1px dashed var(--dsw-alias-border-l1, rgba(255,255,255,.12)); font-size: 10px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #7d8da2); }
 .fp-source a { color: var(--dsw-alias-brand-primary, #6ba0ff); text-decoration: none; }
@@ -1037,6 +1071,124 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function SocialSection({ section, t, onAttraction, activeAttraction }) {
+      const items = Array.isArray(section.items) ? section.items : []
+      if (!items.length) return null
+      return h(
+        'div',
+        { className: 'fp-social-section', 'data-provider': section.id },
+        h(
+          'div',
+          { className: 'fp-social-head' },
+          h('span', { className: 'fp-social-badge' }, section.label || t('social.title')),
+          h('span', { className: 'fp-social-count' }, `${items.length} ${t('social.count')}`),
+          section.url
+            ? h(
+                'a',
+                {
+                  className: 'fp-social-all',
+                  href: section.url,
+                  target: '_blank',
+                  rel: 'noreferrer',
+                },
+                `${t('social.view')} ↗`,
+              )
+            : null,
+        ),
+        h(
+          'div',
+          { className: 'fp-social-list' },
+          ...items.map((item) => {
+            const flyable = Number.isFinite(item.lat) && Number.isFinite(item.lon)
+            const active = activeAttraction === (item.localId || item.id)
+            const content = [
+              h(SmartImage, {
+                key: 'image',
+                src: item.image,
+                alt: item.name,
+                className: 'fp-social-thumb',
+                fallback: item.name?.slice(0, 1) || '·',
+              }),
+              h(
+                'span',
+                { className: 'fp-social-body', key: 'body' },
+                h(
+                  'span',
+                  { className: 'fp-social-title-row' },
+                  h('span', { className: 'fp-social-name' }, item.name),
+                  item.rating
+                    ? h(
+                        'span',
+                        { className: 'fp-social-rating' },
+                        `★ ${Number(item.rating).toFixed(1)}`,
+                      )
+                    : null,
+                ),
+                h(
+                  'span',
+                  { className: 'fp-social-meta' },
+                  [
+                    item.reviewCount ? `${item.reviewCount} ${t('social.reviews')}` : '',
+                    item.noteCount ? `${item.noteCount} ${t('social.notes')}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                ),
+                item.description
+                  ? h('span', { className: 'fp-social-desc' }, item.description)
+                  : null,
+                item.tags?.length
+                  ? h(
+                      'span',
+                      { className: 'fp-social-tags' },
+                      ...item.tags
+                        .slice(0, 4)
+                        .map((tag, index) =>
+                          h('span', { className: 'fp-social-tag', key: `${tag}-${index}` }, tag),
+                        ),
+                    )
+                  : null,
+              ),
+            ]
+            if (flyable) {
+              return h(
+                'button',
+                {
+                  key: item.id,
+                  type: 'button',
+                  className: 'fp-social-card',
+                  'data-active': active ? 'true' : 'false',
+                  title: `${t('attractions.focus')}: ${item.name}`,
+                  onClick: () =>
+                    onAttraction({
+                      id: item.localId || item.id,
+                      lat: item.lat,
+                      lon: item.lon,
+                    }),
+                },
+                ...content,
+              )
+            }
+            return h(
+              'a',
+              {
+                key: item.id,
+                className: 'fp-social-card',
+                href: item.url,
+                target: '_blank',
+                rel: 'noreferrer',
+                title: `${t('social.external')}: ${item.name}`,
+              },
+              ...content,
+            )
+          }),
+        ),
+        section.attribution?.note
+          ? h('div', { className: 'fp-social-note' }, section.attribution.note)
+          : null,
+      )
+    }
+
     function PlaceDetail({ place, t, copied, onCopy, onAttraction, activeAttraction }) {
       const attractions = Array.isArray(place.attractions) ? place.attractions : []
       const hasSource = place.source === 'wikipedia' && place.sourceUrl
@@ -1094,6 +1246,22 @@ window.__ModuleLoader__.load({
           h('h3', { className: 'fp-section-title' }, t('place.intro')),
           h('p', { className: 'fp-intro' }, place.intro || t('place.noIntro')),
         ),
+        place.social?.length
+          ? h(
+              'div',
+              { className: 'fp-social-block' },
+              h('h3', { className: 'fp-section-title' }, t('social.title')),
+              ...place.social.map((section) =>
+                h(SocialSection, {
+                  key: section.id,
+                  section,
+                  t,
+                  onAttraction,
+                  activeAttraction,
+                }),
+              ),
+            )
+          : null,
         h(
           'div',
           { className: 'fp-attractions-head' },

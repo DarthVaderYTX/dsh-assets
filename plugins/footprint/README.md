@@ -11,6 +11,7 @@
 - **当地时间与昼夜**：Cesium 时钟初始化为本机当前时间并按真实时间推进，`SunLight` 决定昼夜明暗；初始视角朝向本地时区经线。区域/全球视角叠加 NASA VIIRS 2012 城市灯光，夜间灯光层 `dayAlpha=0`、`nightAlpha=0.9`；放大到城市、街区后自动隐藏低分辨率灯光层，由同一套 Esri 高清卫星影像承担夜面细节，避免夜间缩略图发糊。右上角顶栏显示本地时间、时区和太阳/月亮图标。
 - **地点定位**：输入地点后先查 Nominatim，失败时回退 Photon；结果同时包含内置目的地。选中后相机飞往坐标，主地点以琥珀色标注，推荐景点以青色标注，可直接点击球面标记或在右侧卡片中点选。
 - **介绍与景点推荐**：通过 Wikipedia 搜索条目、REST 摘要和 geosearch 附近条目，生成地点简介、缩略图、距离与 6 条附近推荐。
+- **社交媒体推荐**：接入马蜂窝移动端公开景点榜单，显示评分、蜂评数、游记数、标签、地址、推荐理由、图片和回链；能匹配到本地坐标的景点可直接在球面上飞过去，匹配不到的卡片打开马蜂窝原页。Provider 注册表已预留后续携程、小红书或官方 API 的接入接口。
 - **离线兜底**：内置北京、上海、西安、成都、杭州、桂林、拉萨、香港、东京、京都、巴黎、伦敦、罗马、纽约、伊斯坦布尔、巴塞罗那 16 个目的地。每城含简介与 4–5 个景点及坐标，按距离排序。
 - **双语界面**：界面文案跟随 DSH 当前语言切换中文 / English；在线 Wikipedia 资料按当前语言取用。内置导览提供英文城市简介与英文景点名，景点说明在英文界面使用简要英文占位。
 - **代理支持**：宿主侧读取 `HTTPS_PROXY` / `HTTP_PROXY`，在 Windows 上也会读取系统 Internet Settings 的 HTTP 代理，通过 CONNECT 隧道访问 Nominatim / Wikipedia，避免 Node 原生 fetch 忽略系统代理的问题。
@@ -31,6 +32,7 @@
 | 地名检索 | [Nominatim](https://nominatim.openstreetmap.org/)（主）/ [Photon](https://photon.komoot.io/)（备） | 宿主转发请求并设置 User-Agent；结果缓存 10 分钟 |
 | 地点简介 | Wikipedia REST `page/summary` | 中文界面用 `zh.wikipedia.org`，英文界面用 `en.wikipedia.org` |
 | 附近景点 | Wikipedia `generator=geosearch` | 10 公里半径，按类型、缩略图与距离排序，取 6 条 |
+| 社交媒体推荐 | [马蜂窝](https://m.mafengwo.cn/)公开移动端景点榜单 | 评分、蜂评/游记数、标签、地址、推荐理由、图片与回链；目录缓存 24h，榜单页缓存 1h |
 | 离线导览 | 本插件 `data/places.js` | 16 个城市的内置原创中文导览 |
 | 全球底图 | Natural Earth II（随 CesiumJS 分发） | 无 Cesium ion token，地形使用椭球体 |
 | 缩放细节 | [Esri World Imagery](https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer) | 低高度自动淡入，Cesium 按缩放层级取 0–19 级卫星瓦片；不依赖 Referer，离线或加载失败时回退到 Natural Earth II |
@@ -51,6 +53,7 @@ plugins/footprint/
   http.js                支持系统代理的 HTTPS JSON 客户端
   client.js              浏览器：左侧栏图标、主面板、Cesium 生命周期
   data/places.js         16 个内置目的地与本地检索/距离计算
+  providers/             社交媒体 Provider 注册表（当前实现：马蜂窝）
   vendor/cesium/         CesiumJS 1.147.0 运行时（约 13 MB）
   locale/                meta.title / meta.description
   icon.svg               插件图标
@@ -59,7 +62,7 @@ plugins/footprint/
 宿主注册两条前缀路由：
 
 - `/footprint-vendor/*`：只读静态文件，带路径穿越防护与 MIME 类型，`CESIUM_BASE_URL` 指向这里。
-- `/footprint-api/health`、`/footprint-api/search`、`/footprint-api/place`、`/footprint-api/reverse`：JSON 接口。
+- `/footprint-api/health`、`/footprint-api/search`、`/footprint-api/place`、`/footprint-api/reverse`、`/footprint-api/providers`：JSON 接口。
 
 客户端只在第一次打开面板时加载 `Cesium.js`，卸载面板时销毁 Viewer、事件处理器与 ResizeObserver；切换地点时只清理并重建实体。底图采用双层结构：Natural Earth II 始终在底层兜底，Esri 卫星细节层根据相机高度调整透明度，瓦片层级完全交给 Cesium 的屏幕误差算法。
 
@@ -75,6 +78,8 @@ plugins/footprint/
 
 ## 已知限制
 
+- 马蜂窝推荐来自公开移动端榜单页；其目录当前覆盖约 100 个热门目的地，不在目录内的城市会自动回退到 Wikipedia / 内置导览。公开页面可能触发反爬校验，失败时不影响地点主内容。
+- 马蜂窝内容版权归马蜂窝及原作者所有；插件只缓存榜单摘要和回链，正式分发前请确认符合其使用条款，或替换为官方 Open Platform API provider。
 - 夜间灯光使用 NASA VIIRS 2012 快照，最高 8 级；它只在区域/全球视角显示，城市近景会自动让位给高清卫星夜面，因此近景不会出现被放大的低分辨率灯光块。
 - 未使用 Cesium ion，因此没有全球地形起伏；全球底图是 Natural Earth II，放大后改用 Esri 卫星影像。
 - 放大后的城市/街区细节来自 Esri World Imagery，需要网络；离线时仍能旋转、定位和查看内置导览，但放大后只有 Natural Earth II 的低分辨率纹理。
