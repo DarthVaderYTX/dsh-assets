@@ -284,6 +284,7 @@ test('dataset nodes emit their URI without starting a command', async () => {
   });
   const run = await waitForRun(submitted.payload.experiment.id);
   assert.equal(run.status, 'succeeded');
+  assert.equal(run.layout, 'vertical');
   assert.equal(run.nodes[0].kind, 'dataset');
   assert.equal(run.nodes[0].outputs[0], 'rows');
   assert.match(run.nodes[0].stdoutTail, /datasets\/demo\.jsonl/);
@@ -299,6 +300,8 @@ test('submitting a graph executes subgraph nodes in dependency order', async () 
   const run = await waitForRun(submitted.payload.experiment.id);
   assert.equal(run.status, 'succeeded', JSON.stringify(run.nodes));
   assert.equal(run.executor, 'local');
+  assert.equal(run.layout, 'vertical');
+  assert.equal(run.edges.length, 3);
   assert.deepEqual(
     run.nodes.map((node) => node.path),
     ['pipeline/prepare', 'pipeline/train', 'pipeline/evaluate', 'report'],

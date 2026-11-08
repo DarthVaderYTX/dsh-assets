@@ -271,12 +271,20 @@ function summarizeRun(run, { detail = false } = {}) {
     startedAt: run.startedAt || null,
     endedAt: run.endedAt || null,
     concurrency: run.concurrency,
+    layout: run.layout === 'horizontal' ? 'horizontal' : 'vertical',
     executor: run.executor || 'local',
     message: run.message || '',
     rerunOf: run.rerunOf || null,
     dir: run.dir,
     counts,
     nodes,
+    edges: (run.edges || []).map((edge) => ({
+      id: edge.id,
+      from: edge.from,
+      to: edge.to,
+      fromPort: edge.fromPort || '',
+      toPort: edge.toPort || '',
+    })),
   };
 }
 
@@ -423,6 +431,69 @@ async function startExperiment(input = {}) {
   const now = Date.now();
   const id = `exp-${now.toString(36)}-${randomUUID().slice(0, 4)}`;
   const concurrency = clampConcurrency(input.concurrency);
+  const nodes = plan.nodes.map((node) => {
+    const target = placement.placements[node.path] || {
+      environmentId: node.environmentId || 'local',
+      environmentName: '',
+      executor: 'local',
+    };
+    return {
+      path: node.path,
+      nodeId: node.nodeId,
+      moduleId: node.moduleId,
+      moduleName: node.moduleName,
+      label: node.label,
+      kind: node.kind,
+      params: node.params,
+      deps: node.deps,
+      command: node.command,
+      cwd: node.cwd,
+      timeoutSec: node.timeoutSec,
+      environmentId: target.environmentId,
+      environmentName: target.environmentName,
+      executor: target.executor,
+      inputs: node.inputs || [],
+      outputs: node.outputs || [],
+      datasetUri: node.datasetUri || '',
+      datasetFormat: node.datasetFormat || '',
+      status: 'pending',
+      startedAt: null,
+      endedAt: null,
+      exitCode: null,
+      error: '',
+      stdoutTail: '',
+      stderrTail: '',
+    };
+  });
+  const byPath = new Map(nodes.map((node) => [node.path, node]));
+  const outCounts = new Map();
+  const inCounts = new Map();
+  const seenEdges = new Set();
+  const runEdges = [];
+  for (const node of nodes) {
+    for (const depPath of node.deps || []) {
+      const source = byPath.get(depPath);
+      if (!source) continue;
+      const outputs = source.outputs || [];
+      const inputs = node.inputs || [];
+      const outIndex = outCounts.get(depPath) || 0;
+      const inIndex = inCounts.get(node.path) || 0;
+      const fromPort = outputs.length ? outputs[outIndex % outputs.length] : '';
+      const toPort = inputs.length ? inputs[inIndex % inputs.length] : '';
+      const key = `${depPath}>${node.path}>${fromPort}>${toPort}`;
+      if (seenEdges.has(key)) continue;
+      seenEdges.add(key);
+      outCounts.set(depPath, outIndex + 1);
+      inCounts.set(node.path, inIndex + 1);
+      runEdges.push({
+        id: `e-${runEdges.length + 1}`,
+        from: depPath,
+        to: node.path,
+        fromPort,
+        toPort,
+      });
+    }
+  }
   const run = {
     id,
     graphId: graph.id,
@@ -433,44 +504,13 @@ async function startExperiment(input = {}) {
     startedAt: now,
     endedAt: null,
     concurrency,
+    layout: graph.layout === 'horizontal' ? 'horizontal' : 'vertical',
     message: '',
     rerunOf: input.rerunOf || null,
     executor: executor.describe().id,
     dir: runDir(id),
-    nodes: plan.nodes.map((node) => {
-      const target = placement.placements[node.path] || {
-        environmentId: node.environmentId || 'local',
-        environmentName: '',
-        executor: 'local',
-      };
-      return {
-        path: node.path,
-        nodeId: node.nodeId,
-        moduleId: node.moduleId,
-        moduleName: node.moduleName,
-        label: node.label,
-        kind: node.kind,
-        params: node.params,
-        deps: node.deps,
-        command: node.command,
-        cwd: node.cwd,
-        timeoutSec: node.timeoutSec,
-        environmentId: target.environmentId,
-        environmentName: target.environmentName,
-        executor: target.executor,
-        inputs: node.inputs || [],
-        outputs: node.outputs || [],
-        datasetUri: node.datasetUri || '',
-        datasetFormat: node.datasetFormat || '',
-        status: 'pending',
-        startedAt: null,
-        endedAt: null,
-        exitCode: null,
-        error: '',
-        stdoutTail: '',
-        stderrTail: '',
-      };
-    }),
+    nodes,
+    edges: runEdges,
   };
   await fsp.mkdir(path.join(run.dir, 'nodes'), { recursive: true });
   await fsp.mkdir(path.join(run.dir, 'outputs'), { recursive: true });

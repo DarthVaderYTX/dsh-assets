@@ -52,6 +52,11 @@ window.__ModuleLoader__.load({
       'status.failed': '失败',
       'status.skipped': '跳过',
       'status.cancelled': '已取消',
+      'runStatus.succeeded': '完成',
+      'runStatus.running': '执行中',
+      'runStatus.failed': '失败',
+      'runStatus.pending': '未开始',
+      'runs.noNodes': '这次运行没有节点',
       'environment.local': '本机',
       'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
       'executor.local': '本机执行器',
@@ -151,6 +156,7 @@ window.__ModuleLoader__.load({
       'canvas.connectHint': '从模块右侧的输出端点拖到另一模块左侧的输入端点；反向拖也可以。',
       'canvas.edgeSelected': '已选中的连线',
       'canvas.deleteSelected': '删除选中',
+      'canvas.runHint': '拖拽空白处平移 · 滚轮缩放 · 拖拽节点调整位置 · 点击节点查看日志',
       'canvas.paletteTitle': '添加模块',
       'canvas.searchPlaceholder': '搜索模块、子图、数据集',
       'canvas.filter.all': '全部',
@@ -283,6 +289,11 @@ window.__ModuleLoader__.load({
       'status.failed': 'Failed',
       'status.skipped': 'Skipped',
       'status.cancelled': 'Cancelled',
+      'runStatus.succeeded': 'Completed',
+      'runStatus.running': 'Running',
+      'runStatus.failed': 'Failed',
+      'runStatus.pending': 'Not started',
+      'runs.noNodes': 'This run has no nodes',
       'environment.local': 'Local',
       'environment.localHint': 'Run on the machine hosting the dsh process.',
       'executor.local': 'Local executor',
@@ -382,6 +393,7 @@ window.__ModuleLoader__.load({
       'canvas.connectHint': 'Drag from an output port on the right to an input port on the left; the reverse works too.',
       'canvas.edgeSelected': 'Selected edge',
       'canvas.deleteSelected': 'Delete selection',
+      'canvas.runHint': 'Drag the background to pan · wheel to zoom · drag nodes to rearrange · click a node for logs',
       'canvas.paletteTitle': 'Add modules',
       'canvas.searchPlaceholder': 'Search modules, subgraphs, datasets',
       'canvas.filter.all': 'All',
@@ -479,6 +491,15 @@ window.__ModuleLoader__.load({
 
     const STYLE = `
 .ath-root {
+  --ath-accent: color-mix(in srgb, var(--dsw-alias-brand-primary) 72%, #94a7ba);
+  --ath-accent-soft: color-mix(in srgb, var(--ath-accent) 14%, transparent);
+  --ath-green: #4f9b78;
+  --ath-yellow: #c9a34a;
+  --ath-red: #bf7070;
+  --ath-gray: #99a3ad;
+  --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
+  --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
+  --ath-shadow-soft: 0 6px 18px rgba(32, 43, 61, .07);
   height: 100%;
   min-height: 520px;
   display: flex;
@@ -505,8 +526,8 @@ window.__ModuleLoader__.load({
 .ath-brand-mark {
   width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
   display: grid; place-items: center;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, var(--dsw-alias-bg-layer-2));
-  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--ath-accent) 14%, var(--dsw-alias-bg-layer-2));
+  color: var(--ath-accent);
 }
 .ath-brand-copy { display: flex; flex-direction: column; min-width: 0; }
 .ath-brand-title { font-size: 15px; font-weight: 650; letter-spacing: .01em; }
@@ -536,7 +557,7 @@ window.__ModuleLoader__.load({
   font-size: 13px;
 }
 .ath-tab:hover { color: var(--dsw-alias-label-primary); }
-.ath-tab[data-active="true"] { color: var(--dsw-alias-label-primary); border-bottom-color: var(--dsw-alias-brand-primary); font-weight: 600; }
+.ath-tab[data-active="true"] { color: var(--dsw-alias-label-primary); border-bottom-color: var(--ath-accent); font-weight: 600; }
 .ath-tab-count { margin-left: 6px; font-size: 10.5px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .ath-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .ath-page {
@@ -565,9 +586,9 @@ window.__ModuleLoader__.load({
 }
 .ath-btn:hover { border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); }
 .ath-btn:disabled { opacity: .55; cursor: not-allowed; }
-.ath-btn-primary { background: var(--dsw-alias-brand-primary); border-color: transparent; color: #fff; }
-.ath-btn-primary:hover { background: var(--dsw-alias-brand-primary); filter: brightness(1.06); }
-.ath-btn-danger { color: var(--dsw-alias-state-error-primary); }
+.ath-btn-primary { background: var(--ath-accent); border-color: transparent; color: #fff; }
+.ath-btn-primary:hover { background: var(--ath-accent); filter: brightness(1.06); }
+.ath-btn-danger { color: var(--ath-red); }
 .ath-btn-ghost { border-color: transparent; background: transparent; color: var(--dsw-alias-label-secondary); }
 .ath-btn-ghost:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
 .ath-icon-btn {
@@ -582,22 +603,24 @@ window.__ModuleLoader__.load({
   border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary);
   background: var(--dsw-alias-bg-layer-2); white-space: nowrap;
 }
-.ath-badge[data-kind="command"] { color: var(--dsw-alias-brand-primary); border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent); }
-.ath-badge[data-kind="graph"] { color: var(--dsw-alias-state-warn-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 40%, transparent); }
+.ath-badge[data-kind="command"] { color: var(--ath-accent); border-color: color-mix(in srgb, var(--ath-accent) 40%, transparent); }
+.ath-badge[data-kind="graph"] { color: var(--ath-yellow); border-color: color-mix(in srgb, var(--ath-yellow) 40%, transparent); }
+.ath-badge[data-kind="dataset"] { color: var(--ath-green); border-color: color-mix(in srgb, var(--ath-green) 40%, transparent); }
 .ath-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap; }
 .ath-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.ath-status[data-status="running"] { color: var(--dsw-alias-brand-primary); }
-.ath-status[data-status="succeeded"] { color: var(--dsw-alias-state-success-primary); }
-.ath-status[data-status="failed"] { color: var(--dsw-alias-state-error-primary); }
-.ath-status[data-status="pending"], .ath-status[data-status="skipped"] { color: var(--dsw-alias-label-secondary); }
-.ath-status[data-status="cancelled"] { color: var(--dsw-alias-state-warn-primary); }
+.ath-status[data-status="running"] { color: var(--ath-yellow); }
+.ath-status[data-status="succeeded"] { color: var(--ath-green); }
+.ath-status[data-status="failed"] { color: var(--ath-red); }
+.ath-status[data-status="pending"], .ath-status[data-status="skipped"] { color: var(--ath-gray); }
+.ath-status[data-status="cancelled"] { color: var(--ath-gray); }
 .ath-muted { color: var(--dsw-alias-label-secondary); }
-.ath-error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.ath-error { color: var(--ath-red); font-size: 12px; }
 .ath-card {
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 11px;
+  border: 1px solid var(--ath-border-soft);
+  border-radius: 12px;
   background: var(--dsw-alias-bg-layer-1);
   padding: 13px 14px;
+  box-shadow: var(--ath-shadow-soft);
 }
 .ath-field { display: flex; flex-direction: column; gap: 5px; }
 .ath-field + .ath-field { margin-top: 12px; }
@@ -608,7 +631,7 @@ window.__ModuleLoader__.load({
   background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
   border-radius: 8px; padding: 7px 9px; font-size: 12.5px;
 }
-.ath-input:focus, .ath-select:focus, .ath-textarea:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, transparent); outline-offset: -1px; border-color: var(--dsw-alias-brand-primary); }
+.ath-input:focus, .ath-select:focus, .ath-textarea:focus { outline: 2px solid color-mix(in srgb, var(--ath-accent) 35%, transparent); outline-offset: -1px; border-color: var(--ath-accent); }
 .ath-textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; line-height: 1.65; resize: vertical; min-height: 96px; }
 .ath-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .ath-row { display: flex; align-items: center; gap: 8px; }
@@ -628,7 +651,7 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-secondary); font-size: 12.5px;
 }
 .ath-empty strong { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; }
-.ath-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent); border-top-color: var(--dsw-alias-brand-primary); border-radius: 50%; animation: ath-spin .8s linear infinite; }
+.ath-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--ath-accent) 25%, transparent); border-top-color: var(--ath-accent); border-radius: 50%; animation: ath-spin .8s linear infinite; }
 .ath-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 64px 0; color: var(--dsw-alias-label-secondary); font-size: 12.5px; }
 .ath-load-error { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 20px; text-align: center; }
 .ath-load-error h2 { margin: 0; font-size: 15px; }
@@ -642,15 +665,15 @@ window.__ModuleLoader__.load({
 }
 .ath-run-item:last-child { border-bottom: 0; }
 .ath-run-item:hover { background: var(--dsw-alias-bg-layer-2); }
-.ath-run-item[data-active="true"] { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, var(--dsw-alias-bg-layer-1)); box-shadow: inset 2px 0 0 var(--dsw-alias-brand-primary); }
+.ath-run-item[data-active="true"] { background: color-mix(in srgb, var(--ath-accent) 8%, var(--dsw-alias-bg-layer-1)); box-shadow: inset 2px 0 0 var(--ath-accent); }
 .ath-run-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; min-width: 0; }
 .ath-run-title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-run-meta { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
 .ath-progress { height: 4px; border-radius: 999px; overflow: hidden; background: var(--dsw-alias-bg-layer-2); }
-.ath-progress > i { display: block; height: 100%; background: var(--dsw-alias-brand-primary); transition: width .3s ease; }
-.ath-progress[data-status="succeeded"] > i { background: var(--dsw-alias-state-success-primary); }
-.ath-progress[data-status="failed"] > i { background: var(--dsw-alias-state-error-primary); }
-.ath-progress[data-status="cancelled"] > i { background: var(--dsw-alias-state-warn-primary); }
+.ath-progress > i { display: block; height: 100%; background: var(--ath-accent); transition: width .3s ease; }
+.ath-progress[data-status="succeeded"] > i { background: var(--ath-green); }
+.ath-progress[data-status="failed"] > i { background: var(--ath-red); }
+.ath-progress[data-status="cancelled"] > i { background: var(--ath-gray); }
 .ath-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ath-detail-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .ath-detail-title { margin: 0; font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
@@ -665,7 +688,7 @@ window.__ModuleLoader__.load({
 .ath-node-name { display: flex; flex-direction: column; min-width: 0; }
 .ath-node-name strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-node-name code { font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.ath-node-error { grid-column: 1 / -1; color: var(--dsw-alias-state-error-primary); font-size: 10.5px; overflow-wrap: anywhere; }
+.ath-node-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10.5px; overflow-wrap: anywhere; }
 .ath-node-params { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
 .ath-param-chip { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 5px; }
 .ath-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -683,7 +706,7 @@ window.__ModuleLoader__.load({
 .ath-editor-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; flex: 0 0 auto; }
 .ath-editor-errors {
   flex: 0 0 auto; max-height: 120px; overflow: auto; margin-bottom: 10px;
-  padding: 9px 12px; border: 1px solid var(--dsw-alias-state-error-primary);
+  padding: 9px 12px; border: 1px solid var(--ath-red);
   border-radius: 9px; background: var(--dsw-alias-bg-layer-1);
 }
 .ath-editor-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; flex: 0 0 auto; }
@@ -701,12 +724,12 @@ window.__ModuleLoader__.load({
   box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
 }
 .ath-canvas-node:hover { border-color: var(--dsw-alias-border-l2); }
-.ath-canvas-node[data-selected="true"] { border-color: var(--dsw-alias-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent); }
+.ath-canvas-node[data-selected="true"] { border-color: var(--ath-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 22%, transparent); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
 .ath-canvas-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-canvas-node-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; white-space: nowrap; }
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
-.ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--dsw-alias-state-warn-primary); flex: 0 0 auto; }
+.ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--ath-yellow); flex: 0 0 auto; }
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .ath-canvas-viewport {
@@ -715,10 +738,10 @@ window.__ModuleLoader__.load({
   min-height: 240px;
   height: auto;
   overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 11px;
+  border: 1px solid var(--ath-border-soft);
+  border-radius: 12px;
   background-color: var(--dsw-alias-bg-base);
-  background-image: radial-gradient(circle at 1px 1px, var(--dsw-alias-border-l1) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--dsw-alias-border-l1) 70%, transparent) 1px, transparent 0);
   background-size: 22px 22px;
   cursor: grab;
   touch-action: none;
@@ -733,15 +756,15 @@ window.__ModuleLoader__.load({
 }
 .ath-node-card {
   position: absolute; width: 200px;
-  border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px;
+  border: 1px solid var(--ath-border-soft); border-radius: 11px;
   background: var(--dsw-alias-bg-layer-1);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+  box-shadow: 0 1px 2px rgba(32, 43, 61, .05);
   cursor: grab;
 }
 .ath-node-card:active { cursor: grabbing; }
 .ath-node-card[data-selected="true"] {
-  border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent);
+  border-color: var(--ath-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 24%, transparent);
 }
 .ath-node-head {
   height: 38px; padding: 5px 10px;
@@ -752,7 +775,7 @@ window.__ModuleLoader__.load({
 .ath-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-node-tag {
   grid-column: 2; grid-row: 1; align-self: center;
-  font-size: 8.5px; line-height: 1.5; color: var(--dsw-alias-state-warn-primary);
+  font-size: 8.5px; line-height: 1.5; color: var(--ath-yellow);
   border: 1px solid currentColor; border-radius: 3px; padding: 0 3px;
 }
 .ath-node-sub { grid-column: 1 / -1; grid-row: 2; font-size: 9.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -767,18 +790,18 @@ window.__ModuleLoader__.load({
   cursor: crosshair;
 }
 .ath-port-in { left: -7px; }
-.ath-port-out { right: -7px; border-color: var(--dsw-alias-brand-primary); }
-.ath-port-dot:hover { transform: scale(1.3); border-color: var(--dsw-alias-brand-primary); }
+.ath-port-out { right: -7px; border-color: var(--ath-accent); }
+.ath-port-dot:hover { transform: scale(1.3); border-color: var(--ath-accent); }
 .ath-edges { pointer-events: none; overflow: visible; }
-.ath-edge { fill: none; stroke: var(--dsw-alias-border-l2); stroke-width: 1.6; }
-.ath-edge[data-selected="true"] { stroke: var(--dsw-alias-brand-primary); stroke-width: 2.4; }
+.ath-edge { fill: none; stroke: var(--ath-edge); stroke-width: 1.6; }
+.ath-edge[data-selected="true"] { stroke: var(--ath-accent); stroke-width: 2.4; }
 .ath-edge-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
-.ath-edge-pending { fill: none; stroke: var(--dsw-alias-brand-primary); stroke-width: 1.8; stroke-dasharray: 4 4; opacity: .85; }
-.ath-connect-origin { position: absolute; z-index: 3; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-brand-primary); opacity: .7; pointer-events: none; }
+.ath-edge-pending { fill: none; stroke: var(--ath-accent); stroke-width: 1.8; stroke-dasharray: 4 4; opacity: .85; }
+.ath-connect-origin { position: absolute; z-index: 3; width: 8px; height: 8px; border-radius: 50%; background: var(--ath-accent); opacity: .7; pointer-events: none; }
 .ath-marquee {
   position: absolute; z-index: 5; pointer-events: none;
-  border: 1px dashed var(--dsw-alias-brand-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+  border: 1px dashed var(--ath-accent);
+  background: color-mix(in srgb, var(--ath-accent) 12%, transparent);
 }
 .ath-canvas-tools {
   position: absolute; top: 10px; right: 10px; z-index: 6;
@@ -847,6 +870,75 @@ window.__ModuleLoader__.load({
 }
 .ath-inspector { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .ath-canvas-tools { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 20px); }
+.ath-page-runs .ath-split > .ath-run-detail {
+  overflow: hidden; display: flex; flex-direction: column; gap: 10px;
+}
+.ath-run-canvas { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.ath-run-viewport { flex: 1 1 auto; min-height: 260px; }
+.ath-run-node { --ath-status: var(--ath-gray); }
+.ath-run-node[data-group="succeeded"] { --ath-status: var(--ath-green); }
+.ath-run-node[data-group="running"] { --ath-status: var(--ath-yellow); }
+.ath-run-node[data-group="failed"] { --ath-status: var(--ath-red); }
+.ath-run-node[data-group="pending"] { --ath-status: var(--ath-gray); }
+.ath-run-node {
+  border-color: color-mix(in srgb, var(--ath-status) 42%, var(--ath-border-soft));
+  background: color-mix(in srgb, var(--ath-status) 10%, var(--dsw-alias-bg-layer-1));
+}
+.ath-run-node[data-selected="true"] {
+  border-color: var(--ath-status);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-status) 26%, transparent);
+}
+.ath-run-node .ath-node-sub { color: var(--ath-status); font-weight: 600; }
+.ath-run-node .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-status) 28%, var(--ath-border-soft)); }
+.ath-run-pulse {
+  width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; margin-left: auto;
+  background: var(--ath-yellow);
+  animation: ath-run-pulse 1.8s ease-out infinite;
+}
+.ath-run-port {
+  width: 10px; height: 10px; border-width: 2px;
+  border-color: var(--ath-status); background: var(--dsw-alias-bg-base);
+  pointer-events: none;
+}
+.ath-run-edge { fill: none; stroke: var(--ath-edge); stroke-width: 1.5; }
+.ath-run-legend {
+  position: absolute; top: 10px; left: 12px; z-index: 6;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 4px 8px; border: 1px solid var(--ath-border-soft); border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 88%, transparent);
+  color: var(--dsw-alias-label-secondary); font-size: 10px; pointer-events: none;
+}
+.ath-run-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.ath-run-legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ath-gray); }
+.ath-run-legend-dot[data-group="succeeded"] { background: var(--ath-green); }
+.ath-run-legend-dot[data-group="running"] { background: var(--ath-yellow); }
+.ath-run-legend-dot[data-group="failed"] { background: var(--ath-red); }
+.ath-run-hint {
+  position: absolute; left: 12px; bottom: 10px; z-index: 5;
+  padding: 4px 7px; border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 84%, transparent);
+  color: var(--dsw-alias-label-secondary); font-size: 10px; pointer-events: none;
+}
+.ath-run-nodebar {
+  position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 7;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--ath-border-soft); border-radius: 10px;
+  background: var(--dsw-alias-bg-overlay); box-shadow: var(--ath-shadow-soft);
+}
+.ath-run-nodebar-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ath-run-nodebar-title { font-size: 12px; }
+.ath-run-nodebar-path {
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px;
+}
+.ath-run-nodebar-meta { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.ath-run-nodebar-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10px; overflow-wrap: anywhere; }
+.ath-run-nodebar .ath-btn { grid-column: 2; grid-row: 1; }
+@keyframes ath-run-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ath-yellow) 45%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
 .ath-inspector { display: flex; flex-direction: column; gap: 12px; }
 .ath-section-title { margin: 0 0 2px; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); text-transform: none; }
 .ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 24px; gap: 6px; align-items: center; }
@@ -861,14 +953,14 @@ window.__ModuleLoader__.load({
   position: fixed; inset: 0; z-index: 1410;
   display: flex; align-items: flex-start; justify-content: center;
   padding: 8vh 16px 16px;
-  background: rgba(15, 23, 42, .38);
-  backdrop-filter: blur(1.5px);
+  background: rgba(35, 47, 62, .26);
+  backdrop-filter: blur(2px);
 }
 .ath-modal {
   width: min(620px, 100%); max-height: 84vh; display: flex; flex-direction: column;
   background: var(--dsw-alias-bg-overlay); color: var(--dsw-alias-label-primary);
-  border: 1px solid var(--dsw-alias-border-l1); border-radius: 13px;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, .28);
+  border: 1px solid var(--ath-border-soft); border-radius: 14px;
+  box-shadow: 0 18px 46px rgba(32, 43, 61, .20);
   overflow: hidden;
 }
 .ath-modal[data-wide="true"] { width: min(860px, 100%); }
@@ -894,9 +986,9 @@ window.__ModuleLoader__.load({
   box-shadow: 0 10px 30px rgba(15, 23, 42, .20); font-size: 11.5px;
   animation: ath-toast-in .16s ease-out;
 }
-.ath-toast[data-kind="error"] { border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, var(--dsw-alias-border-l1)); color: var(--dsw-alias-state-error-primary); }
-.ath-toast-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: var(--dsw-alias-state-success-primary); }
-.ath-toast[data-kind="error"] .ath-toast-dot { background: var(--dsw-alias-state-error-primary); }
+.ath-toast[data-kind="error"] { border-color: color-mix(in srgb, var(--ath-red) 40%, var(--dsw-alias-border-l1)); color: var(--ath-red); }
+.ath-toast-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: var(--ath-green); }
+.ath-toast[data-kind="error"] .ath-toast-dot { background: var(--ath-red); }
 .ath-nav-icon { display: block; }
 @keyframes ath-spin { to { transform: rotate(360deg); } }
 @keyframes ath-toast-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -1061,8 +1153,8 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------- 小部件
 
     function NavIcon({ size = 20, active = false }) {
-      const color = active ? 'var(--dsw-alias-brand-primary)' : 'currentColor';
-      const fill = active ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent)' : 'none';
+      const color = active ? 'var(--ath-accent, var(--dsw-alias-brand-primary))' : 'currentColor';
+      const fill = active ? 'color-mix(in srgb, var(--ath-accent, var(--dsw-alias-brand-primary)) 16%, transparent)' : 'none';
       return h(
         'svg',
         {
@@ -1582,7 +1674,7 @@ window.__ModuleLoader__.load({
           current
             ? h(
                 'div',
-                { className: 'ath-detail' },
+                { className: 'ath-detail ath-run-detail' },
                 h(
                   'div',
                   { className: 'ath-card' },
@@ -1635,62 +1727,11 @@ window.__ModuleLoader__.load({
                     }),
                   ),
                 ),
-                h(
-                  'div',
-                  { className: 'ath-node-table' },
-                  h(
-                    'div',
-                    { className: 'ath-node-row', 'data-head': 'true' },
-                    h('span', null, t('experiments.node')),
-                    h('span', null, t('common.module')),
-                    h('span', null, t('common.status')),
-                    h('span', null, t('common.duration')),
-                    h('span', null, t('experiments.exitCode')),
-                    h('span', null, ''),
-                  ),
-                  (current.nodes || []).map((node) =>
-                    h(
-                      'div',
-                      { className: 'ath-node-row', key: node.path },
-                      h(
-                        'div',
-                        { className: 'ath-node-name' },
-                        h('strong', null, node.label || node.path),
-                        h('code', null, node.path),
-                      ),
-                      h(
-                        'span',
-                        { className: 'ath-module-name', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-                        node.kind === 'graph' ? h('span', { className: 'ath-badge', 'data-kind': 'graph' }, t('experiments.subgraphNode')) : null,
-                        ` ${node.moduleName}`,
-                        h(
-                          'span',
-                          { className: 'ath-node-env' },
-                          environmentName(t, data.environments, node.environmentId, node.environmentName),
-                        ),
-                      ),
-                      h('span', { className: 'ath-status', 'data-status': statusClass(node.status) }, statusText(t, node.status)),
-                      h('span', { className: 'ath-muted' }, formatDuration(node.startedAt, node.endedAt)),
-                      h('span', { className: 'ath-muted ath-mono' }, node.exitCode === null || node.exitCode === undefined ? '—' : node.exitCode),
-                      h(
-                        'button',
-                        { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onOpenLog(current.id, node) },
-                        t('experiments.log'),
-                      ),
-                      node.error ? h('div', { className: 'ath-node-error' }, node.error) : null,
-                      node.params && Object.keys(node.params).length
-                        ? h(
-                            'div',
-                            { className: 'ath-node-params' },
-                            Object.entries(node.params).map(([key, value]) =>
-                              h('span', { className: 'ath-param-chip', key }, `${key}=${value}`),
-                            ),
-                          )
-                        : null,
-                    ),
-                  ),
-                ),
-                h('div', { className: 'ath-hint' }, t('experiments.paramsHint')),
+                h(RunDag, {
+                  t,
+                  experiment: current,
+                  onOpenLog: (id, node) => onOpenLog(id, node),
+                }),
               )
             : h(EmptyState, { title: t('experiments.select') }),
         ),
@@ -1910,6 +1951,514 @@ window.__ModuleLoader__.load({
           y: (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8,
         },
       };
+    }
+
+    const RUN_STATUS_GROUP = {
+      succeeded: 'succeeded',
+      running: 'running',
+      failed: 'failed',
+      pending: 'pending',
+      skipped: 'pending',
+      cancelled: 'pending',
+    };
+
+    function runStatusLabel(t, status) {
+      if (status === 'succeeded' || status === 'running' || status === 'failed' || status === 'pending') {
+        return t(`runStatus.${status}`);
+      }
+      return t(`status.${status}`);
+    }
+
+    function deriveRunEdges(nodes) {
+      const byPath = new Map(nodes.map((node) => [node.path, node]));
+      const edges = [];
+      const outCounts = new Map();
+      const inCounts = new Map();
+      const seen = new Set();
+      for (const node of nodes) {
+        for (const depPath of node.deps || []) {
+          const source = byPath.get(depPath);
+          if (!source) continue;
+          const outputs = source.outputs || [];
+          const inputs = node.inputs || [];
+          const outIndex = outCounts.get(depPath) || 0;
+          const inIndex = inCounts.get(node.path) || 0;
+          const fromPort = outputs.length ? outputs[outIndex % outputs.length] : '';
+          const toPort = inputs.length ? inputs[inIndex % inputs.length] : '';
+          const key = `${depPath}>${node.path}>${fromPort}>${toPort}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          outCounts.set(depPath, outIndex + 1);
+          inCounts.set(node.path, inIndex + 1);
+          edges.push({ id: `e-${edges.length + 1}`, from: depPath, to: node.path, fromPort, toPort });
+        }
+      }
+      return edges;
+    }
+
+    function RunDag({ t, experiment, onOpenLog }) {
+      const nodes = experiment.nodes || [];
+      const direction = experiment.layout === 'horizontal' ? 'horizontal' : 'vertical';
+      const nodeByPath = useMemo(() => new Map(nodes.map((node) => [node.path, node])), [nodes]);
+      const modules = useMemo(
+        () =>
+          new Map(
+            nodes.map((node) => [
+              node.path,
+              {
+                name: node.moduleName,
+                kind: node.kind,
+                inputs: node.inputs || [],
+                outputs: node.outputs || [],
+              },
+            ]),
+          ),
+        [nodes],
+      );
+      const edgesData = useMemo(
+        () => (experiment.edges && experiment.edges.length ? experiment.edges : deriveRunEdges(nodes)),
+        [experiment.edges, nodes],
+      );
+      const graphForLayout = useMemo(
+        () => ({
+          nodes: nodes.map((node) => ({ id: node.path, moduleId: node.path })),
+          edges: edgesData,
+        }),
+        [nodes, edgesData],
+      );
+      const sizes = useMemo(
+        () => new Map(nodes.map((node) => [node.path, nodeSizeFor(modules.get(node.path), direction)])),
+        [nodes, modules, direction],
+      );
+      const basePositions = useMemo(
+        () => layoutNodes(graphForLayout, modules, direction, sizes),
+        [graphForLayout, modules, direction, sizes],
+      );
+
+      const [overrides, setOverrides] = useState({});
+      const [view, setView] = useState({ x: 30, y: 24, zoom: 1 });
+      const [selectedPath, setSelectedPath] = useState('');
+      const [interaction, setInteraction] = useState(null);
+      const canvasRef = useRef(null);
+
+      const positions = useMemo(() => {
+        const map = new Map();
+        for (const node of nodes) {
+          const base = basePositions.get(node.path) || { x: 0, y: 0 };
+          const override = overrides[node.path];
+          map.set(node.path, override ? { x: override.x, y: override.y } : { x: base.x, y: base.y });
+        }
+        return map;
+      }, [nodes, basePositions, overrides]);
+
+      const viewRef = useRef(view);
+      viewRef.current = view;
+      const positionsRef = useRef(positions);
+      positionsRef.current = positions;
+      const sizesRef = useRef(sizes);
+      sizesRef.current = sizes;
+      const modulesRef = useRef(modules);
+      modulesRef.current = modules;
+      const directionRef = useRef(direction);
+      directionRef.current = direction;
+      const nodesRef = useRef(nodes);
+      nodesRef.current = nodes;
+      const nodeByPathRef = useRef(nodeByPath);
+      nodeByPathRef.current = nodeByPath;
+      const selectedRef = useRef(selectedPath);
+      selectedRef.current = selectedPath;
+
+      const fitTo = useCallback((positionMap) => {
+        const element = canvasRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const bounds = canvasBounds(
+          { nodes: nodesRef.current },
+          positionMap,
+          modulesRef.current,
+          directionRef.current,
+          sizesRef.current,
+        );
+        const padding = 50;
+        const zoom = clampZoom(
+          Math.min((rect.width - padding * 2) / bounds.width, (rect.height - padding * 2) / bounds.height, 1.1),
+        );
+        setView({
+          zoom,
+          x: (rect.width - bounds.width * zoom) / 2 - bounds.minX * zoom,
+          y: (rect.height - bounds.height * zoom) / 2 - bounds.minY * zoom,
+        });
+      }, []);
+
+      useEffect(() => {
+        setOverrides({});
+        setSelectedPath('');
+        setInteraction(null);
+        const frame = requestAnimationFrame(() => fitTo(positionsRef.current));
+        return () => cancelAnimationFrame(frame);
+      }, [experiment.id, fitTo]);
+
+      const zoomBy = useCallback((factor) => {
+        setView((previous) => {
+          const element = canvasRef.current;
+          if (!element) return previous;
+          const rect = element.getBoundingClientRect();
+          const px = rect.width / 2;
+          const py = rect.height / 2;
+          const zoom = clampZoom(previous.zoom * factor);
+          const worldX = (px - previous.x) / previous.zoom;
+          const worldY = (py - previous.y) / previous.zoom;
+          return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+        });
+      }, []);
+
+      const zoomTo = useCallback((targetZoom) => {
+        const element = canvasRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        const px = rect.width / 2;
+        const py = rect.height / 2;
+        setView((previous) => {
+          const zoom = clampZoom(targetZoom);
+          const worldX = (px - previous.x) / previous.zoom;
+          const worldY = (py - previous.y) / previous.zoom;
+          return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+        });
+      }, []);
+
+      useEffect(() => {
+        const element = canvasRef.current;
+        if (!element) return undefined;
+        const onWheel = (event) => {
+          event.preventDefault();
+          const rect = element.getBoundingClientRect();
+          const px = event.clientX - rect.left;
+          const py = event.clientY - rect.top;
+          setView((previous) => {
+            const zoom = clampZoom(previous.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12));
+            const worldX = (px - previous.x) / previous.zoom;
+            const worldY = (py - previous.y) / previous.zoom;
+            return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+          });
+        };
+        element.addEventListener('wheel', onWheel, { passive: false });
+        return () => element.removeEventListener('wheel', onWheel);
+      }, []);
+
+      useEffect(() => {
+        if (!interaction) return undefined;
+        const onMove = (event) => {
+          if (interaction.type === 'pan') {
+            setView({
+              ...interaction.origin,
+              x: interaction.origin.x + event.clientX - interaction.startX,
+              y: interaction.origin.y + event.clientY - interaction.startY,
+            });
+            return;
+          }
+          if (interaction.type === 'node') {
+            const zoom = viewRef.current.zoom;
+            const x = interaction.origin.x + (event.clientX - interaction.startX) / zoom;
+            const y = interaction.origin.y + (event.clientY - interaction.startY) / zoom;
+            setOverrides((previous) => ({ ...previous, [interaction.path]: { x, y } }));
+          }
+        };
+        const onUp = () => setInteraction(null);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
+        return () => {
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onUp);
+        };
+      }, [interaction]);
+
+      const portPoint = (path, kind, portName) => {
+        const node = nodeByPath.get(path);
+        const module = modules.get(path);
+        const position = positions.get(path);
+        const size = sizes.get(path);
+        if (!node || !position || !size) return null;
+        const ports = kind === 'input' ? modulePorts(module).inputs : modulePorts(module).outputs;
+        let index = ports.indexOf(portName);
+        if (index < 0) index = 0;
+        if (direction === 'vertical') {
+          return {
+            x: position.x + portX(index, ports.length, size.width),
+            y: position.y + (kind === 'input' ? 0 : size.height),
+          };
+        }
+        return {
+          x: position.x + (kind === 'input' ? 0 : size.width),
+          y: position.y + portTop(index),
+        };
+      };
+
+      const edgeGeometry = useMemo(() => {
+        const list = [];
+        for (const edge of edgesData) {
+          const fromNode = nodeByPath.get(edge.from);
+          const toNode = nodeByPath.get(edge.to);
+          if (!fromNode || !toNode) continue;
+          const fromModule = modules.get(edge.from);
+          const toModule = modules.get(edge.to);
+          const fromPort = edge.fromPort || modulePorts(fromModule).outputs[0] || '';
+          const toPort = edge.toPort || modulePorts(toModule).inputs[0] || '';
+          const start = portPoint(edge.from, 'output', fromPort);
+          const end = portPoint(edge.to, 'input', toPort);
+          if (!start || !end) continue;
+          list.push({ ...edge, d: edgeCurve(start, end, direction).d });
+        }
+        return list;
+      }, [edgesData, nodeByPath, modules, positions, sizes, direction]);
+
+      const bounds = canvasBounds({ nodes }, positions, modules, direction, sizes);
+      const padding = 500;
+      const svgLeft = bounds.minX - padding;
+      const svgTop = bounds.minY - padding;
+      const svgWidth = bounds.width + padding * 2;
+      const svgHeight = bounds.height + padding * 2;
+      const selectedNode = selectedPath ? nodeByPath.get(selectedPath) : null;
+
+      return h(
+        'div',
+        { className: 'ath-run-canvas' },
+        h(
+          'div',
+          {
+            className: 'ath-canvas-viewport ath-run-viewport',
+            ref: canvasRef,
+            onPointerDown: (event) => {
+              if (event.button !== 0) return;
+              setSelectedPath('');
+              setInteraction({
+                type: 'pan',
+                startX: event.clientX,
+                startY: event.clientY,
+                origin: { ...viewRef.current },
+              });
+            },
+            onContextMenu: (event) => event.preventDefault(),
+          },
+          nodes.length
+            ? h(
+                'div',
+                {
+                  className: 'ath-canvas-layer',
+                  style: { transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` },
+                },
+                h(
+                  'svg',
+                  {
+                    className: 'ath-edges',
+                    width: svgWidth,
+                    height: svgHeight,
+                    viewBox: `${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`,
+                    style: { left: svgLeft, top: svgTop, position: 'absolute' },
+                    'aria-hidden': 'true',
+                  },
+                  h(
+                    'defs',
+                    null,
+                    h(
+                      'marker',
+                      {
+                        id: 'ath-run-arrow',
+                        viewBox: '0 0 10 10',
+                        refX: 8,
+                        refY: 5,
+                        markerWidth: 6,
+                        markerHeight: 6,
+                        orient: 'auto-start-reverse',
+                      },
+                      h('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: 'var(--ath-edge)' }),
+                    ),
+                  ),
+                  edgeGeometry.map((edge) =>
+                    h('path', {
+                      key: edge.id,
+                      d: edge.d,
+                      className: 'ath-run-edge',
+                      markerEnd: 'url(#ath-run-arrow)',
+                    }),
+                  ),
+                ),
+                nodes.map((node) => {
+                  const module = modules.get(node.path);
+                  const ports = modulePorts(module);
+                  const position = positions.get(node.path) || { x: 0, y: 0 };
+                  const size = sizes.get(node.path) || nodeSizeFor(module, direction);
+                  const group = RUN_STATUS_GROUP[node.status] || 'pending';
+                  const rows = Math.max(ports.inputs.length, ports.outputs.length);
+                  return h(
+                    'div',
+                    {
+                      key: node.path,
+                      className: 'ath-node-card ath-run-node',
+                      'data-selected': node.path === selectedPath ? 'true' : 'false',
+                      'data-direction': direction,
+                      'data-group': group,
+                      style: { left: position.x, top: position.y, width: size.width, height: size.height },
+                      onPointerDown: (event) => {
+                        if (event.button !== 0) return;
+                        event.stopPropagation();
+                        setSelectedPath(node.path);
+                        const origin = positionsRef.current.get(node.path) || { x: 0, y: 0 };
+                        setInteraction({
+                          type: 'node',
+                          path: node.path,
+                          startX: event.clientX,
+                          startY: event.clientY,
+                          origin,
+                        });
+                      },
+                    },
+                    h(
+                      'div',
+                      { className: 'ath-node-head' },
+                      h('span', { className: 'ath-node-title' }, node.label || node.path),
+                      group === 'running' ? h('span', { className: 'ath-run-pulse' }) : null,
+                      h(
+                        'span',
+                        { className: 'ath-node-sub' },
+                        `${runStatusLabel(t, node.status)} · ${node.moduleName || node.moduleId}`,
+                      ),
+                    ),
+                    direction === 'vertical'
+                      ? h(
+                          'div',
+                          { className: 'ath-node-vports' },
+                          h(
+                            'div',
+                            { className: 'ath-node-vports-row ath-node-vports-top' },
+                            ports.inputs.length
+                              ? ports.inputs.map((port) => h('span', { key: `in-${port}`, className: 'ath-vport-name' }, port))
+                              : null,
+                          ),
+                          h(
+                            'div',
+                            { className: 'ath-node-vports-row ath-node-vports-bottom' },
+                            ports.outputs.map((port) => h('span', { key: `out-${port}`, className: 'ath-vport-name' }, port)),
+                          ),
+                        )
+                      : rows
+                        ? h(
+                            'div',
+                            { className: 'ath-node-ports' },
+                            Array.from({ length: rows }).map((_, row) =>
+                              h(
+                                'div',
+                                { className: 'ath-port-row', key: row },
+                                h('span', { className: 'ath-port-name ath-port-in-name' }, ports.inputs[row] || ''),
+                                h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
+                              ),
+                            ),
+                          )
+                        : null,
+                    ports.inputs.map((port, index) =>
+                      h('div', {
+                        key: `in-${port}`,
+                        className: `ath-port-dot ath-run-port ath-port-in${direction === 'vertical' ? ' ath-port-top' : ''}`,
+                        style:
+                          direction === 'vertical'
+                            ? { left: portX(index, ports.inputs.length, size.width) - 5, top: -5 }
+                            : { top: portTop(index) - 5 },
+                      }),
+                    ),
+                    ports.outputs.map((port, index) =>
+                      h('div', {
+                        key: `out-${port}`,
+                        className: `ath-port-dot ath-run-port ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
+                        style:
+                          direction === 'vertical'
+                            ? { left: portX(index, ports.outputs.length, size.width) - 5, top: size.height - 5 }
+                            : { top: portTop(index) - 5 },
+                      }),
+                    ),
+                  );
+                }),
+              )
+            : h('div', { className: 'ath-canvas-empty' }, h('strong', null, t('runs.noNodes'))),
+          h(
+            'div',
+            { className: 'ath-run-legend', onPointerDown: (event) => event.stopPropagation() },
+            ['succeeded', 'running', 'failed', 'pending'].map((group) =>
+              h(
+                'span',
+                { className: 'ath-run-legend-item', key: group },
+                h('i', { className: 'ath-run-legend-dot', 'data-group': group }),
+                runStatusLabel(t, group),
+              ),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'ath-canvas-tools', onPointerDown: (event) => event.stopPropagation() },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ath-btn ath-btn-ghost',
+                onClick: () => {
+                  setOverrides({});
+                  requestAnimationFrame(() => fitTo(basePositions));
+                },
+              },
+              t('canvas.tidy'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ath-btn ath-btn-ghost',
+                onClick: () => {
+                  setOverrides({});
+                  setSelectedPath('');
+                  requestAnimationFrame(() => fitTo(basePositions));
+                },
+              },
+              t('canvas.reset'),
+            ),
+            h('span', { className: 'ath-tool-sep' }),
+            h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1 / 1.2), title: t('canvas.zoomOut') }, '−'),
+            h(
+              'button',
+              { type: 'button', className: 'ath-zoom-value', onClick: () => zoomTo(1), title: t('canvas.zoomReset') },
+              `${Math.round(view.zoom * 100)}%`,
+            ),
+            h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1.2), title: t('canvas.zoomIn') }, '+'),
+          ),
+          selectedNode
+            ? h(
+                'div',
+                { className: 'ath-run-nodebar', onPointerDown: (event) => event.stopPropagation() },
+                h(
+                  'div',
+                  { className: 'ath-run-nodebar-main' },
+                  h(
+                    'span',
+                    { className: 'ath-status', 'data-status': selectedNode.status },
+                    runStatusLabel(t, selectedNode.status),
+                  ),
+                  h('strong', { className: 'ath-run-nodebar-title' }, selectedNode.label || selectedNode.path),
+                  h('code', { className: 'ath-run-nodebar-path' }, selectedNode.path),
+                  h('span', { className: 'ath-run-nodebar-meta' }, formatDuration(selectedNode.startedAt, selectedNode.endedAt)),
+                  selectedNode.exitCode !== null && selectedNode.exitCode !== undefined
+                    ? h('span', { className: 'ath-run-nodebar-meta' }, `${t('experiments.exitCode')} ${selectedNode.exitCode}`)
+                    : null,
+                ),
+                selectedNode.error ? h('div', { className: 'ath-run-nodebar-error' }, selectedNode.error) : null,
+                h(
+                  'button',
+                  { type: 'button', className: 'ath-btn', onClick: () => onOpenLog(experiment.id, selectedNode) },
+                  t('experiments.log'),
+                ),
+              )
+            : h('div', { className: 'ath-run-hint' }, t('canvas.runHint')),
+        ),
+      );
     }
 
     function ExperimentEditor({
@@ -3178,7 +3727,7 @@ window.__ModuleLoader__.load({
         errors.length
           ? h(
               'div',
-              { className: 'ath-card', style: { borderColor: 'var(--dsw-alias-state-error-primary)', marginBottom: 12 } },
+              { className: 'ath-card', style: { borderColor: 'var(--ath-red)', marginBottom: 12 } },
               errors.map((error, index) => h('div', { className: 'ath-error', key: index }, `· ${error}`)),
             )
           : null,
