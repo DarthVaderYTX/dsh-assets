@@ -63,7 +63,12 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
 }
-.ath-workspace span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ath-workspace span { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ath-workspace-edit {
+  flex: 0 0 auto; border: 0; background: transparent; padding: 0;
+  color: var(--ath-accent); font-size: 10px; cursor: pointer;
+}
+.ath-workspace-edit:hover { text-decoration: underline; }
 .ath-lang-select {
   border: 1px solid var(--ath-border-soft); border-radius: 7px;
   background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);

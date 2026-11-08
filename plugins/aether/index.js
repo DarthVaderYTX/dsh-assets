@@ -3,7 +3,7 @@
 // 职责：保存模块、图、执行环境与实验记录；把图展开成 DAG 计划，解析每个节点的
 // 执行环境并交给对应 Executor；通过 /aether-api 把状态与操作暴露给左侧栏面板。
 // 数据放在 $DSH_HOME/storages/aether，运行产物按实验分目录保存。
-import { promises as fsp } from 'node:fs';
+import { existsSync, promises as fsp, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
@@ -39,8 +39,106 @@ function homeDir() {
   return process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 }
 
-function dataDir() {
+function defaultDataDir() {
   return path.join(homeDir(), 'storages', 'aether');
+}
+
+function workspaceConfigPath() {
+  return path.join(homeDir(), 'storages', 'aether-workspace.json');
+}
+
+function expandHomePath(raw) {
+  const text = String(raw || '').trim();
+  if (text === '~') return os.homedir();
+  if (text.startsWith('~/') || text.startsWith('~\\')) return path.join(os.homedir(), text.slice(2));
+  return text;
+}
+
+let workspaceCache = '';
+let workspaceCacheHome = '';
+
+function workspaceRoot() {
+  const home = homeDir();
+  if (workspaceCache && workspaceCacheHome === home) return workspaceCache;
+  workspaceCacheHome = home;
+  try {
+    const parsed = JSON.parse(readFileSync(workspaceConfigPath(), 'utf8'));
+    const configured = expandHomePath(parsed && parsed.path);
+    workspaceCache = configured ? path.resolve(configured) : defaultDataDir();
+  } catch {
+    workspaceCache = defaultDataDir();
+  }
+  return workspaceCache;
+}
+
+function dataDir() {
+  return workspaceRoot();
+}
+
+function isInsidePath(parent, child) {
+  const relative = path.relative(parent, child);
+  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+async function rewriteRunDirectories(root) {
+  const runsRoot = path.join(root, 'runs');
+  const entries = await fsp.readdir(runsRoot, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(runsRoot, entry.name, 'run.json');
+    try {
+      const run = JSON.parse(await fsp.readFile(file, 'utf8'));
+      run.dir = path.join(runsRoot, entry.name);
+      await fsp.writeFile(file, JSON.stringify(run, null, 2), 'utf8');
+    } catch {
+      // 损坏的运行记录保持原样，不阻塞工作区切换。
+    }
+  }
+}
+
+async function switchWorkspace(rawPath) {
+  const requested = String(rawPath || '').trim();
+  if (!requested) throw httpError(400, '工作区目录不能为空');
+  if (activeRuns.size) throw httpError(409, '仍有实验在运行，请先取消再切换工作区');
+  const current = dataDir();
+  const target = path.resolve(expandHomePath(requested));
+  if (target === current) {
+    return { workspace: target, copied: false, existing: true, unchanged: true };
+  }
+  if (isInsidePath(current, target) || isInsidePath(target, current)) {
+    throw httpError(400, '新工作区不能位于当前工作区内部，也不能包含当前工作区');
+  }
+  const stat = await fsp.stat(target).catch(() => null);
+  if (stat && !stat.isDirectory()) throw httpError(400, '工作区路径必须是一个目录');
+  await fsp.mkdir(target, { recursive: true });
+  const targetState = path.join(target, 'state.json');
+  const hasState = existsSync(targetState);
+  let copied = false;
+  if (!hasState) {
+    const state = await readState();
+    for (const name of ['modules', 'runs']) {
+      const source = path.join(current, name);
+      if (existsSync(source)) {
+        await fsp.cp(source, path.join(target, name), { recursive: true, force: true });
+      }
+    }
+    await fsp.writeFile(targetState, JSON.stringify(state, null, 2), 'utf8');
+    await rewriteRunDirectories(target);
+    copied = true;
+  }
+  await fsp.mkdir(path.dirname(workspaceConfigPath()), { recursive: true });
+  await fsp.writeFile(
+    workspaceConfigPath(),
+    JSON.stringify({ path: target, updatedAt: Date.now() }, null, 2),
+    'utf8',
+  );
+  workspaceCache = target;
+  workspaceCacheHome = homeDir();
+  stateCache = null;
+  stateLoading = null;
+  recoveredRuns = false;
+  await readState();
+  return { workspace: target, copied, existing: hasState, unchanged: false };
 }
 
 function statePath() {
@@ -1029,6 +1127,12 @@ async function handleApi(req, res) {
 
   if (method === 'DELETE' && route === '/experiments') {
     sendJson(res, 200, await deleteExperiment(url.searchParams.get('id') || ''));
+    return;
+  }
+
+  if (method === 'POST' && route === '/workspace') {
+    const body = await readBody(req);
+    sendJson(res, 200, { ok: true, ...(await switchWorkspace(body.path)) });
     return;
   }
 

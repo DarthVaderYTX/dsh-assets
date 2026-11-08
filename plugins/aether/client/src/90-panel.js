@@ -46,6 +46,8 @@
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
       const [newModuleOpen, setNewModuleOpen] = useState(false);
+      const [workspaceOpen, setWorkspaceOpen] = useState(false);
+      const [workspaceBusy, setWorkspaceBusy] = useState(false);
       const [moduleErrors, setModuleErrors] = useState([]);
       const [moduleSaving, setModuleSaving] = useState(false);
       const [confirm, setConfirm] = useState(null);
@@ -394,6 +396,31 @@
         }
       };
 
+      const changeWorkspace = async (pathValue) => {
+        setWorkspaceBusy(true);
+        try {
+          const payload = await request('/workspace', {
+            method: 'POST',
+            body: { path: pathValue },
+          });
+          setWorkspaceOpen(false);
+          setEditorTabs([]);
+          setActiveEditorKey('');
+          setModuleDraft(null);
+          setRunId('');
+          setRunDetail(null);
+          setLogView(null);
+          setOutputView(null);
+          setTab('runs');
+          pushToast(payload.copied ? t('workspace.copied') : t('workspace.switched'));
+          await loadState(true);
+        } catch (error) {
+          fail(error);
+        } finally {
+          setWorkspaceBusy(false);
+        }
+      };
+
       const openRunFolder = async (run) => {
         try {
           await request('/experiments/open', { method: 'POST', body: { id: run.id } });
@@ -694,7 +721,23 @@
           h(
             'div',
             { className: 'ath-top-actions' },
-            data && data.workspace ? h('div', { className: 'ath-workspace', title: data.workspace }, h('span', null, data.workspace)) : null,
+            data && data.workspace
+              ? h(
+                  'div',
+                  { className: 'ath-workspace', title: data.workspace },
+                  h('span', null, data.workspace),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-workspace-edit',
+                      onClick: () => setWorkspaceOpen(true),
+                      title: t('workspace.change'),
+                    },
+                    t('workspace.change'),
+                  ),
+                )
+              : null,
             h(
               'select',
               {
@@ -797,6 +840,15 @@
             )
           : null,
         h('div', { className: 'ath-body' }, content),
+        workspaceOpen
+          ? h(WorkspaceDialog, {
+              t,
+              current: data ? data.workspace : '',
+              busy: workspaceBusy,
+              onClose: () => setWorkspaceOpen(false),
+              onSubmit: (pathValue) => void changeWorkspace(pathValue),
+            })
+          : null,
         newModuleOpen
           ? h(NewModuleDialog, {
               t,

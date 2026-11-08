@@ -25,6 +25,15 @@ window.__ModuleLoader__.load({
       'tab.experiments': '实验',
       'tab.modules': '模块',
       workspace: '工作区',
+      'workspace.title': '工作区',
+      'workspace.change': '更改',
+      'workspace.current': '当前目录',
+      'workspace.pathLabel': '工作区目录',
+      'workspace.pathHint': '所有模块、数据集、子图、实验与运行都会保存在此目录。目标目录为空时会复制当前数据；已有 state.json 时会直接切换到该工作区。',
+      'workspace.apply': '切换工作区',
+      'workspace.busy': '切换中…',
+      'workspace.copied': '工作区已切换，并迁移了当前数据',
+      'workspace.switched': '工作区已切换',
       'language.title': '插件语言',
       'language.auto': '自动',
       'language.zh': '中文',
@@ -321,6 +330,15 @@ window.__ModuleLoader__.load({
       'tab.experiments': 'Experiments',
       'tab.modules': 'Modules',
       workspace: 'Workspace',
+      'workspace.title': 'Workspace',
+      'workspace.change': 'Change',
+      'workspace.current': 'Current directory',
+      'workspace.pathLabel': 'Workspace directory',
+      'workspace.pathHint': 'Modules, datasets, subgraphs, experiments and runs are stored here. An empty target is copied from the current workspace; a target with state.json is opened as-is.',
+      'workspace.apply': 'Switch workspace',
+      'workspace.busy': 'Switching…',
+      'workspace.copied': 'Workspace switched; current data was migrated',
+      'workspace.switched': 'Workspace switched',
       'language.title': 'Plugin language',
       'language.auto': 'Auto',
       'language.zh': '中文',
@@ -676,7 +694,12 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
 }
-.ath-workspace span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ath-workspace span { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ath-workspace-edit {
+  flex: 0 0 auto; border: 0; background: transparent; padding: 0;
+  color: var(--ath-accent); font-size: 10px; cursor: pointer;
+}
+.ath-workspace-edit:hover { text-decoration: underline; }
 .ath-lang-select {
   border: 1px solid var(--ath-border-soft); border-radius: 7px;
   background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
@@ -1777,6 +1800,47 @@ window.__ModuleLoader__.load({
         action || null,
       );
     }
+
+function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
+  const [pathValue, setPathValue] = useState(current || '');
+  return h(
+    Modal,
+    {
+      t,
+      title: t('workspace.title'),
+      onClose: busy ? () => {} : onClose,
+      footer: [
+        h('button', { key: 'cancel', type: 'button', className: 'ath-btn', onClick: onClose, disabled: busy }, t('action.cancel')),
+        h(
+          'button',
+          {
+            key: 'apply',
+            type: 'button',
+            className: 'ath-btn ath-btn-primary',
+            disabled: busy || !pathValue.trim(),
+            onClick: () => onSubmit(pathValue.trim()),
+          },
+          busy ? t('workspace.busy') : t('workspace.apply'),
+        ),
+      ],
+    },
+    h(
+      'div',
+      { className: 'ath-field' },
+      h('label', { className: 'ath-label' }, t('workspace.pathLabel')),
+      h('input', {
+        className: 'ath-input ath-mono',
+        type: 'text',
+        value: pathValue,
+        spellCheck: false,
+        placeholder: 'D:\\workspaces\\aether',
+        onChange: (event) => setPathValue(event.target.value),
+      }),
+      h('div', { className: 'ath-hint' }, t('workspace.pathHint')),
+    ),
+    h('div', { className: 'ath-hint' }, `${t('workspace.current')}: ${current || ''}`),
+  );
+}
 
 // ---- client/src/50-run-views.js ----
     // ---------------------------------------------------------- 实验
@@ -5308,6 +5372,8 @@ window.__ModuleLoader__.load({
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
       const [newModuleOpen, setNewModuleOpen] = useState(false);
+      const [workspaceOpen, setWorkspaceOpen] = useState(false);
+      const [workspaceBusy, setWorkspaceBusy] = useState(false);
       const [moduleErrors, setModuleErrors] = useState([]);
       const [moduleSaving, setModuleSaving] = useState(false);
       const [confirm, setConfirm] = useState(null);
@@ -5656,6 +5722,31 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const changeWorkspace = async (pathValue) => {
+        setWorkspaceBusy(true);
+        try {
+          const payload = await request('/workspace', {
+            method: 'POST',
+            body: { path: pathValue },
+          });
+          setWorkspaceOpen(false);
+          setEditorTabs([]);
+          setActiveEditorKey('');
+          setModuleDraft(null);
+          setRunId('');
+          setRunDetail(null);
+          setLogView(null);
+          setOutputView(null);
+          setTab('runs');
+          pushToast(payload.copied ? t('workspace.copied') : t('workspace.switched'));
+          await loadState(true);
+        } catch (error) {
+          fail(error);
+        } finally {
+          setWorkspaceBusy(false);
+        }
+      };
+
       const openRunFolder = async (run) => {
         try {
           await request('/experiments/open', { method: 'POST', body: { id: run.id } });
@@ -5956,7 +6047,23 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'ath-top-actions' },
-            data && data.workspace ? h('div', { className: 'ath-workspace', title: data.workspace }, h('span', null, data.workspace)) : null,
+            data && data.workspace
+              ? h(
+                  'div',
+                  { className: 'ath-workspace', title: data.workspace },
+                  h('span', null, data.workspace),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-workspace-edit',
+                      onClick: () => setWorkspaceOpen(true),
+                      title: t('workspace.change'),
+                    },
+                    t('workspace.change'),
+                  ),
+                )
+              : null,
             h(
               'select',
               {
@@ -6059,6 +6166,15 @@ window.__ModuleLoader__.load({
             )
           : null,
         h('div', { className: 'ath-body' }, content),
+        workspaceOpen
+          ? h(WorkspaceDialog, {
+              t,
+              current: data ? data.workspace : '',
+              busy: workspaceBusy,
+              onClose: () => setWorkspaceOpen(false),
+              onSubmit: (pathValue) => void changeWorkspace(pathValue),
+            })
+          : null,
         newModuleOpen
           ? h(NewModuleDialog, {
               t,

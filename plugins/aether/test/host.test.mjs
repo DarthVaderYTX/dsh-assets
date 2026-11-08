@@ -3,7 +3,7 @@ import test, { after, before } from 'node:test';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { promises as fsp } from 'node:fs';
+import { existsSync, promises as fsp } from 'node:fs';
 
 import { apply } from '../index.js';
 
@@ -560,4 +560,31 @@ test('cancelling a running experiment settles as cancelled', async () => {
   const run = await waitForRun(id);
   assert.equal(run.status, 'cancelled');
   assert.equal(run.nodes[0].status, 'cancelled');
+});
+
+test('switching workspace migrates state and runs under the new root', async () => {
+  const before = await call('/state');
+  const moduleCount = before.payload.modules.length;
+  const target = path.join(home, 'custom-workspace');
+
+  const switched = await call('/workspace', {
+    method: 'POST',
+    body: { path: target },
+  });
+  assert.equal(switched.status, 200);
+  assert.equal(switched.payload.workspace, target);
+  assert.equal(switched.payload.copied, true);
+  assert.equal(existsSync(path.join(target, 'state.json')), true);
+  assert.equal(existsSync(path.join(target, 'modules', 'assets')), true);
+
+  const after = await call('/state');
+  assert.equal(after.payload.workspace, target);
+  assert.equal(after.payload.modules.length, moduleCount);
+
+  const nested = await call('/workspace', {
+    method: 'POST',
+    body: { path: path.join(target, 'nested') },
+  });
+  assert.equal(nested.status, 400);
+  assert.match(nested.payload.error, /不能位于当前工作区内部/);
 });

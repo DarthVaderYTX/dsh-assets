@@ -271,3 +271,44 @@
         action || null,
       );
     }
+
+function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
+  const [pathValue, setPathValue] = useState(current || '');
+  return h(
+    Modal,
+    {
+      t,
+      title: t('workspace.title'),
+      onClose: busy ? () => {} : onClose,
+      footer: [
+        h('button', { key: 'cancel', type: 'button', className: 'ath-btn', onClick: onClose, disabled: busy }, t('action.cancel')),
+        h(
+          'button',
+          {
+            key: 'apply',
+            type: 'button',
+            className: 'ath-btn ath-btn-primary',
+            disabled: busy || !pathValue.trim(),
+            onClick: () => onSubmit(pathValue.trim()),
+          },
+          busy ? t('workspace.busy') : t('workspace.apply'),
+        ),
+      ],
+    },
+    h(
+      'div',
+      { className: 'ath-field' },
+      h('label', { className: 'ath-label' }, t('workspace.pathLabel')),
+      h('input', {
+        className: 'ath-input ath-mono',
+        type: 'text',
+        value: pathValue,
+        spellCheck: false,
+        placeholder: 'D:\\workspaces\\aether',
+        onChange: (event) => setPathValue(event.target.value),
+      }),
+      h('div', { className: 'ath-hint' }, t('workspace.pathHint')),
+    ),
+    h('div', { className: 'ath-hint' }, `${t('workspace.current')}: ${current || ''}`),
+  );
+}

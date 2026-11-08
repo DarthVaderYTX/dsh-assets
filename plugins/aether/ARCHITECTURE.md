@@ -68,6 +68,10 @@ npm run build
 - `npm run check` 或 `node --test test` 会检查 `client.js` 是否与源码片段一致。
 - 之所以生成单文件：DSH 客户端每个插件只物化一个 bundle，片段拼接既保持运行时简单，又避免 6000 行单文件。
 
+## 工作区
+
+`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。模块（含数据集、子图）、实验、运行与模块资产都写在该目录下。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。
+
 ## 数据版本
 
 `const DATA_VERSION = 6`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。

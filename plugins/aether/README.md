@@ -140,10 +140,17 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 ## 数据与工作区
 
-默认工作区是 `$DSH_HOME/storages/aether`：
+默认工作区是 `$DSH_HOME/storages/aether`；也可以点顶栏工作区路径旁的「更改」指定任意目录。切换后，`state.json`（模块、数据集、子图、实验定义）与 `modules/assets`、`runs` 全部保存在新工作区下。
+
+切换规则：
+- 目标目录为空：复制当前 `state.json`、`modules`、`runs` 后切换；
+- 目标目录已有 `state.json`：直接打开该工作区，不覆盖其中数据；
+- 有运行中的实验、目标位于当前工作区内部（或包含当前工作区）时拒绝切换。
+
+工作区配置保存在固定位置 `$DSH_HOME/storages/aether-workspace.json`（只是路径指针，不属于业务数据）。
 
 ```
-storages/aether/
+<workspace>/
   state.json              # 模块（含端口、版本历史、文件引用）、实验（含节点坐标与连线端口）、执行环境目录
   modules/assets/<id>/    # 新建命令模块时提交的文件或目录
   runs/<run-id>/
@@ -178,6 +185,7 @@ storages/aether/
 | DELETE | `/experiments?id=` | 删除运行（运行中拒绝） |
 | GET | `/experiments/logs?run=&node=&stream=out\|err` | 节点日志 |
 | GET | `/experiments/download?run=&node=&port=` | 下载节点输出（附件，文件名带端口） |
+| POST | `/workspace` | 切换工作区（`{ path }`）；空目录会迁移当前数据，已有 `state.json` 则直接打开 |
 | POST | `/workspace/open` | 打开 Aether 工作区 |
 
 所有接口返回 `{ ok: true, ... }` 或 `{ ok: false, error }`。写接口带 2MB 请求体上限。
@@ -204,7 +212,7 @@ storages/aether/
 - `client.js`：构建产物，唯一被 DSH 加载的客户端文件。源码在 `client/src/` 按职责拆成文案、样式、工具、小部件、运行视图、图列表、画布、实验编辑器、模块库、主面板与注册片段；修改源码后运行 `npm run build`。
 - `test/dag.test.mjs`：图核心单测（拓扑、环、子图展开、嵌套子图、参数继承、环境与端口校验、坐标与布局方向、旧连线迁移）。
 - `test/executor.test.mjs`：环境解析与执行器描述。
-- `test/host.test.mjs`：用假 `ctx` 起真实 HTTP 服务，覆盖种子数据、CRUD 保护、环拒绝、子图不可单独运行、端口与坐标往返、必填输入校验、数据集节点、模块版本、模块文件上传与无命令执行、子图执行、失败传播、取消与 placement 快照。
+- `test/host.test.mjs`：用假 `ctx` 起真实 HTTP 服务，覆盖种子数据、CRUD 保护、环拒绝、子图不可单独运行、端口与坐标往返、必填输入校验、数据集节点、模块版本、模块文件上传与无命令执行、子图执行、工作区切换/迁移、失败传播、取消与 placement 快照。
 - `test/client-build.test.mjs`：确保 `client.js` 与 `client/src/` 片段一致。
 
 ```bash
