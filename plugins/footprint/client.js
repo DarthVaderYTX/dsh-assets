@@ -1355,6 +1355,7 @@ window.__ModuleLoader__.load({
     }
 
     function TripDrawer({
+      open,
       trips,
       activeTripId,
       onSelect,
@@ -1371,6 +1372,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         setConfirmDelete(false)
       }, [activeTripId])
+      if (!open) return null
       return h(
         'div',
         {
@@ -2913,6 +2915,7 @@ window.__ModuleLoader__.load({
           pendingName: pendingTripItemRef.current?.name || '',
         }),
         h(TripDrawer, {
+          open: tripDrawerOpen,
           trips,
           activeTripId,
           onSelect: (id) => void selectTrip(id),
