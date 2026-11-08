@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Aether",
+    "description": "A directed-acyclic-graph task execution manager in the left sidebar: keep reusable modules (commands or subgraphs), compose experiment DAGs and nested subgraphs from module usages and edges, then submit experiments that run in dependency order with per-node status, logs and artifacts."
+  }
+}

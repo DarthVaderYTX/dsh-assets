@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Aether">
+  <defs>
+    <linearGradient id="aether-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="0.55" stop-color="#12233b"/>
+      <stop offset="1" stop-color="#1b3350"/>
+    </linearGradient>
+    <linearGradient id="aether-edge" x1="14" y1="16" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#60a5fa"/>
+    </linearGradient>
+    <radialGradient id="aether-glow" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#aether-bg)"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#3b82f6" stroke-opacity="0.22"/>
+  <circle cx="32" cy="30" r="25" fill="url(#aether-glow)"/>
+  <g stroke="#5eead4" stroke-opacity="0.18" stroke-width="1">
+    <path d="M10 16h44M10 32h44M10 48h44M16 10v44M32 10v44M48 10v44"/>
+  </g>
+  <g fill="none" stroke="url(#aether-edge)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 20h28"/>
+    <path d="M46 20 32 45"/>
+    <path d="M18 20 32 45" stroke-opacity="0.72"/>
+  </g>
+  <g>
+    <circle cx="18" cy="20" r="5.2" fill="#0a1524" stroke="#5eead4" stroke-width="2.8"/>
+    <circle cx="46" cy="20" r="5.2" fill="#0a1524" stroke="#7dd3fc" stroke-width="2.8"/>
+    <circle cx="32" cy="45" r="5.2" fill="#0a1524" stroke="#60a5fa" stroke-width="2.8"/>
+  </g>
+  <g fill="#5eead4">
+    <circle cx="18" cy="20" r="1.5"/>
+  </g>
+  <g fill="#7dd3fc">
+    <circle cx="46" cy="20" r="1.5"/>
+  </g>
+  <g fill="#93c5fd">
+    <circle cx="32" cy="45" r="1.5"/>
+  </g>
+  <path d="M29.6 44.2 32 46.9l2.4-2.7" fill="none" stroke="#0a1524" stroke-width="1.1" stroke-linecap="round"/>
+</svg>
