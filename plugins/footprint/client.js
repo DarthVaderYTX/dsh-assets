@@ -41,6 +41,8 @@ window.__ModuleLoader__.load({
       'globe.retry': '重新加载',
       'globe.ready': 'CesiumJS · 自适应底图',
       'globe.coords': '光标坐标',
+      'area.locating': '识别地区…',
+      'area.unknown': '未知区域',
       'place.located': '已定位',
       'place.guide': '内置导览',
       'place.intro': '关于这里',
@@ -108,6 +110,8 @@ window.__ModuleLoader__.load({
       'globe.retry': 'Try again',
       'globe.ready': 'CesiumJS · adaptive basemap',
       'globe.coords': 'Cursor coordinates',
+      'area.locating': 'Locating area…',
+      'area.unknown': 'Unknown area',
       'place.located': 'Located',
       'place.guide': 'Built-in guide',
       'place.intro': 'About this place',
@@ -303,7 +307,16 @@ window.__ModuleLoader__.load({
 .fp-globe::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 48%, rgba(0,3,8,.48) 100%); }
 .fp-hud { position: absolute; z-index: 2; top: 14px; left: 16px; display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.13); background: rgba(6,14,24,.7); backdrop-filter: blur(10px); color: rgba(231,240,250,.86); font-size: 10.5px; letter-spacing: .015em; pointer-events: none; }
 .fp-hud-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fp-teal); box-shadow: 0 0 0 3px rgba(99,230,213,.12); }
-.fp-coord-hud { position: absolute; z-index: 3; right: 16px; top: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 8px; border: 1px solid rgba(255,255,255,.11); background: rgba(6,14,24,.58); backdrop-filter: blur(8px); color: rgba(231,240,250,.7); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; pointer-events: none; }
+.fp-loc-hud { position: absolute; z-index: 3; right: 16px; top: 14px; width: min(300px, calc(100% - 32px)); display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border-radius: 11px; border: 1px solid rgba(255,255,255,.13); background: rgba(6,14,24,.72); backdrop-filter: blur(12px); color: rgba(231,240,250,.9); pointer-events: none; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+.fp-loc-mark { width: 22px; height: 22px; flex: 0 0 auto; margin-top: 1px; border-radius: 50%; border: 1px solid rgba(244,176,74,.45); background: rgba(244,176,74,.12); display: grid; place-items: center; }
+.fp-loc-mark span { width: 7px; height: 7px; border-radius: 50%; background: var(--fp-amber); box-shadow: 0 0 0 3px rgba(244,176,74,.12); }
+.fp-loc-body { min-width: 0; flex: 1 1 auto; }
+.fp-loc-name { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.35; font-weight: 650; color: #f0f7ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-loc-name::after { content: ''; width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--fp-teal); opacity: 0; }
+.fp-loc-hud[data-loading="true"] .fp-loc-name::after { opacity: .9; animation: fp-pulse 1.1s ease-in-out infinite; }
+.fp-loc-detail { margin-top: 2px; font-size: 10px; line-height: 1.35; color: rgba(220,235,250,.58); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-loc-coord { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.3; color: rgba(220,235,250,.78); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+@keyframes fp-pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 .fp-map-attribution { position: absolute; z-index: 2; left: 16px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; max-width: calc(100% - 120px); font-size: 9px; line-height: 1.4; color: rgba(226,238,250,.52); pointer-events: none; }
 .fp-map-attribution a { color: inherit; pointer-events: auto; }
 
@@ -345,6 +358,8 @@ window.__ModuleLoader__.load({
   .fp-side-scroll { padding: 0 12px 20px; }
   .fp-welcome-sub { font-size: 11.5px; }
   .fp-welcome-hint { display: none; }
+  .fp-loc-hud { right: 10px; top: 10px; width: min(245px, calc(100% - 20px)); }
+  .fp-loc-detail { display: none; }
 }
 `
 
@@ -476,6 +491,17 @@ window.__ModuleLoader__.load({
       return `${km.toFixed(1)} ${t('distance.km')}`
     }
 
+    function formatLatLon(lat, lon, lang) {
+      const ns = lat >= 0 ? 'N' : 'S'
+      const ew = lon >= 0 ? 'E' : 'W'
+      const latText = Math.abs(lat).toFixed(4)
+      const lonText = Math.abs(lon).toFixed(4)
+      if (lang === 'zh') {
+        return `${lat >= 0 ? '北纬' : '南纬'} ${latText}° · ${lon >= 0 ? '东经' : '西经'} ${lonText}°`
+      }
+      return `${latText}° ${ns} · ${lonText}° ${ew}`
+    }
+
     function kindLabel(kind, t) {
       const key = `kind.${String(kind || '').toLowerCase()}`
       const label = t(key)
@@ -502,11 +528,27 @@ window.__ModuleLoader__.load({
 
     function bodyAtmosphere(Cesium, viewer) {
       const scene = viewer.scene
+      // Use the device pixel ratio instead of Cesium's default CSS-resolution
+      // canvas, so imagery and labels stay sharp on 1.5x/2x displays.
+      try {
+        const dpr = window.devicePixelRatio || 1
+        const widget = viewer.cesiumWidget
+        if (widget) {
+          widget.useBrowserRecommendedResolution = false
+          widget.resolutionScale = Math.min(1, 2 / dpr)
+        }
+      } catch {
+        // The canvas still renders at the default resolution if this is unavailable.
+      }
       scene.backgroundColor = Cesium.Color.fromCssColorString('#02050a')
       scene.globe.baseColor = Cesium.Color.fromCssColorString('#071626')
       scene.globe.showGroundAtmosphere = true
       scene.globe.enableLighting = false
       scene.globe.depthTestAgainstTerrain = false
+      scene.globe.maximumScreenSpaceError = 1.1
+      scene.globe.tileCacheSize = 320
+      scene.globe.preloadAncestors = true
+      scene.globe.preloadSiblings = true
       if (scene.skyAtmosphere) {
         scene.skyAtmosphere.show = true
         scene.skyAtmosphere.brightnessShift = 0.18
@@ -517,7 +559,7 @@ window.__ModuleLoader__.load({
         scene.fog.density = 0.00016
       }
       if (scene.screenSpaceCameraController) {
-        scene.screenSpaceCameraController.minimumZoomDistance = 900
+        scene.screenSpaceCameraController.minimumZoomDistance = 500
         scene.screenSpaceCameraController.maximumZoomDistance = 60000000
         scene.screenSpaceCameraController.inertiaSpin = 0.82
         scene.screenSpaceCameraController.inertiaTranslate = 0.82
@@ -1011,17 +1053,27 @@ window.__ModuleLoader__.load({
       const [activeAttraction, setActiveAttraction] = React.useState('')
       const [copied, setCopied] = React.useState(false)
       const [cursor, setCursor] = React.useState(null)
+      const [cursorPlace, setCursorPlace] = React.useState(null)
+      const [reverseLoading, setReverseLoading] = React.useState(false)
       const searchAbort = React.useRef(null)
       const detailAbort = React.useRef(null)
       const candidateRef = React.useRef(null)
       const copiedTimer = React.useRef(null)
       const langRef = React.useRef(lang)
+      const pointerRef = React.useRef({ inside: false, x: 0, y: 0 })
+      const cursorKeyRef = React.useRef('')
+      const reverseCacheRef = React.useRef(new Map())
+      const reverseTimerRef = React.useRef(null)
+      const reverseAbortRef = React.useRef(null)
+      const pendingReverseRef = React.useRef(null)
 
       React.useEffect(
         () => () => {
           if (searchAbort.current) searchAbort.current.abort()
           if (detailAbort.current) detailAbort.current.abort()
           if (copiedTimer.current) window.clearTimeout(copiedTimer.current)
+          if (reverseTimerRef.current) window.clearTimeout(reverseTimerRef.current)
+          if (reverseAbortRef.current) reverseAbortRef.current.abort()
         },
         [],
       )
@@ -1043,6 +1095,59 @@ window.__ModuleLoader__.load({
         }
         return payload
       }, [])
+
+      const runReverse = React.useCallback(async () => {
+        const pending = pendingReverseRef.current
+        if (!pending) return
+        if (reverseAbortRef.current) reverseAbortRef.current.abort()
+        const controller = new AbortController()
+        reverseAbortRef.current = controller
+        try {
+          const payload = await apiGet(
+            `${API}/reverse?lat=${encodeURIComponent(pending.lat)}&lon=${encodeURIComponent(pending.lon)}&lang=${lang}`,
+            controller.signal,
+          )
+          const place = payload.place || null
+          reverseCacheRef.current.set(pending.key, place)
+          if (controller.signal.aborted) return
+          if (pendingReverseRef.current?.key === pending.key) {
+            setCursorPlace(place)
+            setReverseLoading(Boolean(reverseTimerRef.current))
+          }
+        } catch (error) {
+          if (error?.name === 'AbortError') return
+          if (pendingReverseRef.current?.key === pending.key) {
+            setCursorPlace(null)
+            setReverseLoading(false)
+          }
+        }
+      }, [apiGet, lang])
+
+      const scheduleReverse = React.useCallback(
+        (lat, lon) => {
+          const key = `${lang}|${Number(lat).toFixed(3)}|${Number(lon).toFixed(3)}`
+          const cached = reverseCacheRef.current.get(key)
+          if (cached) {
+            pendingReverseRef.current = { lat, lon, key }
+            if (reverseTimerRef.current) {
+              window.clearTimeout(reverseTimerRef.current)
+              reverseTimerRef.current = null
+            }
+            if (reverseAbortRef.current) reverseAbortRef.current.abort()
+            setCursorPlace(cached)
+            setReverseLoading(false)
+            return
+          }
+          pendingReverseRef.current = { lat, lon, key }
+          setReverseLoading(true)
+          if (reverseTimerRef.current) return
+          reverseTimerRef.current = window.setTimeout(() => {
+            reverseTimerRef.current = null
+            void runReverse()
+          }, 550)
+        },
+        [lang, runReverse],
+      )
 
       const openPlace = React.useCallback(
         async (candidate) => {
@@ -1123,6 +1228,10 @@ window.__ModuleLoader__.load({
         if (candidateRef.current) void openPlace(candidateRef.current)
       }, [lang, openPlace])
 
+      React.useEffect(() => {
+        if (cursor) scheduleReverse(cursor.lat, cursor.lon)
+      }, [lang])
+
       const onGlobePick = React.useCallback((attractionId) => {
         setActiveAttraction(attractionId)
       }, [])
@@ -1168,41 +1277,88 @@ window.__ModuleLoader__.load({
       }, [detail])
 
       React.useEffect(() => {
-        if (!globeRef.current) return undefined
         const element = globeRef.current
+        if (!element) return undefined
+        const Cesium = window.Cesium
+        if (!Cesium) return undefined
+        const viewer = element.__footprintViewer
         let frame = null
+        let lastCameraSample = 0
+
+        const sample = (clientX, clientY) => {
+          try {
+            const rect = element.getBoundingClientRect()
+            const position = new Cesium.Cartesian2(clientX - rect.left, clientY - rect.top)
+            const cartesian = viewerPickPosition(element, position)
+            if (!cartesian) return
+            const carto = Cesium.Cartographic.fromCartesian(cartesian)
+            if (!carto) return
+            const lat = Cesium.Math.toDegrees(carto.latitude)
+            const lon = Cesium.Math.toDegrees(carto.longitude)
+            const key = `${lat.toFixed(5)},${lon.toFixed(5)}`
+            if (cursorKeyRef.current === key) return
+            cursorKeyRef.current = key
+            setCursor({ lat, lon })
+            scheduleReverse(lat, lon)
+          } catch {
+            // Cursor readout is decorative; never let it interrupt globe interaction.
+          }
+        }
+
         const onMove = (event) => {
+          pointerRef.current.inside = true
+          pointerRef.current.x = event.clientX
+          pointerRef.current.y = event.clientY
           if (frame) return
           frame = window.requestAnimationFrame(() => {
             frame = null
-            const Cesium = window.Cesium
-            if (!Cesium) return
-            try {
-              const position = new Cesium.Cartesian2(event.clientX - element.getBoundingClientRect().left, event.clientY - element.getBoundingClientRect().top)
-              const cartesian = viewerPickPosition(element, position)
-              if (cartesian) {
-                const carto = Cesium.Cartographic.fromCartesian(cartesian)
-                if (carto) {
-                  setCursor({
-                    lat: Cesium.Math.toDegrees(carto.latitude),
-                    lon: Cesium.Math.toDegrees(carto.longitude),
-                  })
-                }
-              }
-            } catch {
-              // Cursor readout is decorative; never let it interrupt globe interaction.
-            }
+            sample(pointerRef.current.x, pointerRef.current.y)
           })
         }
-        const onLeave = () => setCursor(null)
+
+        const onLeave = () => {
+          pointerRef.current.inside = false
+          cursorKeyRef.current = ''
+          setCursor(null)
+          setCursorPlace(null)
+          setReverseLoading(false)
+          pendingReverseRef.current = null
+          if (reverseTimerRef.current) {
+            window.clearTimeout(reverseTimerRef.current)
+            reverseTimerRef.current = null
+          }
+          if (reverseAbortRef.current) reverseAbortRef.current.abort()
+        }
+
+        // While the user drags or zooms, the point under a stationary pointer
+        // changes too. Re-sample on camera changes so the coordinate/name readout
+        // follows the actual globe, not only the last mousemove.
+        const onCameraChange = () => {
+          if (!pointerRef.current.inside) return
+          const now = performance.now()
+          if (now - lastCameraSample < 70) return
+          lastCameraSample = now
+          if (frame) return
+          frame = window.requestAnimationFrame(() => {
+            frame = null
+            sample(pointerRef.current.x, pointerRef.current.y)
+          })
+        }
+
         element.addEventListener('mousemove', onMove)
         element.addEventListener('mouseleave', onLeave)
+        if (viewer && !viewer.isDestroyed()) {
+          viewer.camera.changed.addEventListener(onCameraChange)
+        }
         return () => {
           if (frame) window.cancelAnimationFrame(frame)
           element.removeEventListener('mousemove', onMove)
           element.removeEventListener('mouseleave', onLeave)
+          if (viewer && !viewer.isDestroyed()) {
+            viewer.camera.changed.removeEventListener(onCameraChange)
+          }
         }
-      }, [])
+      }, [globe.status, scheduleReverse])
 
       const showWelcome = !detail && !detailBusy && !detailError
       return h(
@@ -1425,8 +1581,26 @@ window.__ModuleLoader__.load({
             cursor
               ? h(
                   'div',
-                  { className: 'fp-coord-hud' },
-                  `${cursor.lat.toFixed(2)}°, ${cursor.lon.toFixed(2)}°`,
+                  {
+                    className: 'fp-loc-hud',
+                    'data-loading': reverseLoading ? 'true' : 'false',
+                    'aria-live': 'polite',
+                    title: cursorPlace?.displayName || '',
+                  },
+                  h('span', { className: 'fp-loc-mark', 'aria-hidden': 'true' }, h('span')),
+                  h(
+                    'div',
+                    { className: 'fp-loc-body' },
+                    h(
+                      'div',
+                      { className: 'fp-loc-name' },
+                      cursorPlace?.label || (reverseLoading ? t('area.locating') : t('area.unknown')),
+                    ),
+                    cursorPlace?.detail
+                      ? h('div', { className: 'fp-loc-detail' }, cursorPlace.detail)
+                      : null,
+                    h('div', { className: 'fp-loc-coord' }, formatLatLon(cursor.lat, cursor.lon, lang)),
+                  ),
                 )
               : null,
             showWelcome

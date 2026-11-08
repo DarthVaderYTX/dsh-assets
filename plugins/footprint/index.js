@@ -18,6 +18,7 @@ const VENDOR_PREFIX = '/footprint-vendor'
 const USER_AGENT = 'FootPrint-DSH/1.0 (local Cesium globe plugin)'
 const SEARCH_TTL = 10 * 60 * 1000
 const PLACE_TTL = 30 * 60 * 1000
+const REVERSE_TTL = 24 * 60 * 60 * 1000
 
 const MIME = {
   '.js': 'text/javascript; charset=utf-8',
@@ -47,7 +48,10 @@ const MIME = {
 
 const searchCache = new Map()
 const placeCache = new Map()
+const reverseCache = new Map()
 const inflight = new Map()
+let reverseQueue = Promise.resolve()
+let lastReverseAt = 0
 
 function sendJson(res, status, value) {
   const body = JSON.stringify(value)
@@ -272,6 +276,110 @@ export async function searchPlaces(query, lang) {
   }
   const places = dedupeCandidates([...local.filter(Boolean), ...remote]).slice(0, 8)
   return { places, online }
+}
+
+function uniqueParts(values) {
+  return values
+    .map((value) => cleanText(String(value || '').split(';')[0]))
+    .filter((value, index, list) => value && list.indexOf(value) === index)
+}
+
+function preferLanguageScript(parts, lang) {
+  if (parts.length < 2) return parts
+  const cjk = /[\u4e00-\u9fff]/
+  const preferred = parts.filter((part) => (lang === 'zh') === cjk.test(part))
+  return preferred.length ? preferred : parts
+}
+
+async function reverseRemote(lat, lon, lang) {
+  const url = new URL('https://nominatim.openstreetmap.org/reverse')
+  url.searchParams.set('lat', String(lat))
+  url.searchParams.set('lon', String(lon))
+  url.searchParams.set('format', 'jsonv2')
+  url.searchParams.set('zoom', '16')
+  url.searchParams.set('addressdetails', '1')
+  url.searchParams.set('namedetails', '1')
+  url.searchParams.set('accept-language', acceptLanguage(lang))
+  const data = await fetchJson(url, lang, 9000)
+  if (!data || data.error) throw new Error(data?.error || 'Reverse geocode failed')
+  const address = data.address || {}
+  const city =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.county ||
+    ''
+  const district = address.city_district || address.district || address.borough || ''
+  const suburb = address.suburb || address.neighbourhood || address.quarter || ''
+  const road = address.road || address.pedestrian || address.footpath || ''
+  const labelParts = preferLanguageScript(uniqueParts([city, district]), lang)
+  const fallbackParts = preferLanguageScript(uniqueParts([address.state, address.country]), lang)
+  const detailParts = uniqueParts([suburb, road])
+  return {
+    label: labelParts.join(' · ') || fallbackParts.join(' · ') || data.name || '',
+    detail: detailParts.join(' · '),
+    name: data.name || '',
+    displayName: cleanText(data.display_name || ''),
+    kind: data.addresstype || data.type || '',
+    lat,
+    lon,
+    source: 'osm',
+  }
+}
+
+// Nominatim's public service asks for at most one request per second. The
+// client already debounces, but serializing here also protects against a
+// second FootPrint panel or a quick language switch.
+async function reverseRemoteThrottled(lat, lon, lang) {
+  const task = reverseQueue.then(async () => {
+    const wait = Math.max(0, 1000 - (Date.now() - lastReverseAt))
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+    try {
+      return await reverseRemote(lat, lon, lang)
+    } finally {
+      lastReverseAt = Date.now()
+    }
+  })
+  reverseQueue = task.catch(() => {})
+  return task
+}
+
+export async function reverseGeocode(lat, lon, lang) {
+  const key = `${lang}|${lat.toFixed(3)}|${lon.toFixed(3)}`
+  try {
+    const place = await getCached(reverseCache, key, REVERSE_TTL, () =>
+      reverseRemoteThrottled(lat, lon, lang),
+    )
+    if (place?.label) return place
+  } catch {
+    // Fall through to the built-in area name.
+  }
+  const nearest = nearestCurated(lat, lon)
+  if (nearest && nearest.distanceKm <= 80) {
+    return {
+      label: lang === 'zh' ? nearest.place.name : nearest.place.nameEn,
+      detail: lang === 'zh' ? '内置城市范围' : 'Built-in city area',
+      name: '',
+      displayName: '',
+      kind: 'city',
+      lat,
+      lon,
+      source: 'guide',
+      approximate: true,
+    }
+  }
+  return {
+    label: '',
+    detail: '',
+    name: '',
+    displayName: '',
+    kind: 'place',
+    lat,
+    lon,
+    source: 'none',
+    approximate: true,
+  }
 }
 
 async function searchWikipediaTitle(name, country, lang) {
@@ -678,6 +786,24 @@ export function apply(ctx) {
             }
             const result = await searchPlaces(query, lang)
             sendJson(res, 200, { ok: true, query, lang, ...result })
+            return
+          }
+          if (req.method === 'GET' && route === '/reverse') {
+            const lat = Number(url.searchParams.get('lat'))
+            const lon = Number(url.searchParams.get('lon'))
+            if (
+              !Number.isFinite(lat) ||
+              !Number.isFinite(lon) ||
+              lat < -90 ||
+              lat > 90 ||
+              lon < -180 ||
+              lon > 180
+            ) {
+              sendJson(res, 400, { ok: false, error: 'Invalid coordinates' })
+              return
+            }
+            const place = await reverseGeocode(lat, lon, lang)
+            sendJson(res, 200, { ok: true, lang, place })
             return
           }
           if (req.method === 'GET' && route === '/place') {
