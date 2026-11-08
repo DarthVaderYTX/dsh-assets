@@ -41,6 +41,7 @@ window.__ModuleLoader__.load({
       'globe.retry': '重新加载',
       'globe.ready': 'CesiumJS · 自适应底图',
       'globe.coords': '光标坐标',
+      'time.local': '当地时间',
       'area.locating': '识别地区…',
       'area.unknown': '未知区域',
       'place.located': '已定位',
@@ -58,7 +59,7 @@ window.__ModuleLoader__.load({
       'source.view': '在 Wikipedia 查看',
       'source.license': 'CC BY-SA 4.0',
       'source.map': '全球底图 Natural Earth II · 放大后自动加载 Esri 卫星影像',
-      'source.data': '卫星影像 © Esri · 地名 © OpenStreetMap contributors',
+      'source.data': '卫星影像 © Esri · 夜间灯光 NASA GIBS · 地名 © OpenStreetMap contributors',
       'notice.guide': '在线资料暂不可用，以下为内置导览。',
       'empty.title': '从一个地方开始',
       'empty.body': '搜索后会在这里看到地点介绍、坐标和附近景点推荐。点击推荐景点，地球会飞过去。',
@@ -110,6 +111,7 @@ window.__ModuleLoader__.load({
       'globe.retry': 'Try again',
       'globe.ready': 'CesiumJS · adaptive basemap',
       'globe.coords': 'Cursor coordinates',
+      'time.local': 'Local time',
       'area.locating': 'Locating area…',
       'area.unknown': 'Unknown area',
       'place.located': 'Located',
@@ -127,7 +129,7 @@ window.__ModuleLoader__.load({
       'source.view': 'View on Wikipedia',
       'source.license': 'CC BY-SA 4.0',
       'source.map': 'Global basemap Natural Earth II · Esri satellite imagery fades in as you zoom',
-      'source.data': 'Imagery © Esri · Place data © OpenStreetMap contributors',
+      'source.data': 'Imagery © Esri · Night lights NASA GIBS · Place data © OpenStreetMap contributors',
       'notice.guide': 'Online details are unavailable; showing the built-in guide.',
       'empty.title': 'Start with a place',
       'empty.body': 'After a search, this panel shows the introduction, coordinates and nearby recommendations. Click a recommendation to fly there.',
@@ -197,6 +199,11 @@ window.__ModuleLoader__.load({
 .fp-live { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .fp-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fp-teal); box-shadow: 0 0 0 3px rgba(99,230,213,.12); }
 .fp-key { border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.1)); border-radius: 5px; padding: 2px 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary, #93a2b5); background: var(--dsw-alias-bg-layer-2, rgba(255,255,255,.04)); }
+.fp-time-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.1)); background: var(--dsw-alias-bg-layer-2, rgba(255,255,255,.04)); white-space: nowrap; }
+.fp-time-chip svg { color: var(--fp-teal); opacity: .9; }
+.fp-time-chip[data-day="true"] svg { color: var(--fp-amber); }
+.fp-time-value { font-size: 10.5px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary, #dfe9f5); }
+.fp-time-zone { font-size: 9.5px; color: var(--dsw-alias-label-secondary, #8797aa); }
 
 .fp-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(310px, 370px) minmax(0, 1fr); }
 .fp-side {
@@ -485,6 +492,90 @@ window.__ModuleLoader__.load({
       return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
     }
 
+    function useLocalClock() {
+      const [now, setNow] = React.useState(() => new Date())
+      React.useEffect(() => {
+        const timer = window.setInterval(() => setNow(new Date()), 1000)
+        return () => window.clearInterval(timer)
+      }, [])
+      return now
+    }
+
+    function DayNightIcon({ day, size = 13 }) {
+      if (day) {
+        return h(
+          'svg',
+          {
+            width: size,
+            height: size,
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            'aria-hidden': 'true',
+          },
+          h('circle', {
+            cx: 12,
+            cy: 12,
+            r: 4.1,
+            stroke: 'currentColor',
+            strokeWidth: 1.7,
+          }),
+          h('path', {
+            d: 'M12 2.2v2.1M12 19.7v2.1M2.2 12h2.1M19.7 12h2.1M5.1 5.1l1.5 1.5M17.4 17.4l1.5 1.5M18.9 5.1l-1.5 1.5M6.6 17.4l-1.5 1.5',
+            stroke: 'currentColor',
+            strokeWidth: 1.6,
+            strokeLinecap: 'round',
+          }),
+        )
+      }
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          'aria-hidden': 'true',
+        },
+        h('path', {
+          d: 'M20.2 14.4A8.4 8.4 0 0 1 9.6 3.8 8.5 8.5 0 1 0 20.2 14.4z',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function LocalTimeChip({ lang, t }) {
+      const now = useLocalClock()
+      const locale = lang === 'zh' ? 'zh-CN' : 'en-GB'
+      const time = new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(now)
+      const zone =
+        new Intl.DateTimeFormat(locale, { timeZoneName: 'short' })
+          .formatToParts(now)
+          .find((part) => part.type === 'timeZoneName')?.value || ''
+      const full = new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+      }).format(now)
+      const day = now.getHours() >= 6 && now.getHours() < 18
+      return h(
+        'span',
+        {
+          className: 'fp-time-chip',
+          'data-day': day ? 'true' : 'false',
+          title: `${t('time.local')} · ${full}`,
+          'aria-label': `${t('time.local')} ${time} ${zone}`,
+        },
+        h(DayNightIcon, { day }),
+        h('span', { className: 'fp-time-value' }, time),
+        zone ? h('span', { className: 'fp-time-zone' }, zone) : null,
+      )
+    }
+
     function formatDistance(km, t) {
       if (typeof km !== 'number' || Number.isNaN(km)) return ''
       if (km < 1) return `${Math.max(10, Math.round((km * 1000) / 10) * 10)} ${t('distance.m')}`
@@ -543,7 +634,9 @@ window.__ModuleLoader__.load({
       scene.backgroundColor = Cesium.Color.fromCssColorString('#02050a')
       scene.globe.baseColor = Cesium.Color.fromCssColorString('#071626')
       scene.globe.showGroundAtmosphere = true
-      scene.globe.enableLighting = false
+      scene.globe.enableLighting = true
+      scene.globe.dynamicAtmosphereLighting = true
+      scene.globe.dynamicAtmosphereLightingFromSun = true
       scene.globe.depthTestAgainstTerrain = false
       scene.globe.maximumScreenSpaceError = 1.1
       scene.globe.tileCacheSize = 320
@@ -736,8 +829,20 @@ window.__ModuleLoader__.load({
             viewerRef.current = viewer
             containerRef.current.__footprintViewer = viewer
             bodyAtmosphere(Cesium, viewer)
+
+            // Drive the terminator from the user's actual local clock. Cesium
+            // uses UTC internally, but the instant is the same; the browser's
+            // timezone offset only decides which meridian the initial camera
+            // faces (an approximate local meridian).
+            const now = new Date()
+            viewer.clock.currentTime = Cesium.JulianDate.fromDate(now)
+            viewer.clock.shouldAnimate = true
+            viewer.clock.multiplier = 1
+            if (Cesium.SunLight) viewer.scene.light = new Cesium.SunLight()
+            const rawMeridian = -now.getTimezoneOffset() / 4
+            const localMeridian = ((rawMeridian + 540) % 360) - 180
             viewer.camera.setView({
-              destination: Cesium.Cartesian3.fromDegrees(104, 29, 21500000),
+              destination: Cesium.Cartesian3.fromDegrees(localMeridian, 20, 21500000),
               orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
             })
             const providerPromise =
@@ -781,6 +886,24 @@ window.__ModuleLoader__.load({
               detailLayer.show = false
             } catch {
               detailLayer = null
+            }
+
+            // NASA GIBS city lights appear only on the globe's night side
+            // (dayAlpha 0 / nightAlpha 1). Cesium's lighting shader blends this
+            // layer from the SunLight terminator automatically.
+            try {
+              const nightProvider = new Cesium.UrlTemplateImageryProvider({
+                url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_CityLights_2012/default/2012-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg',
+                minimumLevel: 0,
+                maximumLevel: 8,
+                credit: new Cesium.Credit('NASA Earth Observatory / GIBS'),
+              })
+              const nightLayer = viewer.imageryLayers.addImageryProvider(nightProvider)
+              nightLayer.dayAlpha = 0
+              nightLayer.nightAlpha = 0.9
+              nightLayer.brightness = 1.15
+            } catch {
+              // Day/night shading still works without the optional city-light layer.
             }
 
             updateDetailLayer = () => {
@@ -1392,6 +1515,7 @@ window.__ModuleLoader__.load({
               h('span', { className: 'fp-live-dot' }),
               t('globe.ready'),
             ),
+            h(LocalTimeChip, { lang, t }),
             h('span', { className: 'fp-key' }, 'Enter'),
           ),
         ),
