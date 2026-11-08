@@ -65,8 +65,10 @@ window.__ModuleLoader__.load({
       'runStatus.pending': '未开始',
       'runs.noNodes': '这次运行没有节点',
       'runs.outputMenu': '输出端口',
-      'runs.viewOutput': '查看输出内容',
+      'runs.viewOutput': '查看输出结果',
       'runs.downloadOutput': '下载输出内容',
+      'runs.outputTitle': '输出结果',
+      'runs.outputEmpty': '没有输出内容',
       'runs.outputHint': '右键查看或下载输出',
       'environment.local': '本机',
       'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
@@ -361,6 +363,8 @@ window.__ModuleLoader__.load({
       'runs.outputMenu': 'Output port',
       'runs.viewOutput': 'View output',
       'runs.downloadOutput': 'Download output',
+      'runs.outputTitle': 'Output',
+      'runs.outputEmpty': 'No output',
       'runs.outputHint': 'Right-click to view or download output',
       'environment.local': 'Local',
       'environment.localHint': 'Run on the machine hosting the dsh process.',
@@ -622,8 +626,9 @@ window.__ModuleLoader__.load({
   --ath-yellow-ink: #a16207;
   --ath-red-ink: #b91c1c;
   --ath-gray-ink: #4b5563;
-  --ath-lake: #2aa7c2;
-  --ath-lake-40: rgba(42, 167, 194, 0.4);
+  --ath-dataset-ink: #4338ca;
+  --ath-dataset: #6c63ff;
+  --ath-dataset-40: rgba(108, 99, 255, 0.4);
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 6px 18px rgba(32, 43, 61, .07);
@@ -787,7 +792,7 @@ window.__ModuleLoader__.load({
 }
 .ath-badge[data-kind="command"] { color: var(--ath-accent); border-color: color-mix(in srgb, var(--ath-accent) 40%, transparent); }
 .ath-badge[data-kind="graph"] { color: var(--ath-yellow-ink); border-color: color-mix(in srgb, var(--ath-yellow) 40%, transparent); }
-.ath-badge[data-kind="dataset"] { color: var(--ath-lake); border-color: color-mix(in srgb, var(--ath-lake) 40%, transparent); }
+.ath-badge[data-kind="dataset"] { color: var(--ath-dataset); border-color: color-mix(in srgb, var(--ath-dataset) 40%, transparent); }
 .ath-status {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap;
   padding: 1px 7px; border-radius: 999px; border: 1px solid transparent; font-weight: 500;
@@ -932,8 +937,8 @@ window.__ModuleLoader__.load({
 }
 .ath-canvas-node:hover { border-color: var(--dsw-alias-border-l2); }
 .ath-canvas-node[data-kind="dataset"] {
-  border-color: color-mix(in srgb, var(--ath-lake) 48%, var(--dsw-alias-border-l1));
-  background: color-mix(in srgb, var(--ath-lake) 8%, var(--dsw-alias-bg-layer-1));
+  border-color: color-mix(in srgb, var(--ath-dataset) 48%, var(--dsw-alias-border-l1));
+  background: color-mix(in srgb, var(--ath-dataset) 8%, var(--dsw-alias-bg-layer-1));
 }
 .ath-canvas-node[data-selected="true"] { border-color: var(--ath-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 22%, transparent); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
@@ -980,15 +985,15 @@ window.__ModuleLoader__.load({
 }
 .ath-node-card:active { cursor: grabbing; }
 .ath-node-card[data-kind="dataset"] {
-  border-color: color-mix(in srgb, var(--ath-lake) 50%, var(--ath-border-soft));
-  background: color-mix(in srgb, var(--ath-lake) 9%, var(--dsw-alias-bg-layer-1));
+  border-color: color-mix(in srgb, var(--ath-dataset) 50%, var(--ath-border-soft));
+  background: color-mix(in srgb, var(--ath-dataset) 9%, var(--dsw-alias-bg-layer-1));
 }
 .ath-node-card[data-kind="dataset"]::before {
   content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--ath-lake);
+  border-radius: 0 3px 3px 0; background: var(--ath-dataset);
 }
-.ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-lake) 34%, var(--ath-border-soft)); }
-.ath-node-card[data-kind="dataset"] .ath-node-tag { color: var(--ath-lake); }
+.ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-dataset) 34%, var(--ath-border-soft)); }
+.ath-node-card[data-kind="dataset"] .ath-node-tag { color: var(--ath-dataset); }
 .ath-node-card[data-selected="true"] {
   border-color: var(--ath-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 24%, transparent);
@@ -1174,13 +1179,14 @@ window.__ModuleLoader__.load({
   box-shadow: inset 0 3px 0 var(--ath-status), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] {
-  background: var(--ath-lake-40);
-  border-color: var(--ath-lake-40);
-  box-shadow: inset 0 3px 0 var(--ath-status), inset 4px 0 0 var(--ath-lake), 0 1px 2px rgba(32, 43, 61, .05);
+  background: var(--ath-dataset-40);
+  border-color: var(--ath-dataset-40);
+  box-shadow: inset 4px 0 0 var(--ath-dataset), 0 1px 2px rgba(32, 43, 61, .05);
 }
+.ath-run-node[data-kind="dataset"] .ath-node-sub { color: var(--ath-dataset-ink); }
 .ath-run-node[data-kind="dataset"][data-selected="true"] {
-  border-color: var(--ath-lake);
-  box-shadow: 0 0 0 2px var(--ath-lake-40), inset 0 3px 0 var(--ath-status), inset 4px 0 0 var(--ath-lake);
+  border-color: var(--ath-dataset);
+  box-shadow: 0 0 0 2px var(--ath-dataset-40), inset 4px 0 0 var(--ath-dataset);
 }
 .ath-run-node[data-selected="true"] {
   border-color: var(--ath-status);
@@ -1847,6 +1853,84 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function OutputModal({ t, runId, node, port, onClose }) {
+      const [text, setText] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [failed, setFailed] = useState('');
+
+      const load = useCallback(async () => {
+        setLoading(true);
+        setFailed('');
+        try {
+          const response = await fetch(
+            `${API}/experiments/logs?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
+              node.path,
+            )}&stream=out`,
+            { cache: 'no-store', credentials: 'same-origin' },
+          );
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          setText(await response.text());
+        } catch (error) {
+          setFailed(String(error && error.message ? error.message : error));
+        } finally {
+          setLoading(false);
+        }
+      }, [runId, node.path]);
+
+      useEffect(() => {
+        void load();
+      }, [load]);
+
+      const copy = async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          // 剪贴板不可用时静默失败。
+        }
+      };
+
+      const download = () => {
+        const anchor = document.createElement('a');
+        anchor.href = `${API}/experiments/download?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
+          node.path,
+        )}&port=${encodeURIComponent(port)}`;
+        anchor.download = '';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      };
+
+      return h(
+        Modal,
+        {
+          t,
+          wide: true,
+          title: `${t('runs.outputTitle')} · ${node.label || node.path} · ${port}`,
+          onClose,
+          footer: [
+            h('button', { key: 'copy', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => void copy() }, t('log.copy')),
+            h('button', { key: 'download', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: download }, t('runs.downloadOutput')),
+            h('button', { key: 'close', type: 'button', className: 'ath-btn ath-btn-primary', onClick: onClose }, t('log.close')),
+          ],
+        },
+        h(
+          'div',
+          { className: 'ath-detail', style: { gap: 10 } },
+          h(
+            'div',
+            { className: 'ath-chips' },
+            h('span', { className: 'ath-badge', 'data-kind': 'dataset' }, port),
+            h('span', { className: 'ath-hint ath-mono' }, node.path),
+          ),
+          loading
+            ? h('div', { className: 'ath-loading' }, h('i', { className: 'ath-spinner' }), t('common.loading'))
+            : failed
+              ? h('div', { className: 'ath-error' }, failed)
+              : h('pre', { className: 'ath-log-pre' }, text || t('runs.outputEmpty')),
+        ),
+      );
+    }
+
     function SubmitDialog({ t, graphs, executors, onClose, onSubmit, busy }) {
       const [graphId, setGraphId] = useState(() => (graphs[0] ? graphs[0].id : ''));
       const [name, setName] = useState('');
@@ -1989,6 +2073,7 @@ window.__ModuleLoader__.load({
       onDeleteRun,
       onOpenFolder,
       onOpenLog,
+      onViewOutput,
     }) {
       const [query, setQuery] = useState('');
       const keyword = query.trim().toLowerCase();
@@ -2166,6 +2251,7 @@ window.__ModuleLoader__.load({
                   t,
                   experiment: current,
                   onOpenLog: (id, node) => onOpenLog(id, node),
+                  onViewOutput: (id, node, port) => onViewOutput(id, node, port),
                 }),
               )
             : h(EmptyState, { title: t('experiments.select') }),
@@ -2432,7 +2518,7 @@ window.__ModuleLoader__.load({
       return edges;
     }
 
-    function RunDag({ t, experiment, onOpenLog }) {
+    function RunDag({ t, experiment, onOpenLog, onViewOutput }) {
       const nodes = experiment.nodes || [];
       const direction = experiment.layout === 'horizontal' ? 'horizontal' : 'vertical';
       const nodeByPath = useMemo(() => new Map(nodes.map((node) => [node.path, node])), [nodes]);
@@ -2771,7 +2857,7 @@ window.__ModuleLoader__.load({
                   const ports = modulePorts(module);
                   const position = positions.get(node.path) || { x: 0, y: 0 };
                   const size = sizes.get(node.path) || nodeSizeFor(module, direction);
-                  const group = RUN_STATUS_GROUP[node.status] || 'pending';
+                  const group = node.kind === 'dataset' ? 'dataset' : RUN_STATUS_GROUP[node.status] || 'pending';
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
                   const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
                   const runParams = node.params || {};
@@ -2817,7 +2903,11 @@ window.__ModuleLoader__.load({
                       h(
                         'span',
                         { className: 'ath-node-sub' },
-                        `${runStatusLabel(t, node.status)} · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
+                        `${
+                          node.kind === 'dataset'
+                            ? t('modules.kind.dataset')
+                            : runStatusLabel(t, node.status)
+                        } · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
                           version: node.moduleVersion || 1,
                         })}${runParamShort ? ` · ${runParamShort}` : ''}`,
                       ),
@@ -2975,11 +3065,17 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'ath-run-nodebar-main' },
-                  h(
-                    'span',
-                    { className: 'ath-status', 'data-status': selectedNode.status },
-                    runStatusLabel(t, selectedNode.status),
-                  ),
+                  selectedNode.kind === 'dataset'
+                    ? h(
+                        'span',
+                        { className: 'ath-badge', 'data-kind': 'dataset' },
+                        t('modules.kind.dataset'),
+                      )
+                    : h(
+                        'span',
+                        { className: 'ath-status', 'data-status': selectedNode.status },
+                        runStatusLabel(t, selectedNode.status),
+                      ),
                   h('strong', { className: 'ath-run-nodebar-title' }, selectedNode.label || selectedNode.path),
                   h('code', { className: 'ath-run-nodebar-path' }, selectedNode.path),
                   h(
@@ -2987,8 +3083,12 @@ window.__ModuleLoader__.load({
                     { className: 'ath-run-nodebar-meta' },
                     tr(t, 'modules.versionLabel', { version: selectedNode.moduleVersion || 1 }),
                   ),
-                  h('span', { className: 'ath-run-nodebar-meta' }, formatDuration(selectedNode.startedAt, selectedNode.endedAt)),
-                  selectedNode.exitCode !== null && selectedNode.exitCode !== undefined
+                  selectedNode.kind === 'dataset'
+                    ? null
+                    : h('span', { className: 'ath-run-nodebar-meta' }, formatDuration(selectedNode.startedAt, selectedNode.endedAt)),
+                  selectedNode.kind !== 'dataset' &&
+                  selectedNode.exitCode !== null &&
+                  selectedNode.exitCode !== undefined
                     ? h('span', { className: 'ath-run-nodebar-meta' }, `${t('experiments.exitCode')} ${selectedNode.exitCode}`)
                     : null,
                 ),
@@ -3021,8 +3121,9 @@ window.__ModuleLoader__.load({
                     type: 'button',
                     onClick: () => {
                       const node = nodeByPath.get(outputMenu.path);
+                      const port = outputMenu.port;
                       setOutputMenu(null);
-                      if (node) onOpenLog(experiment.id, node);
+                      if (node) onViewOutput(experiment.id, node, port);
                     },
                   },
                   t('runs.viewOutput'),
@@ -5165,6 +5266,7 @@ window.__ModuleLoader__.load({
       const [submitOpen, setSubmitOpen] = useState(false);
       const [submitting, setSubmitting] = useState(false);
       const [logView, setLogView] = useState(null);
+      const [outputView, setOutputView] = useState(null);
       const [editorTabs, setEditorTabs] = useState([]);
       const [activeEditorKey, setActiveEditorKey] = useState('');
       const editorKeySeq = useRef(0);
@@ -5754,6 +5856,7 @@ window.__ModuleLoader__.load({
           onDeleteRun: deleteRun,
           onOpenFolder: (run) => void openRunFolder(run),
           onOpenLog: (id, node) => setLogView({ runId: id, node }),
+          onViewOutput: (id, node, port) => setOutputView({ runId: id, node, port }),
         });
       };
 
@@ -5952,6 +6055,15 @@ window.__ModuleLoader__.load({
               runId: logView.runId,
               node: logView.node,
               onClose: () => setLogView(null),
+            })
+          : null,
+        outputView
+          ? h(OutputModal, {
+              t,
+              runId: outputView.runId,
+              node: outputView.node,
+              port: outputView.port,
+              onClose: () => setOutputView(null),
             })
           : null,
         h(ConfirmDialog, {
