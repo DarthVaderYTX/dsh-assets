@@ -1,54 +1,73 @@
-// Social content provider registry.
+// Recommendation registry, organized by category and service.
 //
-// Adding another source (Ctrip, Xiaohongshu, an official API, ...) means:
-//   1. implement { id, label, priority, supports, recommend } in a module,
-//   2. import it here and put it in PROVIDERS (or call registerProvider at
-//      startup from another host plugin).
+//   providers/attraction/mafengwo.js
+//   providers/food/mafengwo.js
+//   providers/food/openstreetmap.js
+//   providers/lodging/openstreetmap.js
 //
-// The first provider that supports a place contributes one section. Multiple
-// providers may contribute sections; the client renders every section and
-// falls back to the existing Wikipedia / built-in attractions if none answer.
+// A provider declares both `category` and `service`. The client groups its
+// sections by category; each section carries the service label. Add a new
+// service by implementing the contract below in that category directory and
+// registering it here (or calling registerProvider from another Host plugin).
 
-import { mafengwoProvider } from './mafengwo.js'
+import { mafengwoAttractionProvider } from './attraction/mafengwo.js'
+import { mafengwoFoodProvider } from './food/mafengwo.js'
+import { openstreetmapFoodProvider } from './food/openstreetmap.js'
+import { openstreetmapLodgingProvider } from './lodging/openstreetmap.js'
 
-const PROVIDERS = [mafengwoProvider]
+export const CATEGORIES = ['attraction', 'food', 'lodging']
+
+const PROVIDERS = [
+  mafengwoAttractionProvider,
+  mafengwoFoodProvider,
+  openstreetmapFoodProvider,
+  openstreetmapLodgingProvider,
+]
 
 function isValidProvider(provider) {
   return (
     provider &&
-    typeof provider.id === 'string' &&
+    typeof provider.key === 'string' &&
+    typeof provider.service === 'string' &&
+    CATEGORIES.includes(provider.category) &&
     typeof provider.recommend === 'function' &&
     typeof provider.label === 'object'
   )
 }
 
-/** Register a social provider at runtime. Returns an idempotent disposer. */
+/** Register a provider at runtime. Returns an idempotent disposer. */
 export function registerProvider(provider) {
-  if (!isValidProvider(provider)) throw new Error('Invalid social provider')
-  if (!PROVIDERS.some((item) => item.id === provider.id)) {
+  if (!isValidProvider(provider)) throw new Error('Invalid recommendation provider')
+  if (!PROVIDERS.some((item) => item.key === provider.key)) {
     PROVIDERS.push(provider)
     PROVIDERS.sort((a, b) => (a.priority || 0) - (b.priority || 0))
   }
   return () => {
-    const index = PROVIDERS.findIndex((item) => item.id === provider.id)
+    const index = PROVIDERS.findIndex((item) => item.key === provider.key)
     if (index >= 0) PROVIDERS.splice(index, 1)
   }
 }
 
-/** Metadata for the Plugin Manager diagnostics / future Settings UI. */
+/** Provider directory grouped by category, for diagnostics / a future UI. */
 export function listProviders() {
-  return PROVIDERS.map((provider) => ({
-    id: provider.id,
-    label: provider.label,
-    priority: provider.priority || 0,
-    timeoutMs: provider.timeoutMs || 9000,
-  }))
+  const grouped = Object.fromEntries(CATEGORIES.map((category) => [category, []]))
+  for (const provider of PROVIDERS) {
+    grouped[provider.category].push({
+      key: provider.key,
+      service: provider.service,
+      category: provider.category,
+      label: provider.label,
+      priority: provider.priority || 0,
+      timeoutMs: provider.timeoutMs || 9000,
+    })
+  }
+  return grouped
 }
 
 function withTimeout(promise, timeoutMs) {
   let timer = null
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Social provider timed out')), timeoutMs)
+    timer = setTimeout(() => reject(new Error('Recommendation provider timed out')), timeoutMs)
   })
   return Promise.race([promise, timeout]).finally(() => {
     if (timer) clearTimeout(timer)
@@ -56,13 +75,13 @@ function withTimeout(promise, timeoutMs) {
 }
 
 /**
- * Collect social recommendation sections for a place.
- *
- * A provider failure is isolated: the place keeps its Wikipedia/guide content.
- * Providers run in parallel so a future second source does not add latency.
+ * Collect recommendation sections for one place, grouped by category.
+ * Provider failures are isolated; the place keeps its Wikipedia/guide content.
  */
-export async function getSocialRecommendations(place, lang = 'zh') {
-  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return []
+export async function getRecommendations(place, lang = 'zh') {
+  const grouped = Object.fromEntries(CATEGORIES.map((category) => [category, []]))
+  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return grouped
+
   const active = PROVIDERS.filter((provider) => {
     try {
       return provider.supports ? provider.supports(place, lang) : true
@@ -78,13 +97,22 @@ export async function getSocialRecommendations(place, lang = 'zh') {
       ),
     ),
   )
-  const sections = []
-  for (const result of settled) {
-    if (result.status !== 'fulfilled') continue
+  settled.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return
     const section = result.value
-    if (section && Array.isArray(section.items) && section.items.length > 0) {
-      sections.push(section)
-    }
-  }
-  return sections
+    if (!section || !Array.isArray(section.items) || !section.items.length) return
+    const category = active[index].category
+    if (!grouped[category]) grouped[category] = []
+    grouped[category].push({
+      ...section,
+      category,
+      service: section.service || active[index].service,
+      serviceLabel:
+        section.serviceLabel ||
+        active[index].label?.[lang] ||
+        active[index].label?.zh ||
+        active[index].service,
+    })
+  })
+  return grouped
 }

@@ -1,6 +1,8 @@
 import { createReadStream } from 'node:fs'
 import { promises as fsp } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import {
   PLACES,
@@ -10,7 +12,7 @@ import {
   searchCurated,
 } from './data/places.js'
 import { fetchJson as requestJson } from './http.js'
-import { getSocialRecommendations, listProviders } from './providers/index.js'
+import { getRecommendations, listProviders } from './providers/index.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const VENDOR_ROOT = path.join(HERE, 'vendor', 'cesium')
@@ -20,6 +22,11 @@ const USER_AGENT = 'FootPrint-DSH/1.0 (local Cesium globe plugin)'
 const SEARCH_TTL = 10 * 60 * 1000
 const PLACE_TTL = 30 * 60 * 1000
 const REVERSE_TTL = 24 * 60 * 60 * 1000
+const TRIP_CATEGORIES = ['attraction', 'food', 'lodging']
+const HOME_DIR = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+const TRIPS_DIR = path.join(HOME_DIR, 'storages', 'footprint')
+const TRIPS_FILE = path.join(TRIPS_DIR, 'trips.json')
+const TRIPS_VERSION = 1
 
 const MIME = {
   '.js': 'text/javascript; charset=utf-8',
@@ -53,6 +60,146 @@ const reverseCache = new Map()
 const inflight = new Map()
 let reverseQueue = Promise.resolve()
 let lastReverseAt = 0
+let tripsState = null
+let tripsLoadPromise = null
+let tripsMutationQueue = Promise.resolve()
+let tripsWriteQueue = Promise.resolve()
+
+function emptyTripsState() {
+  return { version: TRIPS_VERSION, activeTripId: null, trips: [] }
+}
+
+function dateOrEmpty(value) {
+  const text = cleanText(value)
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ''
+}
+
+function sanitizeTripItem(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {}
+  const name = cleanText(source.name).slice(0, 160)
+  if (!name) return null
+  const category = TRIP_CATEGORIES.includes(source.category)
+    ? source.category
+    : 'attraction'
+  const lat = Number(source.lat)
+  const lon = Number(source.lon)
+  const rating = Number(source.rating)
+  const reviewCount = Number(source.reviewCount)
+  const noteCount = Number(source.noteCount)
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id.slice(0, 80) : randomUUID(),
+    category,
+    name,
+    description: cleanText(source.description).slice(0, 800),
+    image: cleanText(source.image).slice(0, 600),
+    url: cleanText(source.url).slice(0, 600),
+    address: cleanText(source.address).slice(0, 240),
+    source: cleanText(source.source || source.provider).slice(0, 80),
+    service: cleanText(source.service).slice(0, 80),
+    provider: cleanText(source.provider).slice(0, 80),
+    localId: cleanText(source.localId).slice(0, 120),
+    lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : null,
+    lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : null,
+    rating: Number.isFinite(rating) ? rating : null,
+    reviewCount: Number.isFinite(reviewCount) ? Math.round(reviewCount) : null,
+    noteCount: Number.isFinite(noteCount) ? Math.round(noteCount) : null,
+    tags: Array.isArray(source.tags)
+      ? source.tags.map((tag) => cleanText(tag).slice(0, 40)).filter(Boolean).slice(0, 8)
+      : [],
+    addedAt: typeof source.addedAt === 'string' ? source.addedAt : new Date().toISOString(),
+  }
+}
+
+function sanitizeTrip(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {}
+  const items = Array.isArray(source.items)
+    ? source.items.map(sanitizeTripItem).filter(Boolean).slice(0, 200)
+    : []
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id.slice(0, 80) : randomUUID(),
+    name: cleanText(source.name).slice(0, 80) || '未命名行程',
+    startDate: dateOrEmpty(source.startDate),
+    endDate: dateOrEmpty(source.endDate),
+    notes: cleanText(source.notes).slice(0, 800),
+    items,
+    createdAt: typeof source.createdAt === 'string' ? source.createdAt : new Date().toISOString(),
+    updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : new Date().toISOString(),
+  }
+}
+
+async function loadTripsState() {
+  if (tripsState) return tripsState
+  if (!tripsLoadPromise) {
+    tripsLoadPromise = (async () => {
+      try {
+        const text = await fsp.readFile(TRIPS_FILE, 'utf8')
+        const parsed = JSON.parse(text)
+        const trips = Array.isArray(parsed.trips) ? parsed.trips.map(sanitizeTrip) : []
+        const activeTripId = trips.some((trip) => trip.id === parsed.activeTripId)
+          ? parsed.activeTripId
+          : trips[0]?.id || null
+        tripsState = {
+          version: TRIPS_VERSION,
+          activeTripId,
+          trips,
+        }
+      } catch (error) {
+        if (error?.code !== 'ENOENT') {
+          try {
+            await fsp.rename(TRIPS_FILE, `${TRIPS_FILE}.corrupt.${Date.now()}`)
+          } catch {
+            // Keep the unreadable file in place; the next write will replace it.
+          }
+        }
+        tripsState = emptyTripsState()
+      }
+      return tripsState
+    })().finally(() => {
+      tripsLoadPromise = null
+    })
+  }
+  return tripsLoadPromise
+}
+
+function persistTrips(state) {
+  const text = JSON.stringify(state, null, 2)
+  tripsWriteQueue = tripsWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      await fsp.mkdir(TRIPS_DIR, { recursive: true })
+      const temporary = `${TRIPS_FILE}.${process.pid}.${Date.now()}.tmp`
+      await fsp.writeFile(temporary, text, 'utf8')
+      await fsp.rename(temporary, TRIPS_FILE)
+    })
+  return tripsWriteQueue
+}
+
+function mutateTrips(mutator) {
+  const task = tripsMutationQueue.then(async () => {
+    const state = await loadTripsState()
+    const result = await mutator(state)
+    state.version = TRIPS_VERSION
+    await persistTrips(state)
+    return result
+  })
+  tripsMutationQueue = task.catch(() => {})
+  return task
+}
+
+async function readJsonBody(req) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > 1024 * 1024) throw new Error('Request body is too large')
+    chunks.push(chunk)
+  }
+  const text = Buffer.concat(chunks).toString('utf8')
+  if (!text) return {}
+  const value = JSON.parse(text)
+  if (!value || typeof value !== 'object') throw new Error('Request body must be an object')
+  return value
+}
 
 function sendJson(res, status, value) {
   const body = JSON.stringify(value)
@@ -61,6 +208,20 @@ function sendJson(res, status, value) {
     'cache-control': 'no-store',
   })
   res.end(body)
+}
+
+function httpError(statusCode, message) {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  return error
+}
+
+function tripsPayload(state) {
+  return {
+    version: state.version,
+    activeTripId: state.activeTripId,
+    trips: state.trips,
+  }
 }
 
 function normalizeLang(value) {
@@ -784,6 +945,119 @@ export function apply(ctx) {
             sendJson(res, 200, { ok: true, providers: listProviders() })
             return
           }
+          if (req.method === 'GET' && route === '/trips') {
+            const state = await loadTripsState()
+            sendJson(res, 200, { ok: true, ...tripsPayload(state) })
+            return
+          }
+          if (req.method === 'POST' && route === '/trips') {
+            const body = await readJsonBody(req)
+            const saved = await mutateTrips((state) => {
+              const incoming = sanitizeTrip(body)
+              let trip = body.id
+                ? state.trips.find((item) => item.id === body.id)
+                : null
+              if (trip) {
+                trip.name = incoming.name
+                trip.startDate = incoming.startDate
+                trip.endDate = incoming.endDate
+                trip.notes = incoming.notes
+                trip.updatedAt = new Date().toISOString()
+              } else {
+                trip = {
+                  ...incoming,
+                  id: typeof body.id === 'string' && body.id ? body.id : randomUUID(),
+                  items: [],
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+                state.trips.unshift(trip)
+              }
+              state.activeTripId = trip.id
+              return trip
+            })
+            sendJson(res, 200, {
+              ok: true,
+              trip: saved,
+              ...tripsPayload(await loadTripsState()),
+            })
+            return
+          }
+          if (req.method === 'DELETE' && route === '/trips') {
+            const id = cleanText(url.searchParams.get('id') || '')
+            const state = await mutateTrips((current) => {
+              const index = current.trips.findIndex((trip) => trip.id === id)
+              if (index < 0) throw httpError(404, 'Trip not found')
+              current.trips.splice(index, 1)
+              if (current.activeTripId === id) {
+                current.activeTripId = current.trips[0]?.id || null
+              }
+              return current
+            })
+            sendJson(res, 200, { ok: true, ...tripsPayload(state) })
+            return
+          }
+          if (req.method === 'POST' && route === '/trips/active') {
+            const body = await readJsonBody(req)
+            const id = cleanText(body.tripId)
+            const state = await mutateTrips((current) => {
+              if (!current.trips.some((trip) => trip.id === id)) {
+                throw httpError(404, 'Trip not found')
+              }
+              current.activeTripId = id
+              return current
+            })
+            sendJson(res, 200, { ok: true, ...tripsPayload(state) })
+            return
+          }
+          if (req.method === 'POST' && route === '/trips/items') {
+            const body = await readJsonBody(req)
+            const tripId = cleanText(body.tripId)
+            const item = sanitizeTripItem(body.item)
+            if (!item) {
+              sendJson(res, 400, { ok: false, error: 'Item name is required' })
+              return
+            }
+            const result = await mutateTrips((state) => {
+              const trip = state.trips.find((entry) => entry.id === tripId)
+              if (!trip) throw httpError(404, 'Trip not found')
+              const duplicate = trip.items.find(
+                (entry) =>
+                  entry.category === item.category &&
+                  cleanText(entry.name).toLowerCase() === item.name.toLowerCase() &&
+                  (entry.lat == null ||
+                    item.lat == null ||
+                    (Math.abs(entry.lat - item.lat) < 0.0002 &&
+                      Math.abs(entry.lon - item.lon) < 0.0002)),
+              )
+              if (duplicate) return { trip, item: duplicate, duplicate: true }
+              trip.items.push(item)
+              trip.updatedAt = new Date().toISOString()
+              return { trip, item, duplicate: false }
+            })
+            sendJson(res, 200, {
+              ok: true,
+              ...result,
+              activeTripId: tripId,
+              trips: (await loadTripsState()).trips,
+            })
+            return
+          }
+          if (req.method === 'DELETE' && route === '/trips/items') {
+            const tripId = cleanText(url.searchParams.get('tripId') || '')
+            const itemId = cleanText(url.searchParams.get('itemId') || '')
+            const state = await mutateTrips((current) => {
+              const trip = current.trips.find((entry) => entry.id === tripId)
+              if (!trip) throw httpError(404, 'Trip not found')
+              const before = trip.items.length
+              trip.items = trip.items.filter((entry) => entry.id !== itemId)
+              if (trip.items.length === before) throw httpError(404, 'Trip item not found')
+              trip.updatedAt = new Date().toISOString()
+              return current
+            })
+            sendJson(res, 200, { ok: true, ...tripsPayload(state) })
+            return
+          }
           if (req.method === 'GET' && route === '/search') {
             const query = cleanText(url.searchParams.get('q') || '')
             if (!query) {
@@ -821,8 +1095,11 @@ export function apply(ctx) {
             const key = `${lang}|${input.id}|${input.name}|${round(input.lat, 4)}|${round(input.lon, 4)}`
             const place = await getCached(placeCache, key, PLACE_TTL, async () => {
               const base = await buildPlace(input, lang)
-              const social = await getSocialRecommendations(base, lang)
-              return social.length ? { ...base, social } : base
+              const recommendations = await getRecommendations(base, lang)
+              const hasRecommendations = Object.values(recommendations).some(
+                (sections) => sections.length > 0,
+              )
+              return hasRecommendations ? { ...base, recommendations } : base
             })
             sendJson(res, 200, { ok: true, lang, place })
             return
@@ -830,7 +1107,7 @@ export function apply(ctx) {
           sendJson(res, 404, { ok: false, error: `Unknown endpoint ${route}` })
         } catch (error) {
           if (!res.headersSent) {
-            sendJson(res, 500, {
+            sendJson(res, Number(error?.statusCode) || 500, {
               ok: false,
               error: String(error?.message || error),
             })

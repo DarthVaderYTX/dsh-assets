@@ -1,12 +1,17 @@
-// 马蜂窝（Mafengwo）内容提供方。
+// Shared Mafengwo mobile-page reader.
 //
-// 这里使用马蜂窝移动端的公开目的地/景点榜单页，提取榜单摘要、评分、蜂评数、
-// 游记数、标签、地址、推荐理由和回链。只缓存摘要并在界面回链，不抓取全文。
+// The public mobile site exposes three useful ranking pages under the same
+// destination id:
+//   /jd/<id>/  attractions
+//   /cy/<id>/  food
+//   /gw/<id>/  shopping (not used yet)
+// /yl/<id>/ (entertainment) can be plugged in the same way.
 //
-// 该文件是 SocialProvider 接口的第一个实现。后续接入携程、小红书、官方 API
-// 等来源时，复制这个结构并在 providers/index.js 注册即可。
+// The parser supports both HTML layouts used by the mobile site: the richer
+// "poi-li" card (rating/address/tags) and the international "poi" card
+// (review excerpt/one tag).
 
-import { fetchText } from '../http.js'
+import { fetchText } from '../../http.js'
 
 const DIRECTORY_URL = 'https://m.mafengwo.cn/mdd/'
 const MOBILE_UA =
@@ -79,10 +84,6 @@ function pageHeaders(referer = 'https://m.mafengwo.cn/') {
   }
 }
 
-/**
- * Parse the public destination directory into normalized-name -> { id, name }.
- * Exported so the provider contract can be tested without network access.
- */
 export function parseDestinationDirectory(html) {
   const directory = new Map()
   const pattern =
@@ -97,15 +98,36 @@ export function parseDestinationDirectory(html) {
   return directory
 }
 
-/**
- * Parse one public attraction-ranking page.
- * Exported for tests; every field is optional except name/url.
- */
-export function parsePoiPage(html, place = {}) {
+function attachLocalCoordinates(items, place, category) {
+  if (category !== 'attraction') return items
+  const known = Array.isArray(place.attractions) ? place.attractions : []
+  if (!known.length) return items
+  return items.map((item) => {
+    if (Number.isFinite(item.lat) && Number.isFinite(item.lon)) return item
+    const normalized = normalizeName(item.name)
+    const match = known.find((candidate) => {
+      const name = normalizeName(candidate.name || candidate.nameZh || '')
+      return (
+        name &&
+        (name === normalized ||
+          (normalized.length >= 2 && name.includes(normalized)) ||
+          (name.length >= 2 && normalized.includes(name)))
+      )
+    })
+    if (!match) return item
+    return {
+      ...item,
+      lat: match.lat,
+      lon: match.lon,
+      localId: match.id,
+    }
+  })
+}
+
+export function parseMafengwoPage(html, category, place = {}) {
   const items = []
   const cardPattern =
     /<a href="\/poi\/(\d+)\.html[^"]*" class="(?:poi-li|poi)">([\s\S]*?)<\/a>/g
-  const known = Array.isArray(place.attractions) ? place.attractions : []
   let rank = 0
   for (const match of String(html || '').matchAll(cardPattern)) {
     const poiId = match[1]
@@ -140,22 +162,13 @@ export function parsePoiPage(html, place = {}) {
     const comment = stripHtml(
       String(commentHtml || '').replace(/<strong>[\s\S]*?<\/strong>/, ''),
     )
-    const normalized = normalizeName(name)
-    const local = known.find((item) => {
-      const candidate = normalizeName(item.name || item.nameZh || '')
-      return (
-        candidate &&
-        (candidate === normalized ||
-          (normalized.length >= 2 && candidate.includes(normalized)) ||
-          (candidate.length >= 2 && normalized.includes(candidate)))
-      )
-    })
     rank += 1
     items.push({
       id: `mafengwo:${poiId}`,
       poiId,
       name,
       rank,
+      category,
       image,
       rating: progress > 0 ? Math.round((progress / 20) * 10) / 10 : null,
       reviewCount: Number.isFinite(numbers[0]) ? numbers[0] : null,
@@ -165,14 +178,12 @@ export function parsePoiPage(html, place = {}) {
       description: comment || [tagsText, address].filter(Boolean).join(' · '),
       url: `https://m.mafengwo.cn/poi/${poiId}.html`,
       provider: 'mafengwo',
+      service: 'mafengwo',
       source: 'mafengwo',
-      lat: local?.lat,
-      lon: local?.lon,
-      localId: local?.id,
     })
     if (items.length >= MAX_ITEMS) break
   }
-  return items
+  return attachLocalCoordinates(items, place, category)
 }
 
 async function fetchDirectory() {
@@ -200,7 +211,8 @@ async function getDirectory() {
   return directoryPromise
 }
 
-function findDestination(directory, place) {
+export async function findMafengwoDestination(place) {
+  const directory = await getDirectory()
   const candidates = [
     place.nameZh,
     place.name,
@@ -218,98 +230,61 @@ function findDestination(directory, place) {
   return null
 }
 
-async function fetchDestinationPage(destination) {
-  const key = destination.id
+const SECTION_PATH = {
+  attraction: 'jd',
+  food: 'cy',
+  shopping: 'gw',
+  entertainment: 'yl',
+}
+
+export async function fetchMafengwoSection(destination, category) {
+  const section = SECTION_PATH[category]
+  if (!section) throw new Error(`Unsupported Mafengwo category: ${category}`)
+  const key = `${section}:${destination.id}`
   const cached = pageCache.get(key)
   if (cached && Date.now() - cached.at < PAGE_TTL) return cached.value
-  const html = await fetchText(
-    `https://m.mafengwo.cn/jd/${destination.id}/`,
-    pageHeaders(`https://m.mafengwo.cn/mdd/${destination.id}`),
-    10000,
-  )
-  if (isBlocked(html)) throw new Error('Mafengwo destination page was blocked')
-  const items = parsePoiPage(html)
-  if (!items.length) throw new Error('Mafengwo destination page had no POIs')
-  const value = {
-    destination,
-    url: `https://m.mafengwo.cn/jd/${destination.id}/`,
-    items,
-  }
+  const url = `https://m.mafengwo.cn/${section}/${destination.id}/`
+  const html = await fetchText(url, pageHeaders(`https://m.mafengwo.cn/mdd/${destination.id}`), 10000)
+  if (isBlocked(html)) throw new Error(`Mafengwo ${category} page was blocked`)
+  const items = parseMafengwoPage(html, category)
+  if (!items.length) throw new Error(`Mafengwo ${category} page had no entries`)
+  const value = { destination, category, url, items }
   pageCache.set(key, { at: Date.now(), value })
   return value
 }
 
-function attachLocalCoordinates(items, place) {
-  const known = Array.isArray(place.attractions) ? place.attractions : []
-  if (!known.length) return items
-  return items.map((item) => {
-    if (Number.isFinite(item.lat) && Number.isFinite(item.lon)) return item
-    const normalized = normalizeName(item.name)
-    const match = known.find((candidate) => {
-      const name = normalizeName(candidate.name || candidate.nameZh || '')
-      return (
-        name &&
-        (name === normalized ||
-          (normalized.length >= 2 && name.includes(normalized)) ||
-          (name.length >= 2 && normalized.includes(name)))
-      )
-    })
-    if (!match) return item
-    return {
-      ...item,
-      lat: match.lat,
-      lon: match.lon,
-      localId: match.id,
-    }
-  })
-}
-
-/**
- * SocialProvider implementation.
- *
- * Interface:
- *   id: string
- *   label: { zh, en }
- *   priority: number
- *   supports(place, lang): boolean
- *   recommend(place, lang): Promise<SocialSection | null>
- *
- * SocialSection:
- *   { id, label, url, items: SocialItem[], destination? }
- *
- * SocialItem:
- *   { id, name, description, image, url, rating?, reviewCount?, noteCount?,
- *     tags?, lat?, lon?, localId?, provider, source }
- */
-export const mafengwoProvider = {
-  id: 'mafengwo',
-  label: { zh: '马蜂窝', en: 'Mafengwo' },
-  priority: 10,
-  timeoutMs: 9000,
-  supports() {
-    return true
-  },
-  async recommend(place, lang = 'zh') {
-    const directory = await getDirectory()
-    const destination = findDestination(directory, place)
-    if (!destination) return null
-    const page = await fetchDestinationPage(destination)
-    return {
-      id: 'mafengwo',
-      label: lang === 'zh' ? '马蜂窝' : 'Mafengwo',
-      url: page.url,
-      destination: { id: destination.id, name: destination.name },
-      attribution: {
-        name: '马蜂窝',
-        url: page.url,
-        note:
-          lang === 'zh'
-            ? '榜单摘要与评分来自马蜂窝公开移动端页面'
-            : 'Ranking snippets and ratings from public Mafengwo mobile pages',
-      },
-      items: attachLocalCoordinates(page.items, place),
-    }
-  },
+export function buildMafengwoSection({ destination, category, url, items }, lang) {
+  const categoryLabel =
+    category === 'food'
+      ? lang === 'zh'
+        ? '美食'
+        : 'Food'
+      : category === 'lodging'
+        ? lang === 'zh'
+          ? '住宿'
+          : 'Stay'
+        : lang === 'zh'
+          ? '景点'
+          : 'Sights'
+  return {
+    key: `mafengwo:${category}`,
+    service: 'mafengwo',
+    serviceLabel: lang === 'zh' ? '马蜂窝' : 'Mafengwo',
+    category,
+    label: lang === 'zh' ? '马蜂窝' : 'Mafengwo',
+    title: categoryLabel,
+    url,
+    destination: { id: destination.id, name: destination.name },
+    attribution: {
+      name: '马蜂窝',
+      url,
+      note:
+        lang === 'zh'
+          ? '榜单摘要与评分来自马蜂窝公开移动端页面'
+          : 'Ranking snippets and ratings from public Mafengwo mobile pages',
+    },
+    items,
+  }
 }
 
 export { normalizeName as normalizeMafengwoName }

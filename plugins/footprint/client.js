@@ -50,7 +50,7 @@ window.__ModuleLoader__.load({
       'place.noIntro': '暂无简介。',
       'place.copy': '复制坐标',
       'place.copied': '已复制',
-      'attractions.title': '景点推荐',
+      'attractions.title': '地图上的景点',
       'attractions.count': '个去处',
       'attractions.empty': '附近暂时没有可推荐的景点，先在地球上看看周边吧。',
       'attractions.focus': '在地球上查看',
@@ -60,6 +60,35 @@ window.__ModuleLoader__.load({
       'social.reviews': '条蜂评',
       'social.notes': '篇游记',
       'social.external': '打开原页面',
+      'rec.attraction': '景点推荐',
+      'rec.food': '餐饮推荐',
+      'rec.lodging': '住宿推荐',
+      'trip.title': '我的行程',
+      'trip.none': '未选择行程',
+      'trip.create': '新建行程',
+      'trip.name': '行程名称',
+      'trip.namePlaceholder': '例如：京都三日',
+      'trip.start': '开始日期',
+      'trip.end': '结束日期',
+      'trip.save': '创建行程',
+      'trip.cancel': '取消',
+      'trip.add': '加入行程',
+      'trip.added': '已加入行程',
+      'trip.created': '行程已创建',
+      'trip.duplicate': '已经在行程里了',
+      'trip.count': '个地点',
+      'trip.empty': '还没有行程，先创建一个。',
+      'trip.noItems': '行程还是空的。去搜索景点、餐饮或住宿，再把它们加进来。',
+      'trip.select': '选择行程',
+      'trip.delete': '删除行程',
+      'trip.remove': '移除',
+      'trip.close': '关闭',
+      'trip.focus': '在地球上查看',
+      'trip.pending': '创建后会把「{name}」加入这个行程。',
+      'trip.category.attraction': '景点',
+      'trip.category.food': '餐饮',
+      'trip.category.lodging': '住宿',
+      'trip.failed': '行程操作失败，请重试。',
       'source.wikipedia': '资料与图片来自 Wikipedia',
       'source.guide': 'FootPrint 内置旅行导览',
       'source.view': '在 Wikipedia 查看',
@@ -126,7 +155,7 @@ window.__ModuleLoader__.load({
       'place.noIntro': 'No introduction yet.',
       'place.copy': 'Copy coordinates',
       'place.copied': 'Copied',
-      'attractions.title': 'Places to see',
+      'attractions.title': 'Sights on the map',
       'attractions.count': 'nearby',
       'attractions.empty': 'No nearby sights to recommend yet. Explore the surroundings on the globe.',
       'attractions.focus': 'Show on globe',
@@ -136,6 +165,35 @@ window.__ModuleLoader__.load({
       'social.reviews': 'reviews',
       'social.notes': 'travel notes',
       'social.external': 'Open original page',
+      'rec.attraction': 'Sights',
+      'rec.food': 'Food',
+      'rec.lodging': 'Stays',
+      'trip.title': 'My trips',
+      'trip.none': 'No trip selected',
+      'trip.create': 'New trip',
+      'trip.name': 'Trip name',
+      'trip.namePlaceholder': 'e.g. Three days in Kyoto',
+      'trip.start': 'Start date',
+      'trip.end': 'End date',
+      'trip.save': 'Create trip',
+      'trip.cancel': 'Cancel',
+      'trip.add': 'Add to trip',
+      'trip.added': 'Added to trip',
+      'trip.created': 'Trip created',
+      'trip.duplicate': 'Already in this trip',
+      'trip.count': 'places',
+      'trip.empty': 'No trips yet. Create one first.',
+      'trip.noItems': 'This trip is empty. Search for sights, food or stays, then add them here.',
+      'trip.select': 'Choose a trip',
+      'trip.delete': 'Delete trip',
+      'trip.remove': 'Remove',
+      'trip.close': 'Close',
+      'trip.focus': 'Show on globe',
+      'trip.pending': '“{name}” will be added after the trip is created.',
+      'trip.category.attraction': 'Sights',
+      'trip.category.food': 'Food',
+      'trip.category.lodging': 'Stays',
+      'trip.failed': 'Trip action failed. Please try again.',
       'source.wikipedia': 'Text and images from Wikipedia',
       'source.guide': 'FootPrint built-in travel guide',
       'source.view': 'View on Wikipedia',
@@ -181,6 +239,7 @@ window.__ModuleLoader__.load({
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
   background: var(--dsw-alias-bg-base, #0b1017);
   color: var(--dsw-alias-label-primary, #e7edf5);
   font-family: inherit;
@@ -254,6 +313,59 @@ window.__ModuleLoader__.load({
   border-radius: 999px; padding: 4px 9px; font: inherit; font-size: 11px;
 }
 .fp-chip:hover { color: var(--dsw-alias-label-primary, #e7edf5); border-color: var(--dsw-alias-border-l2, rgba(255,255,255,.22)); }
+.fp-trip-bar { display: flex; gap: 6px; margin-top: 10px; }
+.fp-trip-current { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; appearance: none; cursor: pointer; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.12)); border-radius: 9px; background: var(--dsw-alias-bg-layer-2, rgba(255,255,255,.04)); color: var(--dsw-alias-label-secondary, #93a2b5); padding: 7px 9px; font: inherit; font-size: 11px; text-align: left; }
+.fp-trip-current:hover { border-color: rgba(244,176,74,.45); color: var(--dsw-alias-label-primary, #e7edf5); }
+.fp-trip-current svg { flex: 0 0 auto; color: var(--fp-amber); }
+.fp-trip-current-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-trip-current-count { margin-left: auto; flex: 0 0 auto; min-width: 18px; height: 17px; padding: 0 5px; border-radius: 999px; background: rgba(244,176,74,.16); color: var(--fp-amber); display: grid; place-items: center; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.fp-trip-new-btn { flex: 0 0 auto; width: 30px; appearance: none; cursor: pointer; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.12)); border-radius: 9px; background: transparent; color: var(--dsw-alias-label-secondary, #93a2b5); font: inherit; font-size: 18px; line-height: 1; }
+.fp-trip-new-btn:hover { color: var(--fp-amber); border-color: rgba(244,176,74,.45); }
+.fp-spot-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 5px; align-items: stretch; }
+.fp-spot-row > .fp-attraction, .fp-spot-row > .fp-social-card { box-sizing: border-box; width: 100%; }
+.fp-add-btn { appearance: none; cursor: pointer; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.12)); border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #121a24); color: var(--fp-amber); font: inherit; font-size: 16px; line-height: 1; padding: 0; display: grid; place-items: center; min-height: 42px; }
+.fp-add-btn:hover:not(:disabled) { border-color: rgba(244,176,74,.55); background: rgba(244,176,74,.1); }
+.fp-add-btn:disabled { cursor: default; }
+.fp-add-btn[data-added="true"] { color: var(--fp-teal); border-color: rgba(99,230,213,.35); }
+.fp-rec-group { margin-top: 17px; }
+.fp-rec-title { margin-bottom: 2px; }
+.fp-modal-mask { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(2,6,12,.64); backdrop-filter: blur(4px); }
+.fp-trip-dialog, .fp-trip-drawer { width: min(410px, 100%); max-height: min(82vh, 680px); display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; border: 1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.18)); background: var(--dsw-alias-bg-layer-1, #111a24); color: var(--dsw-alias-label-primary, #e7edf5); box-shadow: 0 18px 60px rgba(0,0,0,.4); overflow: hidden; }
+.fp-trip-dialog { width: min(380px, 100%); }
+.fp-trip-dialog-title { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.fp-trip-field { display: flex; flex-direction: column; gap: 5px; font-size: 10.5px; color: var(--dsw-alias-label-secondary, #93a2b5); }
+.fp-trip-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 8px 9px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.14)); background: var(--dsw-alias-bg-base, #0b1017); color: var(--dsw-alias-label-primary, #e7edf5); }
+.fp-trip-input:focus { outline: none; border-color: var(--dsw-alias-brand-primary, #6ba0ff); }
+.fp-trip-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fp-trip-pending { margin: 0; padding: 8px 9px; border-radius: 8px; background: rgba(244,176,74,.12); color: #d6bf96; font-size: 10px; line-height: 1.5; }
+.fp-trip-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.fp-btn { appearance: none; cursor: pointer; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.14)); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, #e7edf5); font: inherit; font-size: 12px; padding: 7px 12px; }
+.fp-btn:hover { border-color: var(--dsw-alias-border-l2, rgba(255,255,255,.24)); }
+.fp-btn-primary { background: var(--dsw-alias-brand-primary, #3d7eff); border-color: transparent; color: #fff; }
+.fp-btn:disabled { opacity: .5; cursor: default; }
+.fp-trip-drawer-head { display: flex; align-items: center; gap: 8px; }
+.fp-trip-close { margin-left: auto; appearance: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary, #93a2b5); cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; }
+.fp-trip-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.fp-trip-tab { flex: 0 0 auto; appearance: none; cursor: pointer; border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.12)); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary, #93a2b5); font: inherit; font-size: 10.5px; padding: 5px 9px; display: inline-flex; align-items: center; gap: 5px; }
+.fp-trip-tab[data-active="true"] { color: var(--dsw-alias-label-primary, #e7edf5); border-color: rgba(244,176,74,.55); background: rgba(244,176,74,.11); }
+.fp-trip-tab-count { min-width: 15px; height: 15px; border-radius: 999px; background: rgba(255,255,255,.08); display: grid; place-items: center; font-size: 9px; }
+.fp-trip-tab-new { border-style: dashed; }
+.fp-trip-content { flex: 1 1 auto; overflow: auto; min-height: 0; padding-right: 2px; }
+.fp-trip-summary { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.fp-trip-name { margin: 0; font-size: 15px; font-weight: 700; }
+.fp-trip-dates { margin: 0; font-size: 10px; color: var(--dsw-alias-label-secondary, #7d8da2); }
+.fp-trip-empty { margin: 10px 0; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #93a2b5); }
+.fp-trip-groups { display: flex; flex-direction: column; gap: 10px; }
+.fp-trip-group-title { margin: 0 0 5px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-secondary, #7d8da2); }
+.fp-trip-item { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 4px; align-items: center; border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.07)); }
+.fp-trip-item-main { min-width: 0; appearance: none; cursor: pointer; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 7px 0; }
+.fp-trip-item-name { display: block; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-primary, #e7edf5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-trip-item-desc { display: block; margin-top: 2px; font-size: 9.5px; color: var(--dsw-alias-label-secondary, #7d8da2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-trip-remove { appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--dsw-alias-label-secondary, #7d8da2); font: inherit; font-size: 16px; line-height: 1; padding: 2px; }
+.fp-trip-remove:hover { color: var(--dsw-alias-state-error-primary, #e06b5e); }
+.fp-trip-drawer-actions { border-top: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.09)); padding-top: 9px; margin-top: 4px; }
+.fp-trip-danger { color: var(--dsw-alias-state-error-primary, #e06b5e); border-color: rgba(224,107,94,.3); font-size: 10.5px; }
+.fp-toast { position: absolute; z-index: 30; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 8px 13px; border-radius: 999px; background: rgba(8,18,30,.92); border: 1px solid rgba(244,176,74,.35); color: #f1f7fd; font-size: 11px; box-shadow: 0 8px 28px rgba(0,0,0,.3); }
 .fp-msg { margin: 8px 1px 0; font-size: 11px; line-height: 1.45; color: var(--dsw-alias-label-secondary, #93a2b5); }
 .fp-msg[data-kind="error"] { color: var(--dsw-alias-state-error-primary, #e06b5e); }
 .fp-msg[data-kind="warn"] { color: var(--dsw-alias-state-warn-primary, #d49b36); }
@@ -575,6 +687,26 @@ window.__ModuleLoader__.load({
           stroke: 'currentColor',
           strokeWidth: 1.7,
           strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function TripIcon({ size = 14 }) {
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          'aria-hidden': 'true',
+        },
+        h('path', {
+          d: 'M6.2 8.5h11.6v9.3H6.2zM9 8.5V6.2h6v2.3M4.8 12.2h14.4M10.2 12.2v2.2h3.6v-2.2',
+          stroke: 'currentColor',
+          strokeWidth: 1.6,
+          strokeLinejoin: 'round',
+          strokeLinecap: 'round',
         }),
       )
     }
@@ -1071,12 +1203,250 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function SocialSection({ section, t, onAttraction, activeAttraction }) {
-      const items = Array.isArray(section.items) ? section.items : []
-      if (!items.length) return null
+    function TripDialog({ open, draft, setDraft, onSubmit, onClose, busy, t, pendingName }) {
+      if (!open) return null
       return h(
         'div',
-        { className: 'fp-social-section', 'data-provider': section.id },
+        {
+          className: 'fp-modal-mask',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget && !busy) onClose()
+          },
+        },
+        h(
+          'form',
+          { className: 'fp-trip-dialog', onSubmit },
+          h('h2', { className: 'fp-trip-dialog-title' }, t('trip.create')),
+          h(
+            'label',
+            { className: 'fp-trip-field' },
+            h('span', null, t('trip.name')),
+            h('input', {
+              className: 'fp-trip-input',
+              value: draft.name,
+              placeholder: t('trip.namePlaceholder'),
+              maxLength: 80,
+              autoFocus: true,
+              onChange: (event) => setDraft({ ...draft, name: event.target.value }),
+            }),
+          ),
+          h(
+            'div',
+            { className: 'fp-trip-date-row' },
+            h(
+              'label',
+              { className: 'fp-trip-field' },
+              h('span', null, t('trip.start')),
+              h('input', {
+                className: 'fp-trip-input',
+                type: 'date',
+                value: draft.startDate,
+                onChange: (event) => setDraft({ ...draft, startDate: event.target.value }),
+              }),
+            ),
+            h(
+              'label',
+              { className: 'fp-trip-field' },
+              h('span', null, t('trip.end')),
+              h('input', {
+                className: 'fp-trip-input',
+                type: 'date',
+                value: draft.endDate,
+                onChange: (event) => setDraft({ ...draft, endDate: event.target.value }),
+              }),
+            ),
+          ),
+          pendingName
+            ? h('p', { className: 'fp-trip-pending' }, t('trip.pending').replace('{name}', pendingName))
+            : null,
+          h(
+            'div',
+            { className: 'fp-trip-dialog-actions' },
+            h(
+              'button',
+              { type: 'button', className: 'fp-btn', onClick: onClose, disabled: busy },
+              t('trip.cancel'),
+            ),
+            h(
+              'button',
+              { type: 'submit', className: 'fp-btn fp-btn-primary', disabled: busy || !draft.name.trim() },
+              busy ? t('loading.detail') : t('trip.save'),
+            ),
+          ),
+        ),
+      )
+    }
+
+    function TripDrawer({
+      trips,
+      activeTripId,
+      onSelect,
+      onCreate,
+      onClose,
+      onRemoveItem,
+      onDeleteTrip,
+      onFocusItem,
+      t,
+    }) {
+      const [confirmDelete, setConfirmDelete] = React.useState(false)
+      const active = trips.find((trip) => trip.id === activeTripId) || trips[0] || null
+      const groups = ['attraction', 'food', 'lodging']
+      React.useEffect(() => {
+        setConfirmDelete(false)
+      }, [activeTripId])
+      return h(
+        'div',
+        {
+          className: 'fp-modal-mask',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
+        h(
+          'section',
+          { className: 'fp-trip-drawer', 'aria-label': t('trip.title') },
+          h(
+            'header',
+            { className: 'fp-trip-drawer-head' },
+            h('h2', { className: 'fp-trip-dialog-title' }, t('trip.title')),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'fp-trip-close',
+                onClick: onClose,
+                title: t('trip.close'),
+                'aria-label': t('trip.close'),
+              },
+              '×',
+            ),
+          ),
+          trips.length
+            ? h(
+                'div',
+                { className: 'fp-trip-tabs' },
+                ...trips.map((trip) =>
+                  h(
+                    'button',
+                    {
+                      key: trip.id,
+                      type: 'button',
+                      className: 'fp-trip-tab',
+                      'data-active': trip.id === active?.id ? 'true' : 'false',
+                      onClick: () => onSelect(trip.id),
+                    },
+                    h('span', { className: 'fp-trip-tab-name' }, trip.name),
+                    h('span', { className: 'fp-trip-tab-count' }, `${trip.items.length}`),
+                  ),
+                ),
+                h(
+                  'button',
+                  { type: 'button', className: 'fp-trip-tab fp-trip-tab-new', onClick: onCreate },
+                  `+ ${t('trip.create')}`,
+                ),
+              )
+            : null,
+          !active
+            ? h('p', { className: 'fp-trip-empty' }, t('trip.empty'))
+            : h(
+                'div',
+                { className: 'fp-trip-content' },
+                h(
+                  'div',
+                  { className: 'fp-trip-summary' },
+                  h('h3', { className: 'fp-trip-name' }, active.name),
+                  h(
+                    'p',
+                    { className: 'fp-trip-dates' },
+                    [active.startDate, active.endDate].filter(Boolean).join(' → ') ||
+                      `${active.items.length} ${t('trip.count')}`,
+                  ),
+                ),
+                active.items.length
+                  ? h(
+                      'div',
+                      { className: 'fp-trip-groups' },
+                      ...groups.map((category) => {
+                        const items = active.items.filter((item) => item.category === category)
+                        if (!items.length) return null
+                        return h(
+                          'div',
+                          { className: 'fp-trip-group', key: category },
+                          h('h4', { className: 'fp-trip-group-title' }, t(`trip.category.${category}`)),
+                          ...items.map((item) =>
+                            h(
+                              'div',
+                              { className: 'fp-trip-item', key: item.id },
+                              h(
+                                'button',
+                                {
+                                  type: 'button',
+                                  className: 'fp-trip-item-main',
+                                  onClick: () => onFocusItem(item),
+                                  title: Number.isFinite(item.lat)
+                                    ? t('trip.focus')
+                                    : t('social.external'),
+                                },
+                                h('span', { className: 'fp-trip-item-name' }, item.name),
+                                item.description
+                                  ? h('span', { className: 'fp-trip-item-desc' }, item.description)
+                                  : null,
+                              ),
+                              h(
+                                'button',
+                                {
+                                  type: 'button',
+                                  className: 'fp-trip-remove',
+                                  onClick: () => onRemoveItem(active.id, item.id),
+                                  title: t('trip.remove'),
+                                  'aria-label': t('trip.remove'),
+                                },
+                                '×',
+                              ),
+                            ),
+                          ),
+                        )
+                      }),
+                    )
+                  : h('p', { className: 'fp-trip-empty' }, t('trip.noItems')),
+                h(
+                  'div',
+                  { className: 'fp-trip-drawer-actions' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'fp-btn fp-trip-danger',
+                      onClick: () => {
+                        if (!confirmDelete) {
+                          setConfirmDelete(true)
+                          return
+                        }
+                        onDeleteTrip(active.id)
+                      },
+                    },
+                    confirmDelete ? `${t('trip.delete')}?` : t('trip.delete'),
+                  ),
+                ),
+              ),
+        ),
+      )
+    }
+
+    function SocialSection({
+      section,
+      t,
+      onAttraction,
+      activeAttraction,
+      onAdd,
+      isInTrip,
+    }) {
+      const items = Array.isArray(section.items) ? section.items : []
+      if (!items.length) return null
+      const category = section.category || 'attraction'
+      return h(
+        'div',
+        { className: 'fp-social-section', 'data-provider': section.key || section.id },
         h(
           'div',
           { className: 'fp-social-head' },
@@ -1150,11 +1520,13 @@ window.__ModuleLoader__.load({
                   : null,
               ),
             ]
+            const addable = { ...item, category }
+            const added = isInTrip ? isInTrip(addable) : false
+            let card = null
             if (flyable) {
-              return h(
+              card = h(
                 'button',
                 {
-                  key: item.id,
                   type: 'button',
                   className: 'fp-social-card',
                   'data-active': active ? 'true' : 'false',
@@ -1168,18 +1540,36 @@ window.__ModuleLoader__.load({
                 },
                 ...content,
               )
+            } else {
+              card = h(
+                'a',
+                {
+                  className: 'fp-social-card',
+                  href: item.url,
+                  target: '_blank',
+                  rel: 'noreferrer',
+                  title: `${t('social.external')}: ${item.name}`,
+                },
+                ...content,
+              )
             }
             return h(
-              'a',
-              {
-                key: item.id,
-                className: 'fp-social-card',
-                href: item.url,
-                target: '_blank',
-                rel: 'noreferrer',
-                title: `${t('social.external')}: ${item.name}`,
-              },
-              ...content,
+              'div',
+              { className: 'fp-spot-row', key: item.id },
+              card,
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'fp-add-btn',
+                  'data-added': added ? 'true' : 'false',
+                  disabled: added || !onAdd,
+                  onClick: () => onAdd?.(addable),
+                  title: added ? t('trip.added') : `${t('trip.add')}: ${item.name}`,
+                  'aria-label': `${t('trip.add')}: ${item.name}`,
+                },
+                added ? '✓' : '+',
+              ),
             )
           }),
         ),
@@ -1189,9 +1579,27 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function PlaceDetail({ place, t, copied, onCopy, onAttraction, activeAttraction }) {
+    function PlaceDetail({
+      place,
+      t,
+      copied,
+      onCopy,
+      onAttraction,
+      activeAttraction,
+      onAdd,
+      isInTrip,
+    }) {
       const attractions = Array.isArray(place.attractions) ? place.attractions : []
       const hasSource = place.source === 'wikipedia' && place.sourceUrl
+      const recommendations = place.recommendations || {}
+      const recGroups = ['attraction', 'food', 'lodging']
+        .map((category) => ({
+          category,
+          sections: Array.isArray(recommendations[category])
+            ? recommendations[category]
+            : [],
+        }))
+        .filter((group) => group.sections.length > 0)
       return h(
         'div',
         { className: 'fp-detail' },
@@ -1246,22 +1654,24 @@ window.__ModuleLoader__.load({
           h('h3', { className: 'fp-section-title' }, t('place.intro')),
           h('p', { className: 'fp-intro' }, place.intro || t('place.noIntro')),
         ),
-        place.social?.length
-          ? h(
-              'div',
-              { className: 'fp-social-block' },
-              h('h3', { className: 'fp-section-title' }, t('social.title')),
-              ...place.social.map((section) =>
-                h(SocialSection, {
-                  key: section.id,
-                  section,
-                  t,
-                  onAttraction,
-                  activeAttraction,
-                }),
-              ),
-            )
-          : null,
+        ...recGroups.map((group) =>
+          h(
+            'div',
+            { className: 'fp-rec-group', key: group.category },
+            h('h3', { className: 'fp-section-title fp-rec-title' }, t(`rec.${group.category}`)),
+            ...group.sections.map((section) =>
+              h(SocialSection, {
+                key: section.key || `${section.service}:${group.category}`,
+                section,
+                t,
+                onAttraction,
+                activeAttraction,
+                onAdd,
+                isInTrip,
+              }),
+            ),
+          ),
+        ),
         h(
           'div',
           { className: 'fp-attractions-head' },
@@ -1272,41 +1682,59 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'fp-attractions' },
-              ...attractions.map((attraction) =>
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    key: attraction.id,
-                    className: 'fp-attraction',
-                    'data-active': attraction.id === activeAttraction ? 'true' : 'false',
-                    onClick: () => onAttraction(attraction),
-                    title: `${t('attractions.focus')}: ${attraction.name}`,
-                    'aria-label': `${t('aria.attraction')}: ${attraction.name}`,
-                  },
-                  h(SmartImage, {
-                    src: attraction.thumbnail,
-                    alt: attraction.name,
-                    className: 'fp-thumb',
-                    fallback: attraction.name?.slice(0, 1) || '·',
-                  }),
+              ...attractions.map((attraction) => {
+                const addable = { ...attraction, category: 'attraction' }
+                const added = isInTrip ? isInTrip(addable) : false
+                return h(
+                  'div',
+                  { className: 'fp-spot-row', key: attraction.id },
                   h(
-                    'span',
-                    { className: 'fp-attraction-body' },
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'fp-attraction',
+                      'data-active': attraction.id === activeAttraction ? 'true' : 'false',
+                      onClick: () => onAttraction(attraction),
+                      title: `${t('attractions.focus')}: ${attraction.name}`,
+                      'aria-label': `${t('aria.attraction')}: ${attraction.name}`,
+                    },
+                    h(SmartImage, {
+                      src: attraction.thumbnail,
+                      alt: attraction.name,
+                      className: 'fp-thumb',
+                      fallback: attraction.name?.slice(0, 1) || '·',
+                    }),
                     h(
                       'span',
-                      { className: 'fp-attraction-top' },
-                      h('span', { className: 'fp-attraction-name' }, attraction.name),
+                      { className: 'fp-attraction-body' },
                       h(
                         'span',
-                        { className: 'fp-attraction-distance' },
-                        formatDistance(attraction.distance, t),
+                        { className: 'fp-attraction-top' },
+                        h('span', { className: 'fp-attraction-name' }, attraction.name),
+                        h(
+                          'span',
+                          { className: 'fp-attraction-distance' },
+                          formatDistance(attraction.distance, t),
+                        ),
                       ),
+                      h('span', { className: 'fp-attraction-desc' }, attraction.description),
                     ),
-                    h('span', { className: 'fp-attraction-desc' }, attraction.description),
                   ),
-                ),
-              ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'fp-add-btn',
+                      'data-added': added ? 'true' : 'false',
+                      disabled: added || !onAdd,
+                      onClick: () => onAdd?.(addable),
+                      title: added ? t('trip.added') : `${t('trip.add')}: ${attraction.name}`,
+                      'aria-label': `${t('trip.add')}: ${attraction.name}`,
+                    },
+                    added ? '✓' : '+',
+                  ),
+                )
+              }),
             )
           : h('p', { className: 'fp-muted' }, t('attractions.empty')),
         h(
@@ -1365,6 +1793,17 @@ window.__ModuleLoader__.load({
       const [cursor, setCursor] = React.useState(null)
       const [cursorPlace, setCursorPlace] = React.useState(null)
       const [reverseLoading, setReverseLoading] = React.useState(false)
+      const [trips, setTrips] = React.useState([])
+      const [activeTripId, setActiveTripId] = React.useState(null)
+      const [tripDrawerOpen, setTripDrawerOpen] = React.useState(false)
+      const [tripDialogOpen, setTripDialogOpen] = React.useState(false)
+      const [tripBusy, setTripBusy] = React.useState(false)
+      const [tripMessage, setTripMessage] = React.useState('')
+      const [tripDraft, setTripDraft] = React.useState({
+        name: '',
+        startDate: '',
+        endDate: '',
+      })
       const searchAbort = React.useRef(null)
       const detailAbort = React.useRef(null)
       const candidateRef = React.useRef(null)
@@ -1376,6 +1815,8 @@ window.__ModuleLoader__.load({
       const reverseTimerRef = React.useRef(null)
       const reverseAbortRef = React.useRef(null)
       const pendingReverseRef = React.useRef(null)
+      const pendingTripItemRef = React.useRef(null)
+      const tripMessageTimerRef = React.useRef(null)
 
       React.useEffect(
         () => () => {
@@ -1384,6 +1825,7 @@ window.__ModuleLoader__.load({
           if (copiedTimer.current) window.clearTimeout(copiedTimer.current)
           if (reverseTimerRef.current) window.clearTimeout(reverseTimerRef.current)
           if (reverseAbortRef.current) reverseAbortRef.current.abort()
+          if (tripMessageTimerRef.current) window.clearTimeout(tripMessageTimerRef.current)
         },
         [],
       )
@@ -1404,6 +1846,197 @@ window.__ModuleLoader__.load({
           throw new Error(payload?.error || `HTTP ${response.status}`)
         }
         return payload
+      }, [])
+
+      const apiSend = React.useCallback(async (path, method, body) => {
+        const response = await fetch(path, {
+          method,
+          cache: 'no-store',
+          headers: {
+            accept: 'application/json',
+            ...(body ? { 'content-type': 'application/json' } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        })
+        let payload = null
+        try {
+          payload = await response.json()
+        } catch {
+          // Fall through to the HTTP status message.
+        }
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || `HTTP ${response.status}`)
+        }
+        return payload
+      }, [])
+
+      const applyTripsPayload = React.useCallback((payload) => {
+        if (Array.isArray(payload.trips)) setTrips(payload.trips)
+        if (payload.activeTripId !== undefined) setActiveTripId(payload.activeTripId)
+      }, [])
+
+      const showTripMessage = React.useCallback((message) => {
+        setTripMessage(message)
+        if (tripMessageTimerRef.current) window.clearTimeout(tripMessageTimerRef.current)
+        tripMessageTimerRef.current = window.setTimeout(() => setTripMessage(''), 2200)
+      }, [])
+
+      const activeTrip = trips.find((trip) => trip.id === activeTripId) || null
+
+      const tripHasItem = React.useCallback(
+        (item) => {
+          if (!activeTrip) return false
+          const name = String(item?.name || '').trim().toLowerCase()
+          if (!name) return false
+          return activeTrip.items.some(
+            (entry) =>
+              entry.category === (item.category || 'attraction') &&
+              entry.name.toLowerCase() === name,
+          )
+        },
+        [activeTrip],
+      )
+
+      React.useEffect(() => {
+        let alive = true
+        apiGet(`${API}/trips`)
+          .then((payload) => {
+            if (alive) applyTripsPayload(payload)
+          })
+          .catch(() => {})
+        return () => {
+          alive = false
+        }
+      }, [apiGet, applyTripsPayload])
+
+      const addItemToTrip = React.useCallback(
+        async (tripId, item, silent = false) => {
+          setTripBusy(true)
+          try {
+            const payload = await apiSend(`${API}/trips/items`, 'POST', { tripId, item })
+            applyTripsPayload(payload)
+            if (!silent) {
+              showTripMessage(payload.duplicate ? t('trip.duplicate') : t('trip.added'))
+            }
+            return payload
+          } catch {
+            showTripMessage(t('trip.failed'))
+            return null
+          } finally {
+            setTripBusy(false)
+          }
+        },
+        [apiSend, applyTripsPayload, showTripMessage, t],
+      )
+
+      const handleAddToTrip = React.useCallback(
+        (item) => {
+          if (!activeTripId) {
+            pendingTripItemRef.current = item
+            setTripDraft({ name: '', startDate: '', endDate: '' })
+            setTripDialogOpen(true)
+            return
+          }
+          void addItemToTrip(activeTripId, item)
+        },
+        [activeTripId, addItemToTrip],
+      )
+
+      const saveTrip = React.useCallback(
+        async (event) => {
+          event?.preventDefault()
+          const name = tripDraft.name.trim()
+          if (!name) return
+          setTripBusy(true)
+          try {
+            const payload = await apiSend(`${API}/trips`, 'POST', {
+              name,
+              startDate: tripDraft.startDate,
+              endDate: tripDraft.endDate,
+            })
+            applyTripsPayload(payload)
+            setTripDialogOpen(false)
+            setTripDraft({ name: '', startDate: '', endDate: '' })
+            const pending = pendingTripItemRef.current
+            pendingTripItemRef.current = null
+            if (pending && payload.trip?.id) {
+              const added = await addItemToTrip(payload.trip.id, pending, true)
+              if (added) showTripMessage(t('trip.added'))
+            } else {
+              showTripMessage(t('trip.created'))
+            }
+          } catch {
+            showTripMessage(t('trip.failed'))
+          } finally {
+            setTripBusy(false)
+          }
+        },
+        [addItemToTrip, apiSend, applyTripsPayload, showTripMessage, t, tripDraft],
+      )
+
+      const selectTrip = React.useCallback(
+        async (id) => {
+          try {
+            const payload = await apiSend(`${API}/trips/active`, 'POST', { tripId: id })
+            applyTripsPayload(payload)
+          } catch {
+            showTripMessage(t('trip.failed'))
+          }
+        },
+        [apiSend, applyTripsPayload, showTripMessage, t],
+      )
+
+      const removeTripItem = React.useCallback(
+        async (tripId, itemId) => {
+          try {
+            const payload = await apiSend(
+              `${API}/trips/items?tripId=${encodeURIComponent(tripId)}&itemId=${encodeURIComponent(itemId)}`,
+              'DELETE',
+            )
+            applyTripsPayload(payload)
+          } catch {
+            showTripMessage(t('trip.failed'))
+          }
+        },
+        [apiSend, applyTripsPayload, showTripMessage, t],
+      )
+
+      const deleteTrip = React.useCallback(
+        async (id) => {
+          try {
+            const payload = await apiSend(
+              `${API}/trips?id=${encodeURIComponent(id)}`,
+              'DELETE',
+            )
+            applyTripsPayload(payload)
+            if (!payload.trips?.length) setTripDrawerOpen(false)
+          } catch {
+            showTripMessage(t('trip.failed'))
+          }
+        },
+        [apiSend, applyTripsPayload, showTripMessage, t],
+      )
+
+      React.useEffect(() => {
+        if (!tripDialogOpen && !tripDrawerOpen) return undefined
+        const onKeyDown = (event) => {
+          if (event.key !== 'Escape') return
+          if (tripDialogOpen) {
+            setTripDialogOpen(false)
+            pendingTripItemRef.current = null
+          } else {
+            setTripDrawerOpen(false)
+          }
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+      }, [tripDialogOpen, tripDrawerOpen])
+
+      const openCreateTrip = React.useCallback(() => {
+        pendingTripItemRef.current = null
+        setTripDraft({ name: '', startDate: '', endDate: '' })
+        setTripDrawerOpen(false)
+        setTripDialogOpen(true)
       }, [])
 
       const runReverse = React.useCallback(async () => {
@@ -1547,6 +2180,18 @@ window.__ModuleLoader__.load({
       }, [])
 
       const globe = useGlobe(globeRef, detail, onGlobePick)
+
+      const focusTripItem = React.useCallback(
+        (item) => {
+          setTripDrawerOpen(false)
+          if (Number.isFinite(item.lat) && Number.isFinite(item.lon)) {
+            globe.focusAttraction(item)
+          } else if (item.url) {
+            window.open(item.url, '_blank', 'noopener,noreferrer')
+          }
+        },
+        [globe],
+      )
 
       const selectAttraction = React.useCallback(
         (attraction) => {
@@ -1795,6 +2440,46 @@ window.__ModuleLoader__.load({
               !online
                 ? h('p', { className: 'fp-msg', 'data-kind': 'warn' }, t('search.localOnly'))
                 : null,
+              h(
+                'div',
+                { className: 'fp-trip-bar' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'fp-trip-current',
+                    onClick: () => {
+                      if (trips.length) setTripDrawerOpen(true)
+                      else openCreateTrip()
+                    },
+                    title: activeTrip ? t('trip.title') : t('trip.create'),
+                  },
+                  h(TripIcon, { size: 14 }),
+                  h(
+                    'span',
+                    { className: 'fp-trip-current-name' },
+                    activeTrip?.name || t('trip.none'),
+                  ),
+                  activeTrip
+                    ? h(
+                        'span',
+                        { className: 'fp-trip-current-count' },
+                        `${activeTrip.items.length}`,
+                      )
+                    : null,
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'fp-trip-new-btn',
+                    onClick: openCreateTrip,
+                    title: t('trip.create'),
+                    'aria-label': t('trip.create'),
+                  },
+                  '+',
+                ),
+              ),
             ),
             h(
               'div',
@@ -1865,6 +2550,8 @@ window.__ModuleLoader__.load({
                       onCopy: copyCoordinates,
                       onAttraction: selectAttraction,
                       activeAttraction,
+                      onAdd: handleAddToTrip,
+                      isInTrip: tripHasItem,
                     })
                   : detailError
                     ? h('div', { className: 'fp-empty-card' }, h('p', { className: 'fp-msg', 'data-kind': 'error' }, detailError))
@@ -1980,6 +2667,31 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+        h(TripDialog, {
+          open: tripDialogOpen,
+          draft: tripDraft,
+          setDraft: setTripDraft,
+          onSubmit: saveTrip,
+          onClose: () => {
+            setTripDialogOpen(false)
+            pendingTripItemRef.current = null
+          },
+          busy: tripBusy,
+          t,
+          pendingName: pendingTripItemRef.current?.name || '',
+        }),
+        h(TripDrawer, {
+          trips,
+          activeTripId,
+          onSelect: (id) => void selectTrip(id),
+          onCreate: openCreateTrip,
+          onClose: () => setTripDrawerOpen(false),
+          onRemoveItem: (tripId, itemId) => void removeTripItem(tripId, itemId),
+          onDeleteTrip: (id) => void deleteTrip(id),
+          onFocusItem: focusTripItem,
+          t,
+        }),
+        tripMessage ? h('div', { className: 'fp-toast' }, tripMessage) : null,
       )
     }
 

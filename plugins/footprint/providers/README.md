@@ -1,77 +1,91 @@
-# Social content providers
+# Recommendation providers
 
-`providers/index.js` is a small registry for attraction recommendations from
-social / travel sources. The current first provider is **Mafengwo**; future
-providers (Ctrip, Xiaohongshu, an official API, ...) only need to implement the
-same contract and be added to the registry.
+Providers are organized by **category** and **service name**:
 
-## Provider contract
+```
+providers/
+  index.js                         registry; returns sections grouped by category
+  attraction/
+    mafengwo.js                    attractions from the public Mafengwo mobile ranking
+  food/
+    mafengwo.js                    food from the public Mafengwo mobile ranking
+    openstreetmap.js               nearby restaurants/cafes via Nominatim bounded search
+  lodging/
+    openstreetmap.js               nearby hotels/guest houses via Nominatim bounded search
+  shared/
+    mafengwo.js                    directory, page cache and mobile HTML parser
+    nominatim.js                   shared 1 req/s bounded-search queue
+```
+
+A place response contains:
+
+```js
+{
+  recommendations: {
+    attraction: [ section, ... ],
+    food:       [ section, ... ],
+    lodging:    [ section, ... ],
+  }
+}
+```
+
+Each section:
+
+```js
+{
+  key: 'mafengwo:food',
+  service: 'mafengwo',
+  serviceLabel: '马蜂窝',
+  category: 'food',
+  label: '马蜂窝',
+  url: 'https://m.mafengwo.cn/cy/10065/',
+  attribution: { name, url, note },
+  items: [ item, ... ],
+}
+```
+
+Item fields used by the client:
+
+```js
+{
+  id, name, description, image, url,
+  category, service, provider, source,
+  rating?, reviewCount?, noteCount?,
+  tags?, address?,
+  lat?, lon?, localId?, distance?
+}
+```
+
+## Adding a provider
 
 ```js
 export const myProvider = {
-  id: 'ctrip',
+  key: 'ctrip:food',
+  service: 'ctrip',
+  category: 'food',
   label: { zh: '携程', en: 'Ctrip' },
-  priority: 20,
+  priority: 30,
   timeoutMs: 9000,
-
-  supports(place, lang) {
-    return Boolean(place && place.lat != null && place.lon != null)
-  },
-
+  supports(place, lang) { return true },
   async recommend(place, lang) {
-    // Return null when this source has no content for the place.
-    return {
-      id: 'ctrip',
-      label: lang === 'zh' ? '携程' : 'Ctrip',
-      url: 'https://example.com/destination',
-      items: [
-        {
-          id: 'ctrip:123',
-          name: '示例景点',
-          description: '推荐理由/简介',
-          image: 'https://example.com/photo.jpg',
-          url: 'https://example.com/poi/123',
-          rating: 4.7,
-          reviewCount: 1200,
-          noteCount: 80,
-          tags: ['博物馆', '亲子'],
-          // Optional: coordinates let the client fly to the item and drop a marker.
-          lat: 39.9,
-          lon: 116.4,
-          localId: 'curated:beijing:forbidden-city',
-          provider: 'ctrip',
-          source: 'ctrip',
-        },
-      ],
-    }
+    return { key: 'ctrip:food', service: 'ctrip', category: 'food',
+      label: '携程', url: '...', items: [...] }
   },
 }
 ```
 
-Then register it in `providers/index.js`:
+Register it in `providers/index.js`, or call `registerProvider(provider)` from
+another Host plugin. `getRecommendations()` runs supported providers in
+parallel, applies each timeout, isolates failures, and returns every non-empty
+section. A failed social provider never blocks the Wikipedia/guide content.
 
-```js
-import { myProvider } from './my-provider.js'
+## Notes
 
-const PROVIDERS = [mafengwoProvider, myProvider]
-```
-
-`getSocialRecommendations(place, lang)` runs all supported providers in
-parallel, isolates failures, applies `timeoutMs`, and returns every non-empty
-section. The place's existing Wikipedia / built-in guide recommendations stay
-untouched, so a failing social provider never blanks the panel.
-
-## Mafengwo provider
-
-- Reads the public mobile destination directory (`m.mafengwo.cn/mdd/`) to map a
-  place name to a destination id.
-- Reads the public attraction ranking page (`m.mafengwo.cn/jd/<id>/`) for
-  ranking, rating, review/note counts, tags, address, recommendation reason,
-  image and backlink.
-- Caches the directory for 24 hours and each destination page for 1 hour.
-- Maps a POI to coordinates only when its name matches an existing place
-  attraction (e.g. Mafengwo "故宫" ↔ "故宫博物院"); otherwise the card links
-  to Mafengwo instead of flying on the globe.
-- Does not use Mafengwo's official Open Platform API because that API is aimed
-  at hotel/ticket supply and requires merchant credentials. A future provider
-  can implement the official API without changing the client contract.
+- Mafengwo: public mobile pages (`/jd/<id>/` attractions, `/cy/<id>/` food).
+  Directory cached 24h; each ranking page cached 1h. The official Open Platform
+  API is aimed at hotel/ticket supply and needs merchant credentials, so it is
+  not used here; a future provider can wrap it.
+- OpenStreetMap: Nominatim bounded search around the place; shared queue keeps
+  requests at roughly one per second. Food radius ~3 km, lodging ~5 km.
+- Mafengwo content belongs to Mafengwo and its authors. Only short ranking
+  snippets and backlinks are cached; confirm the terms before redistributing.
