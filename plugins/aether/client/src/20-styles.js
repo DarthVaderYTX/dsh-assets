@@ -734,7 +734,10 @@
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
   .ath-brand-sub { display: none; }
-  .ath-workspace { display: none; }
+  .ath-workspace {
+    max-width: none; padding: 0; border: 0; background: transparent;
+  }
+  .ath-workspace span { display: none; }
   .ath-topbar { padding: 10px 12px; }
   .ath-node-row { grid-template-columns: minmax(110px, 1.4fr) 84px 56px 52px; }
   .ath-node-row > :nth-child(2), .ath-node-row > :nth-child(4) { display: none; }
