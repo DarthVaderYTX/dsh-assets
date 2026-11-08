@@ -8,7 +8,7 @@
 - **CesiumJS 3D 地球**：本地随插件提供 CesiumJS 1.147.0 与 Natural Earth II 全球底图，不依赖 CDN、Cesium ion 或在线地形；支持拖动旋转、滚轮缩放、右键倾斜。
 - **随缩放自动清晰**：相机高度低于约 9,000 km 时，Esri World Imagery 卫星细节层平滑淡入；Cesium 按屏幕误差自动选择瓦片层级，放大到城市、街区时会请求更高层级的卫星瓦片，而不是拉伸 Natural Earth II 的低分辨率纹理。缩回全球视角时细节层自动隐藏，回到 Natural Earth II 底图。画布按设备像素比渲染，并把 `maximumScreenSpaceError` 收紧到 1.1、瓦片缓存增加到 320，避免高分屏上发糊。
 - **实时地区名与经纬度**：鼠标在球面上移动、拖拽地球或缩放时，右上角实时显示光标下的经纬度；停顿约 550 ms 后显示 Nominatim 反向地理编码得到的详细地区名（如“东城区 · 东华门街道”）。拖动过程中也会随相机变化重新采样，不是只在鼠标移动时更新。
-- **当地时间与昼夜**：Cesium 时钟初始化为本机当前时间并按真实时间推进，`SunLight` 决定昼夜明暗；初始视角朝向本地时区经线。夜间叠加 NASA VIIRS 2012 城市灯光，白天自动隐藏；右上角顶栏显示本地时间、时区和太阳/月亮图标。
+- **当地时间与昼夜**：Cesium 时钟初始化为本机当前时间并按真实时间推进，`SunLight` 决定昼夜明暗；初始视角朝向本地时区经线。区域/全球视角叠加 NASA VIIRS 2012 城市灯光，夜间灯光层 `dayAlpha=0`、`nightAlpha=0.9`；放大到城市、街区后自动隐藏低分辨率灯光层，由同一套 Esri 高清卫星影像承担夜面细节，避免夜间缩略图发糊。右上角顶栏显示本地时间、时区和太阳/月亮图标。
 - **地点定位**：输入地点后先查 Nominatim，失败时回退 Photon；结果同时包含内置目的地。选中后相机飞往坐标，主地点以琥珀色标注，推荐景点以青色标注，可直接点击球面标记或在右侧卡片中点选。
 - **介绍与景点推荐**：通过 Wikipedia 搜索条目、REST 摘要和 geosearch 附近条目，生成地点简介、缩略图、距离与 6 条附近推荐。
 - **离线兜底**：内置北京、上海、西安、成都、杭州、桂林、拉萨、香港、东京、京都、巴黎、伦敦、罗马、纽约、伊斯坦布尔、巴塞罗那 16 个目的地。每城含简介与 4–5 个景点及坐标，按距离排序。
@@ -35,7 +35,7 @@
 | 全球底图 | Natural Earth II（随 CesiumJS 分发） | 无 Cesium ion token，地形使用椭球体 |
 | 缩放细节 | [Esri World Imagery](https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer) | 低高度自动淡入，Cesium 按缩放层级取 0–19 级卫星瓦片；不依赖 Referer，离线或加载失败时回退到 Natural Earth II |
 | 实时地区名 | [Nominatim reverse](https://nominatim.openstreetmap.org/) | 光标经纬度反向地理编码；客户端 550 ms 防抖 + 宿主 1 秒串行限速 + 24 小时缓存 |
-| 昼夜光照 | Cesium `SunLight` + [NASA GIBS VIIRS CityLights_2012](https://gibs.earthdata.nasa.gov/) | 时钟取本机当前时间；夜间灯光层 `dayAlpha=0`、`nightAlpha=0.9`，只在暗面显示 |
+| 昼夜光照 | Cesium `SunLight` + [NASA GIBS VIIRS CityLights_2012](https://gibs.earthdata.nasa.gov/) | 时钟取本机当前时间；夜间灯光层 `dayAlpha=0`、`nightAlpha≤0.9`，区域级显示；低于约 700 km 自动隐藏，夜面改用高清 Esri 影像 |
 
 Wikipedia 文本与图片遵循 CC BY-SA 4.0；界面内向条目链接与许可信息。卫星影像 © Esri, Maxar, Earthstar Geographics, and the GIS User Community；地名数据 © OpenStreetMap contributors，遵循 ODbL。CesiumJS 以 Apache-2.0 分发，声明见 `vendor/cesium/LICENSE.md` 与 `vendor/cesium/VENDOR.md`。
 
@@ -75,7 +75,7 @@ plugins/footprint/
 
 ## 已知限制
 
-- 夜间灯光使用 NASA VIIRS 2012 快照，最高 8 级，城市尺度会放大显示；它用于氛围和方位感，不是实时灯光数据。
+- 夜间灯光使用 NASA VIIRS 2012 快照，最高 8 级；它只在区域/全球视角显示，城市近景会自动让位给高清卫星夜面，因此近景不会出现被放大的低分辨率灯光块。
 - 未使用 Cesium ion，因此没有全球地形起伏；全球底图是 Natural Earth II，放大后改用 Esri 卫星影像。
 - 放大后的城市/街区细节来自 Esri World Imagery，需要网络；离线时仍能旋转、定位和查看内置导览，但放大后只有 Natural Earth II 的低分辨率纹理。
 - 实时地区名依赖 Nominatim 反向地理编码；不可用时仍显示经纬度，并回退到 80 km 内最近的内置城市名。

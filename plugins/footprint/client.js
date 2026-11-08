@@ -642,6 +642,11 @@ window.__ModuleLoader__.load({
       scene.globe.tileCacheSize = 320
       scene.globe.preloadAncestors = true
       scene.globe.preloadSiblings = true
+      // Cesium fades day/night shading out when the camera gets close (the
+      // default fade starts around 10,000 km). Keep the terminator active at
+      // every zoom so a local view still reflects the user's local time.
+      scene.globe.lightingFadeOutDistance = 0
+      scene.globe.lightingFadeInDistance = 1
       if (scene.skyAtmosphere) {
         scene.skyAtmosphere.show = true
         scene.skyAtmosphere.brightnessShift = 0.18
@@ -805,6 +810,7 @@ window.__ModuleLoader__.load({
         let handler = null
         let observer = null
         let detailLayer = null
+        let nightLayer = null
         let updateDetailLayer = null
         setStatus('loading')
         setError('')
@@ -898,23 +904,36 @@ window.__ModuleLoader__.load({
                 maximumLevel: 8,
                 credit: new Cesium.Credit('NASA Earth Observatory / GIBS'),
               })
-              const nightLayer = viewer.imageryLayers.addImageryProvider(nightProvider)
-              nightLayer.dayAlpha = 0
-              nightLayer.nightAlpha = 0.9
-              nightLayer.brightness = 1.15
+              const nightLayerRef = viewer.imageryLayers.addImageryProvider(nightProvider)
+              nightLayer = nightLayerRef
+              nightLayerRef.dayAlpha = 0
+              nightLayerRef.nightAlpha = 0.9
+              nightLayerRef.brightness = 2
             } catch {
               // Day/night shading still works without the optional city-light layer.
             }
 
             updateDetailLayer = () => {
-              if (!detailLayer || viewer.isDestroyed()) return
+              if (viewer.isDestroyed()) return
               try {
                 const height = viewer.camera.positionCartographic.height
                 if (!Number.isFinite(height)) return
                 const alpha = Cesium.Math.clamp((9_000_000 - height) / 3_500_000, 0, 1)
-                detailLayer.alpha = alpha
-                detailLayer.show = alpha > 0.015
-                if (detailLayer.show) viewer.scene.requestRender()
+                if (detailLayer) {
+                  detailLayer.alpha = alpha
+                  detailLayer.show = alpha > 0.015
+                }
+                if (nightLayer) {
+                  // At street level the 500 m city-light source would just be
+                  // upscaled. Hide it there and let the high-resolution Esri
+                  // satellite layer carry the night side; keep city lights for
+                  // continental / regional views where they add orientation.
+                  const nightAlpha =
+                    Cesium.Math.clamp((height - 700_000) / 2_300_000, 0, 1) * 0.9
+                  nightLayer.nightAlpha = nightAlpha
+                  nightLayer.show = nightAlpha > 0.015
+                }
+                viewer.scene.requestRender()
               } catch {
                 // A camera read during teardown is harmless.
               }
