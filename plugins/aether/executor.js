@@ -105,6 +105,7 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_ENVIRONMENT_ID = node.environmentId || 'local';
   env.AETHER_ENVIRONMENT_NAME = node.environmentName || '';
   env.AETHER_EXECUTOR = node.executor || 'local';
+  env.AETHER_PORTS = JSON.stringify({ inputs: node.inputs || [], outputs: node.outputs || [] });
   env.AETHER_INPUT_FILE = inputFile;
   env.AETHER_PARAMS = JSON.stringify(node.params || {});
   env.AETHER_INPUTS = JSON.stringify(

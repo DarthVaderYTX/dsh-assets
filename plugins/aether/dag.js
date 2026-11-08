@@ -5,10 +5,14 @@
 
 const MODULE_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const PARAM_KEY = /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/;
+const MAX_PORTS = 16;
+const MAX_PORT_LABEL = 40;
 
 export const DEFAULT_TIMEOUT_SEC = 300;
 export const MAX_TIMEOUT_SEC = 86400;
 export const MODULE_KINDS = ['command', 'graph'];
+export const DEFAULT_INPUT_PORTS = ['input'];
+export const DEFAULT_OUTPUT_PORTS = ['output'];
 
 /**
  * 内置执行环境。执行环境是「模块在哪里跑」的声明，由执行器解析：
@@ -71,9 +75,22 @@ function scalar(value) {
   return String(value);
 }
 
+function normalizePorts(raw, fallback) {
+  if (!Array.isArray(raw)) return fallback.slice();
+  const ports = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const label = String(item == null ? '' : item).trim().slice(0, MAX_PORT_LABEL);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    ports.push(label);
+    if (ports.length >= MAX_PORTS) break;
+  }
+  return ports;
+}
+
 /** 参数既支持 `{ key: value }`，也支持 `[{ key, value }]` 的编辑态。 */
-export function normalizeParams(raw) {
-  const params = {};
+export function normalizeParams(raw) {  const params = {};
   if (Array.isArray(raw)) {
     for (const row of raw) {
       if (!row || typeof row !== 'object') continue;
@@ -107,11 +124,19 @@ export function normalizeModule(raw) {
         ? Math.min(MAX_TIMEOUT_SEC, Math.max(1, Math.round(timeout)))
         : DEFAULT_TIMEOUT_SEC,
     params: normalizeParams(source.params),
+    inputs: normalizePorts(source.inputs, DEFAULT_INPUT_PORTS),
+    outputs: normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS),
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
     environmentId: String(source.environmentId == null ? '' : source.environmentId).trim() || 'local',
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
   };
+}
+
+function normalizeCoordinate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 export function normalizeGraph(raw) {
@@ -123,6 +148,8 @@ export function normalizeGraph(raw) {
       moduleId: String(node.moduleId == null ? '' : node.moduleId).trim(),
       label: String(node.label == null ? '' : node.label).trim().slice(0, 120),
       params: normalizeParams(node.params),
+      x: normalizeCoordinate(node.x),
+      y: normalizeCoordinate(node.y),
     }));
   const edges = (Array.isArray(source.edges) ? source.edges : [])
     .filter((edge) => edge && typeof edge === 'object')
@@ -130,6 +157,8 @@ export function normalizeGraph(raw) {
       id: String(edge.id || `edge-${index + 1}`).trim().slice(0, 96),
       from: String(edge.from == null ? '' : edge.from).trim(),
       to: String(edge.to == null ? '' : edge.to).trim(),
+      fromPort: String(edge.fromPort == null ? '' : edge.fromPort).trim().slice(0, MAX_PORT_LABEL),
+      toPort: String(edge.toPort == null ? '' : edge.toPort).trim().slice(0, MAX_PORT_LABEL),
     }));
   return {
     id: String(source.id == null ? '' : source.id).trim(),
@@ -140,6 +169,22 @@ export function normalizeGraph(raw) {
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
   };
+}
+
+/** 给旧连线补上默认端口（第一条输出 / 输入），不改动已有端口。 */
+export function hydrateGraphPorts(graph, modules = []) {
+  const moduleById = new Map(modules.map((module) => [module.id, module]));
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const edge of graph.edges) {
+    const source = nodeById.get(edge.from);
+    const target = nodeById.get(edge.to);
+    if (!source || !target) continue;
+    const sourceModule = moduleById.get(source.moduleId);
+    const targetModule = moduleById.get(target.moduleId);
+    if (!edge.fromPort && sourceModule?.outputs?.length) edge.fromPort = sourceModule.outputs[0];
+    if (!edge.toPort && targetModule?.inputs?.length) edge.toPort = targetModule.inputs[0];
+  }
+  return graph;
 }
 
 function unique(values) {
@@ -249,6 +294,23 @@ export function validateModule(module, modules = [], graphs = [], environments =
   if (!catalog.some((item) => item.id === module.environmentId)) {
     errors.push(`执行环境「${module.environmentId}」不存在`);
   }
+  for (const [side, ports] of [
+    ['输入', module.inputs],
+    ['输出', module.outputs],
+  ]) {
+    if (!Array.isArray(ports)) {
+      errors.push(`模块的${side}端口无效`);
+      continue;
+    }
+    if (ports.length > MAX_PORTS) errors.push(`${side}端口最多 ${MAX_PORTS} 个`);
+    const seen = new Set();
+    for (const port of ports) {
+      if (!port) errors.push(`模块存在空的${side}端口`);
+      else if (port.length > MAX_PORT_LABEL) errors.push(`${side}端口名「${port}」过长`);
+      else if (seen.has(port)) errors.push(`${side}端口「${port}」重复`);
+      seen.add(port);
+    }
+  }
   for (const [key, value] of Object.entries(module.params || {})) {
     if (!PARAM_KEY.test(key)) errors.push(`参数名「${key}」无效（字母或下划线开头，可含数字、点、横线）`);
     if (value !== null && typeof value === 'object') errors.push(`参数「${key}」的值必须是字符串、数字或布尔值`);
@@ -259,16 +321,17 @@ export function validateModule(module, modules = [], graphs = [], environments =
       errors.push(`超时需在 1–${MAX_TIMEOUT_SEC} 秒之间`);
     }
   } else {
-    if (!module.graphId) errors.push('子图模块需要选择一个图');
-    else if (!graphs.some((graph) => graph.id === module.graphId)) errors.push(`图「${module.graphId}」不存在`);
+    if (!module.graphId) errors.push('子图模块需要选择一个实验');
+    else if (!graphs.some((graph) => graph.id === module.graphId)) errors.push(`实验「${module.graphId}」不存在`);
   }
   return errors;
 }
 
 export function validateGraph(graph, modules = [], graphs = []) {
   const errors = [];
-  if (!graph.name) errors.push('图需要名称');
+  if (!graph.name) errors.push('实验需要名称');
   const moduleById = new Map(modules.map((module) => [module.id, module]));
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const nodeIds = new Set();
   for (const node of graph.nodes) {
     if (!node.id) errors.push('节点缺少 id');
@@ -277,7 +340,7 @@ export function validateGraph(graph, modules = [], graphs = []) {
     const module = moduleById.get(node.moduleId);
     if (!module) errors.push(`节点「${nodeName(node)}」引用的模块不存在：${node.moduleId || '（空）'}`);
     else if (module.kind === 'graph' && !graphs.some((item) => item.id === module.graphId)) {
-      errors.push(`节点「${nodeName(node)}」的子图模块「${module.name}」指向不存在的图`);
+      errors.push(`节点「${nodeName(node)}」的子图模块「${module.name}」指向不存在的实验`);
     }
     for (const key of Object.keys(node.params || {})) {
       if (!PARAM_KEY.test(key)) errors.push(`节点「${nodeName(node)}」的参数名「${key}」无效`);
@@ -293,7 +356,27 @@ export function validateGraph(graph, modules = [], graphs = []) {
       errors.push('节点不能依赖自身');
       continue;
     }
-    const pair = `${edge.from}>${edge.to}`;
+    const sourceNode = nodeById.get(edge.from);
+    const targetNode = nodeById.get(edge.to);
+    const sourceModule = moduleById.get(sourceNode.moduleId);
+    const targetModule = moduleById.get(targetNode.moduleId);
+    if (sourceModule) {
+      const outputs = sourceModule.outputs || [];
+      if (!outputs.length) {
+        errors.push(`节点「${nodeName(sourceNode)}」的模块没有输出端口，不能作为连线起点`);
+      } else if (edge.fromPort && !outputs.includes(edge.fromPort)) {
+        errors.push(`节点「${nodeName(sourceNode)}」没有输出端口「${edge.fromPort}」`);
+      }
+    }
+    if (targetModule) {
+      const inputs = targetModule.inputs || [];
+      if (!inputs.length) {
+        errors.push(`节点「${nodeName(targetNode)}」的模块没有输入端口，不能作为连线终点`);
+      } else if (edge.toPort && !inputs.includes(edge.toPort)) {
+        errors.push(`节点「${nodeName(targetNode)}」没有输入端口「${edge.toPort}」`);
+      }
+    }
+    const pair = `${edge.from}>${edge.to}>${edge.fromPort || ''}>${edge.toPort || ''}`;
     if (pairs.has(pair)) errors.push('存在重复连线');
     pairs.add(pair);
   }
@@ -372,7 +455,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
       exits: [],
       entryNodes: [],
       exitNodes: [],
-      error: `图「${graph.name}」中存在环，无法执行`,
+      error: `实验「${graph.name}」中存在环，无法执行`,
     };
   }
 
@@ -419,6 +502,8 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         cwd: module?.cwd || '',
         timeoutSec: module?.timeoutSec || DEFAULT_TIMEOUT_SEC,
         environmentId: module?.environmentId || 'local',
+        inputs: module?.inputs || [],
+        outputs: module?.outputs || [],
       };
       plan.set(nodeId, { entries: [entry], exits: [entry] });
       nodes.push(entry);

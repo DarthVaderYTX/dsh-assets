@@ -2,7 +2,7 @@
   "name": "aether",
   "version": "1.0.0",
   "private": true,
-  "description": "Aether: a directed-acyclic-graph task execution manager with a left-sidebar panel for reusable modules, experiment graphs and subgraphs, and submitted experiment runs.",
+  "description": "Aether: a DAG task execution manager with a left-sidebar panel for reusable modules (with input/output ports), pannable experiment DAGs and subgraphs, and submitted runs.",
   "type": "module",
   "exports": {
     ".": "./index.js",

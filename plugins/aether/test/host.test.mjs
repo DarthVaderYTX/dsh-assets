@@ -151,7 +151,7 @@ test('cycles and subgraph reference loops are rejected', async () => {
       graph: {
         name: 'Loop graph',
         nodes: [
-          { id: 'a', moduleId: 'prepare' },
+          { id: 'a', moduleId: 'train' },
           { id: 'b', moduleId: 'evaluate' },
         ],
         edges: [
@@ -206,6 +206,61 @@ test('non-latin names still receive distinct module ids', async () => {
   assert.notEqual(first.payload.module.id, second.payload.module.id);
   assert.equal(first.payload.module.id, 'module');
   assert.equal(second.payload.module.id, 'module-2');
+});
+
+test('module ports and canvas coordinates round-trip through the API', async () => {
+  const source = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: { name: 'Port source', kind: 'command', command: 'echo src', inputs: [], outputs: ['result', 'result'] },
+    },
+  });
+  assert.equal(source.status, 200);
+  assert.deepEqual(source.payload.module.inputs, []);
+  assert.deepEqual(source.payload.module.outputs, ['result']);
+
+  const sink = await call('/modules', {
+    method: 'POST',
+    body: { create: true, module: { name: 'Port sink', kind: 'command', command: 'echo sink', inputs: ['value'], outputs: [] } },
+  });
+  assert.equal(sink.status, 200);
+
+  const graph = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        name: 'Port graph',
+        nodes: [
+          { id: 's', moduleId: source.payload.module.id, x: 40, y: 50 },
+          { id: 'd', moduleId: sink.payload.module.id, x: 300, y: 75 },
+        ],
+        edges: [{ id: 'e1', from: 's', to: 'd', fromPort: 'result', toPort: 'value' }],
+      },
+    },
+  });
+  assert.equal(graph.status, 200);
+  const detail = await call(`/graphs?id=${graph.payload.graph.id}`);
+  assert.equal(detail.payload.graph.nodes[0].x, 40);
+  assert.equal(detail.payload.graph.nodes[1].y, 75);
+  assert.equal(detail.payload.graph.edges[0].fromPort, 'result');
+  assert.equal(detail.payload.graph.edges[0].toPort, 'value');
+
+  const badPort = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        name: 'Bad port graph',
+        nodes: [
+          { id: 's', moduleId: source.payload.module.id },
+          { id: 'd', moduleId: sink.payload.module.id },
+        ],
+        edges: [{ id: 'e1', from: 's', to: 'd', fromPort: 'result', toPort: 'missing' }],
+      },
+    },
+  });
+  assert.equal(badPort.status, 400);
+  assert.match(badPort.payload.error, /没有输入端口「missing」/);
 });
 
 test('submitting a graph executes subgraph nodes in dependency order', async () => {

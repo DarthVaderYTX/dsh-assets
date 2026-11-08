@@ -5,6 +5,7 @@ import {
   expandGraph,
   findCycle,
   graphReferenceErrors,
+  hydrateGraphPorts,
   normalizeEnvironment,
   normalizeEnvironments,
   normalizeGraph,
@@ -61,6 +62,74 @@ test('validateGraph reports missing modules, self edges and cycles', () => {
     edges: [edge('a', 'b'), edge('b', 'a')],
   });
   assert.match(validateGraph(loop, modules, []).join('\n'), /存在环/);
+});
+
+test('modules expose input/output ports and normalize duplicates', () => {
+  const legacy = normalizeModule({ id: 'legacy', name: 'Legacy', kind: 'command', command: 'echo' });
+  assert.deepEqual(legacy.inputs, ['input']);
+  assert.deepEqual(legacy.outputs, ['output']);
+
+  const explicit = normalizeModule({
+    id: 'explicit',
+    name: 'Explicit',
+    kind: 'command',
+    command: 'echo',
+    inputs: [],
+    outputs: ['a', 'a', ' b ', ''],
+  });
+  assert.deepEqual(explicit.inputs, []);
+  assert.deepEqual(explicit.outputs, ['a', 'b']);
+});
+
+test('hydrateGraphPorts fills legacy edges from module ports', () => {
+  const modules = [
+    normalizeModule({ id: 'src', name: 'Src', kind: 'command', command: 'echo', inputs: [], outputs: ['out'] }),
+    normalizeModule({ id: 'dst', name: 'Dst', kind: 'command', command: 'echo', inputs: ['in'], outputs: [] }),
+  ];
+  const graph = normalizeGraph({
+    name: 'Ports',
+    nodes: [node('s', 'src'), node('d', 'dst')],
+    edges: [edge('s', 'd')],
+  });
+  hydrateGraphPorts(graph, modules);
+  assert.equal(graph.edges[0].fromPort, 'out');
+  assert.equal(graph.edges[0].toPort, 'in');
+  assert.deepEqual(validateGraph(graph, modules, []), []);
+});
+
+test('graph validation rejects unknown or missing ports', () => {
+  const modules = [
+    normalizeModule({ id: 'src', name: 'Src', kind: 'command', command: 'echo', inputs: [], outputs: ['out'] }),
+    normalizeModule({ id: 'dst', name: 'Dst', kind: 'command', command: 'echo', inputs: ['in'], outputs: [] }),
+  ];
+  const badPort = normalizeGraph({
+    name: 'Bad port',
+    nodes: [node('s', 'src'), node('d', 'dst')],
+    edges: [{ id: 'e1', from: 's', to: 'd', fromPort: 'out', toPort: 'nope' }],
+  });
+  assert.match(validateGraph(badPort, modules, []).join('\n'), /没有输入端口「nope」/);
+
+  const noInput = normalizeGraph({
+    name: 'No input',
+    nodes: [node('a', 'src'), node('b', 'src')],
+    edges: [{ id: 'e1', from: 'a', to: 'b', fromPort: 'out', toPort: 'out' }],
+  });
+  assert.match(validateGraph(noInput, modules, []).join('\n'), /没有输入端口/);
+});
+
+test('nodes keep canvas coordinates through normalization', () => {
+  const graph = normalizeGraph({
+    name: 'Positioned',
+    nodes: [
+      { id: 'a', moduleId: 'm', x: 12.5, y: 30 },
+      { id: 'b', moduleId: 'm', x: 'bad', y: null },
+    ],
+    edges: [],
+  });
+  assert.equal(graph.nodes[0].x, 12.5);
+  assert.equal(graph.nodes[0].y, 30);
+  assert.equal(graph.nodes[1].x, null);
+  assert.equal(graph.nodes[1].y, null);
 });
 
 test('validateModule enforces command and subgraph requirements', () => {

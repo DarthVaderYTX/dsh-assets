@@ -7,15 +7,17 @@ window.__ModuleLoader__.load({
 
     const NS = 'aether';
     const API = '/aether-api';
-    const TAB_KEY = 'aether:active-tab';
+    const TAB_KEY = 'aether:active-tab-v2';
+
+    // 术语：UI 的「实验」= 内部 graph（DAG 定义）；UI 的「运行」= 内部 experiment（一次提交）。
 
     // ---------------------------------------------------------- 文案
 
     const ZH = {
       panel: 'Aether',
       subtitle: '有向无环图任务执行管理器',
+      'tab.runs': '运行',
       'tab.experiments': '实验',
-      'tab.graphs': '图',
       'tab.modules': '模块',
       workspace: '工作区',
       'action.refresh': '刷新',
@@ -57,11 +59,11 @@ window.__ModuleLoader__.load({
       'experiments.executor': '执行器',
       'experiments.environments': '执行环境',
       'graphs.planEnv': '环境',
-      'experiments.title': '实验记录',
-      'experiments.subtitle': '提交一张图，Aether 按依赖顺序执行其中的模块使用。',
-      'experiments.new': '提交实验',
-      'experiments.empty': '还没有提交过实验。先在「图」里搭一张 DAG，再回来提交。',
-      'experiments.select': '选择左侧的实验中查看详情',
+      'experiments.title': '运行记录',
+      'experiments.subtitle': '每次运行是一张实验 DAG 的一次提交；这里查看进度、日志与产物。',
+      'experiments.new': '运行实验',
+      'experiments.empty': '还没有运行记录。先在「实验」里搭一张 DAG，再运行它。',
+      'experiments.select': '选择左侧的运行查看详情',
       'experiments.filter.all': '全部',
       'experiments.filter.running': '运行中',
       'experiments.filter.finished': '已结束',
@@ -75,66 +77,82 @@ window.__ModuleLoader__.load({
       'experiments.stdout': '标准输出',
       'experiments.stderr': '错误输出',
       'experiments.logEmpty': '这个节点还没有输出。',
-      'experiments.cancel': '取消实验',
+      'experiments.cancel': '取消运行',
       'experiments.rerun': '重跑',
-      'experiments.delete': '删除实验',
+      'experiments.delete': '删除记录',
       'experiments.openDir': '打开运行目录',
-      'experiments.name': '实验名称',
+      'experiments.name': '运行名称',
       'experiments.namePlaceholder': '留空则自动生成',
       'experiments.concurrency': '并发上限',
-      'experiments.graph': '选择图',
-      'experiments.submit': '提交',
+      'experiments.graph': '选择实验',
+      'experiments.submit': '运行',
       'experiments.submitting': '正在提交…',
-      'experiments.noGraphs': '还没有可提交的图，先去「图」里创建一张。',
+      'experiments.noGraphs': '还没有可运行的实验，先去「实验」里创建一个。',
       'experiments.plan': '执行计划',
       'experiments.planSummary': '{nodes} 个节点 · {layers} 层',
       'experiments.startedAt': '开始',
       'experiments.endedAt': '结束',
-      'experiments.paramsHint': '提交时使用的模块与参数已快照，之后修改图不会影响这次实验。',
+      'experiments.paramsHint': '提交运行时使用的模块与参数已快照，之后修改实验不会影响这次运行。',
       'experiments.cancelHint': '取消会终止正在运行的节点，未开始的节点标记为已取消。',
-      'experiments.deleteHint': '删除会移除这次实验的运行目录和日志，不可恢复。',
-      'experiments.rerunHint': '按当前图重新提交一次实验（会使用最新的模块与参数）。',
+      'experiments.deleteHint': '删除会移除这次运行的目录和日志，不可恢复。',
+      'experiments.rerunHint': '按当前实验重新运行一次（会使用最新的模块与参数）。',
       'experiments.params': '参数',
       'experiments.subgraphNode': '子图',
-      'graphs.title': '图',
-      'graphs.subtitle': '用模块使用和连线搭出实验的 DAG；子图模块可以把一张图装进另一张图。',
-      'graphs.empty': '还没有图。新建一张，从模块库添加节点并用连线表达依赖。',
-      'graphs.new': '新建图',
+      'graphs.title': '实验',
+      'graphs.subtitle': '实验是一张有向无环图：添加模块使用、连接输入输出端口，保存后可以运行。',
+      'graphs.empty': '还没有实验。新建一个，添加模块并用端口连线。',
+      'graphs.new': '新建实验',
       'graphs.edit': '编辑',
-      'graphs.delete': '删除图',
-      'graphs.name': '图名称',
+      'graphs.delete': '删除实验',
+      'graphs.name': '实验名称',
       'graphs.desc': '说明',
-      'graphs.nodeCount': '{n} 个节点',
+      'graphs.nodeCount': '{n} 个模块',
       'graphs.edgeCount': '{n} 条连线',
       'graphs.layerCount': '{n} 层',
-      'graphs.addNode': '添加节点',
+      'graphs.addNode': '添加模块',
       'graphs.chooseModule': '选择模块',
       'graphs.noModules': '模块库还是空的，先去「模块」里创建一个。',
-      'graphs.canvasEmpty': '从上方选一个模块并添加为节点。',
-      'graphs.inspector': '节点设置',
-      'graphs.selectNode': '在画布上点一个节点来编辑。',
+      'graphs.canvasEmpty': '从上方选一个模块并添加到画布。',
+      'graphs.inspector': '模块设置',
+      'graphs.selectNode': '在画布上点一个模块来编辑。',
       'graphs.nodeLabel': '显示名称',
       'graphs.nodeLabelPlaceholder': '默认使用模块名称',
       'graphs.nodeModule': '使用模块',
-      'graphs.nodeDeps': '依赖',
-      'graphs.addDep': '添加依赖',
-      'graphs.depPlaceholder': '选择上游节点',
-      'graphs.noDeps': '没有依赖，作为入口节点。',
-      'graphs.deleteNode': '删除节点',
+      'graphs.nodeDeps': '连线',
+      'graphs.addDep': '添加连线',
+      'graphs.depPlaceholder': '选择上游模块',
+      'graphs.noDeps': '还没有连线。',
+      'graphs.deleteNode': '删除模块',
       'graphs.edges': '连线',
-      'graphs.save': '保存图',
+      'graphs.save': '保存实验',
       'graphs.saving': '正在保存…',
       'graphs.cycle': '存在环，请调整连线',
       'graphs.planNodes': '{n} 个可执行节点',
       'graphs.unsaved': '有未保存的修改',
       'graphs.subgraph': '子图',
-      'graphs.subgraphTip': '这个节点会把子图「{name}」内联进当前图执行；节点参数会作为子图节点的默认值。',
-      'graphs.fixErrors': '请先修正图上的问题',
-      'graphs.deleteHint': '删除后这张图不会再出现在提交列表里；历史实验记录仍然保留。',
-      'graphs.nodesTitle': '节点与连线',
+      'graphs.subgraphTip': '这个模块会把实验「{name}」内联进来执行；模块参数会作为内层节点的默认值。',
+      'graphs.fixErrors': '请先修正实验上的问题',
+      'graphs.deleteHint': '删除后这个实验不会再出现在运行列表里；历史运行记录仍然保留。',
+      'graphs.usedBy': '被子图模块引用',
+      'graphs.nodesTitle': '模块与连线',
       'graphs.removeEdge': '删除连线',
+      'canvas.tidy': '整理',
+      'canvas.reset': '复位',
+      'canvas.zoomIn': '放大',
+      'canvas.zoomOut': '缩小',
+      'canvas.zoomReset': '恢复 100%',
+      'canvas.hint': '拖拽空白处平移 · 滚轮缩放 · Shift+右键框选模块与连线 · 从端口拖出连线',
+      'canvas.input': '输入',
+      'canvas.output': '输出',
+      'canvas.inputs': '输入',
+      'canvas.outputs': '输出',
+      'canvas.none': '无',
+      'canvas.noPorts': '无端口',
+      'canvas.connectHint': '从模块右侧的输出端点拖到另一模块左侧的输入端点；反向拖也可以。',
+      'canvas.edgeSelected': '已选中的连线',
+      'canvas.deleteSelected': '删除选中',
       'modules.title': '模块',
-      'modules.subtitle': '模块是可复用的执行单元：一段命令，或另一张图（子图）。',
+      'modules.subtitle': '模块是可复用的执行单元：一段命令，或另一个实验（子图）。',
       'modules.empty': '还没有模块。创建一个命令模块开始。',
       'modules.new': '新建模块',
       'modules.edit': '编辑模块',
@@ -144,6 +162,12 @@ window.__ModuleLoader__.load({
       'modules.kind': '模块类型',
       'modules.kind.command': '命令',
       'modules.kind.graph': '子图',
+      'modules.ports': '端口',
+      'modules.inputs': '输入端口',
+      'modules.outputs': '输出端口',
+      'modules.addPort': '添加端口',
+      'modules.portPlaceholder': '端口名',
+      'modules.portsHint': '端口是画布上的连线端点；模块可以没有输入或输出，用空列表表示。',
       'modules.command': '命令',
       'modules.commandHint': '通过 shell 执行。可用 {{参数名}} 插入参数；环境变量见下方说明。',
       'modules.cwd': '工作目录',
@@ -151,8 +175,8 @@ window.__ModuleLoader__.load({
       'modules.timeout': '超时（秒）',
       'modules.params': '默认参数',
       'modules.paramsHint': '节点会继承这里的默认值，可在节点上覆盖。',
-      'modules.graphRef': '引用的图',
-      'modules.graphRefHint': '该图会在使用此模块的节点处内联执行。',
+      'modules.graphRef': '引用的实验',
+      'modules.graphRefHint': '该实验会在使用此模块的节点处内联执行。',
       'modules.environment': '执行环境',
       'modules.environmentHint': '决定模块由哪个执行器运行。当前只有本机执行器；接入远程执行器后，由调度器按环境选择执行位置。',
       'modules.usedBy': '被使用',
@@ -160,7 +184,7 @@ window.__ModuleLoader__.load({
       'modules.notUsed': '尚未被使用',
       'modules.envTitle': '执行时注入的环境',
       'modules.envHint': 'AETHER_INPUT_FILE（上游输入 JSON 文件）、AETHER_NODE_DIR（节点目录）、AETHER_PARAMS（参数 JSON）、AETHER_INPUTS（上游摘要 JSON）、AETHER_RUN_ID / AETHER_NODE_PATH。',
-      'modules.noGraphs': '还没有图可选，先创建一张图。',
+      'modules.noGraphs': '还没有实验可选，先创建一个实验。',
       'modules.deleteHint': '删除后模块会从模块库移除；被图引用的模块不能直接删除。',
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
@@ -187,8 +211,8 @@ window.__ModuleLoader__.load({
       'error.retry': '重试',
       'confirm.deleteModule.title': '删除模块？',
       'confirm.deleteModule.body': '模块「{name}」将从模块库移除。',
-      'confirm.deleteGraph.title': '删除图？',
-      'confirm.deleteGraph.body': '图「{name}」将从图列表移除。',
+      'confirm.deleteGraph.title': '删除实验？',
+      'confirm.deleteGraph.body': '实验「{name}」将从实验列表移除。',
       'confirm.deleteRun.title': '删除实验记录？',
       'confirm.deleteRun.body': '实验「{name}」的运行目录与日志会被删除。',
       'confirm.cancelRun.title': '取消实验？',
@@ -197,8 +221,8 @@ window.__ModuleLoader__.load({
       'log.refresh': '刷新',
       'log.close': '关闭',
       'log.copy': '复制全部',
-      'graphEditor.new': '新建图',
-      'graphEditor.edit': '编辑图',
+      'graphEditor.new': '新建实验',
+      'graphEditor.edit': '编辑实验',
       'moduleEditor.new': '新建模块',
       'moduleEditor.edit': '编辑模块',
     };
@@ -206,8 +230,8 @@ window.__ModuleLoader__.load({
     const EN = {
       panel: 'Aether',
       subtitle: 'Directed-acyclic-graph task execution manager',
+      'tab.runs': 'Runs',
       'tab.experiments': 'Experiments',
-      'tab.graphs': 'Graphs',
       'tab.modules': 'Modules',
       workspace: 'Workspace',
       'action.refresh': 'Refresh',
@@ -249,11 +273,11 @@ window.__ModuleLoader__.load({
       'experiments.executor': 'Executor',
       'experiments.environments': 'Environments',
       'graphs.planEnv': 'Environment',
-      'experiments.title': 'Experiments',
-      'experiments.subtitle': 'Submit a graph and Aether runs its module usages in dependency order.',
-      'experiments.new': 'Submit experiment',
-      'experiments.empty': 'No experiments yet. Build a DAG under Graphs, then submit it here.',
-      'experiments.select': 'Select an experiment on the left to see details',
+      'experiments.title': 'Runs',
+      'experiments.subtitle': 'Each run is one submission of an experiment DAG; inspect progress, logs and artifacts here.',
+      'experiments.new': 'Run experiment',
+      'experiments.empty': 'No runs yet. Build a DAG under Experiments, then run it.',
+      'experiments.select': 'Select a run on the left to see details',
       'experiments.filter.all': 'All',
       'experiments.filter.running': 'Running',
       'experiments.filter.finished': 'Finished',
@@ -267,66 +291,82 @@ window.__ModuleLoader__.load({
       'experiments.stdout': 'stdout',
       'experiments.stderr': 'stderr',
       'experiments.logEmpty': 'This node has no output yet.',
-      'experiments.cancel': 'Cancel experiment',
+      'experiments.cancel': 'Cancel run',
       'experiments.rerun': 'Run again',
-      'experiments.delete': 'Delete experiment',
+      'experiments.delete': 'Delete record',
       'experiments.openDir': 'Open run folder',
-      'experiments.name': 'Experiment name',
+      'experiments.name': 'Run name',
       'experiments.namePlaceholder': 'Leave blank to generate one',
       'experiments.concurrency': 'Concurrency limit',
-      'experiments.graph': 'Graph',
-      'experiments.submit': 'Submit',
+      'experiments.graph': 'Experiment',
+      'experiments.submit': 'Run',
       'experiments.submitting': 'Submitting…',
-      'experiments.noGraphs': 'No graphs to submit yet. Create one under Graphs first.',
+      'experiments.noGraphs': 'No experiments to run yet. Create one under Experiments first.',
       'experiments.plan': 'Execution plan',
       'experiments.planSummary': '{nodes} nodes · {layers} layers',
       'experiments.startedAt': 'Started',
       'experiments.endedAt': 'Ended',
-      'experiments.paramsHint': 'The modules and parameters are snapshotted at submit time; later graph edits do not affect this run.',
+      'experiments.paramsHint': 'Modules and parameters are snapshotted when the run is submitted; later experiment edits do not affect it.',
       'experiments.cancelHint': 'Cancelling stops running nodes and marks pending nodes as cancelled.',
       'experiments.deleteHint': 'Deleting removes this run folder and its logs permanently.',
-      'experiments.rerunHint': 'Submit the current graph again with the latest modules and parameters.',
+      'experiments.rerunHint': 'Run the current experiment again with the latest modules and parameters.',
       'experiments.params': 'Parameters',
       'experiments.subgraphNode': 'Subgraph',
-      'graphs.title': 'Graphs',
-      'graphs.subtitle': 'Build experiment DAGs from module usages and edges; a subgraph module nests one graph in another.',
-      'graphs.empty': 'No graphs yet. Create one, add module usages as nodes and connect their dependencies.',
-      'graphs.new': 'New graph',
+      'graphs.title': 'Experiments',
+      'graphs.subtitle': 'An experiment is a DAG: add module usages, connect input and output ports, save, then run it.',
+      'graphs.empty': 'No experiments yet. Create one, add modules and connect their ports.',
+      'graphs.new': 'New experiment',
       'graphs.edit': 'Edit',
-      'graphs.delete': 'Delete graph',
-      'graphs.name': 'Graph name',
+      'graphs.delete': 'Delete experiment',
+      'graphs.name': 'Experiment name',
       'graphs.desc': 'Description',
-      'graphs.nodeCount': '{n} nodes',
+      'graphs.nodeCount': '{n} modules',
       'graphs.edgeCount': '{n} edges',
       'graphs.layerCount': '{n} layers',
-      'graphs.addNode': 'Add node',
+      'graphs.addNode': 'Add module',
       'graphs.chooseModule': 'Choose a module',
       'graphs.noModules': 'The module library is empty. Create a module first.',
-      'graphs.canvasEmpty': 'Pick a module above and add it as a node.',
-      'graphs.inspector': 'Node settings',
-      'graphs.selectNode': 'Select a node on the canvas to edit it.',
+      'graphs.canvasEmpty': 'Pick a module above and add it to the canvas.',
+      'graphs.inspector': 'Module settings',
+      'graphs.selectNode': 'Select a module on the canvas to edit it.',
       'graphs.nodeLabel': 'Display name',
       'graphs.nodeLabelPlaceholder': 'Defaults to the module name',
       'graphs.nodeModule': 'Module usage',
-      'graphs.nodeDeps': 'Dependencies',
-      'graphs.addDep': 'Add dependency',
-      'graphs.depPlaceholder': 'Choose an upstream node',
-      'graphs.noDeps': 'No dependencies; this is an entry node.',
-      'graphs.deleteNode': 'Delete node',
+      'graphs.nodeDeps': 'Connections',
+      'graphs.addDep': 'Add connection',
+      'graphs.depPlaceholder': 'Choose an upstream module',
+      'graphs.noDeps': 'No connections yet.',
+      'graphs.deleteNode': 'Delete module',
       'graphs.edges': 'Edges',
-      'graphs.save': 'Save graph',
+      'graphs.save': 'Save experiment',
       'graphs.saving': 'Saving…',
-      'graphs.cycle': 'The graph contains a cycle',
+      'graphs.cycle': 'The experiment contains a cycle',
       'graphs.planNodes': '{n} executable nodes',
       'graphs.unsaved': 'Unsaved changes',
       'graphs.subgraph': 'Subgraph',
-      'graphs.subgraphTip': 'This node inlines graph “{name}” when run; node parameters become defaults for the inner nodes.',
-      'graphs.fixErrors': 'Fix the graph problems first',
-      'graphs.deleteHint': 'Deleting removes the graph from the submit list; past experiments keep their records.',
-      'graphs.nodesTitle': 'Nodes and edges',
+      'graphs.subgraphTip': 'This module inlines experiment “{name}” when run; module parameters become defaults for the inner nodes.',
+      'graphs.fixErrors': 'Fix the experiment problems first',
+      'graphs.deleteHint': 'Deleting removes the experiment from the run list; past runs keep their records.',
+      'graphs.usedBy': 'Referenced by subgraph module',
+      'graphs.nodesTitle': 'Modules and edges',
       'graphs.removeEdge': 'Remove edge',
+      'canvas.tidy': 'Tidy',
+      'canvas.reset': 'Reset',
+      'canvas.zoomIn': 'Zoom in',
+      'canvas.zoomOut': 'Zoom out',
+      'canvas.zoomReset': 'Reset to 100%',
+      'canvas.hint': 'Drag the background to pan · wheel to zoom · Shift+right-drag to select modules and edges · drag from a port to connect',
+      'canvas.input': 'Input',
+      'canvas.output': 'Output',
+      'canvas.inputs': 'Inputs',
+      'canvas.outputs': 'Outputs',
+      'canvas.none': 'none',
+      'canvas.noPorts': 'No ports',
+      'canvas.connectHint': 'Drag from an output port on the right to an input port on the left; the reverse works too.',
+      'canvas.edgeSelected': 'Selected edge',
+      'canvas.deleteSelected': 'Delete selection',
       'modules.title': 'Modules',
-      'modules.subtitle': 'Modules are reusable execution units: a shell command, or another graph (a subgraph).',
+      'modules.subtitle': 'Modules are reusable execution units: a shell command, or another experiment (a subgraph).',
       'modules.empty': 'No modules yet. Create a command module to start.',
       'modules.new': 'New module',
       'modules.edit': 'Edit module',
@@ -336,6 +376,12 @@ window.__ModuleLoader__.load({
       'modules.kind': 'Module type',
       'modules.kind.command': 'Command',
       'modules.kind.graph': 'Subgraph',
+      'modules.ports': 'Ports',
+      'modules.inputs': 'Input ports',
+      'modules.outputs': 'Output ports',
+      'modules.addPort': 'Add port',
+      'modules.portPlaceholder': 'Port name',
+      'modules.portsHint': 'Ports are the connection endpoints on the canvas; a module may have no inputs or no outputs.',
       'modules.command': 'Command',
       'modules.commandHint': 'Runs through the shell. Insert parameters with {{name}}; environment variables are listed below.',
       'modules.cwd': 'Working directory',
@@ -343,16 +389,16 @@ window.__ModuleLoader__.load({
       'modules.timeout': 'Timeout (seconds)',
       'modules.params': 'Default parameters',
       'modules.paramsHint': 'Nodes inherit these defaults and can override them.',
-      'modules.graphRef': 'Graph',
-      'modules.graphRefHint': 'This graph is inlined where the module is used.',
+      'modules.graphRef': 'Experiment',
+      'modules.graphRefHint': 'This experiment is inlined where the module is used.',
       'modules.environment': 'Execution environment',
       'modules.environmentHint': 'Chooses which executor runs the module. Only the local executor exists today; a remote executor will let a scheduler pick a location per environment.',
       'modules.usedBy': 'Used by',
-      'modules.usedByCount': '{n} graphs',
+      'modules.usedByCount': '{n} experiments',
       'modules.notUsed': 'Not used yet',
       'modules.envTitle': 'Injected environment',
       'modules.envHint': 'AETHER_INPUT_FILE (upstream inputs JSON), AETHER_NODE_DIR (node folder), AETHER_PARAMS (params JSON), AETHER_INPUTS (upstream summary JSON), AETHER_RUN_ID / AETHER_NODE_PATH.',
-      'modules.noGraphs': 'No graphs available; create a graph first.',
+      'modules.noGraphs': 'No experiments available; create one first.',
       'modules.deleteHint': 'Deleting removes the module from the library; modules used by graphs cannot be deleted.',
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
@@ -379,8 +425,8 @@ window.__ModuleLoader__.load({
       'error.retry': 'Retry',
       'confirm.deleteModule.title': 'Delete module?',
       'confirm.deleteModule.body': 'Module “{name}” will be removed from the library.',
-      'confirm.deleteGraph.title': 'Delete graph?',
-      'confirm.deleteGraph.body': 'Graph “{name}” will be removed from the graph list.',
+      'confirm.deleteGraph.title': 'Delete experiment?',
+      'confirm.deleteGraph.body': 'Experiment “{name}” will be removed from the experiment list.',
       'confirm.deleteRun.title': 'Delete experiment record?',
       'confirm.deleteRun.body': 'The run folder and logs of “{name}” will be deleted.',
       'confirm.cancelRun.title': 'Cancel experiment?',
@@ -389,8 +435,8 @@ window.__ModuleLoader__.load({
       'log.refresh': 'Refresh',
       'log.close': 'Close',
       'log.copy': 'Copy all',
-      'graphEditor.new': 'New graph',
-      'graphEditor.edit': 'Edit graph',
+      'graphEditor.new': 'New experiment',
+      'graphEditor.edit': 'Edit experiment',
       'moduleEditor.new': 'New module',
       'moduleEditor.edit': 'Edit module',
     };
@@ -611,6 +657,96 @@ window.__ModuleLoader__.load({
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
 .ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--dsw-alias-state-warn-primary); flex: 0 0 auto; }
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ath-canvas-viewport {
+  position: relative;
+  height: 560px;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 11px;
+  background-color: var(--dsw-alias-bg-base);
+  background-image: radial-gradient(circle at 1px 1px, var(--dsw-alias-border-l1) 1px, transparent 0);
+  background-size: 22px 22px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.ath-canvas-viewport[data-panning="true"] { cursor: grabbing; }
+.ath-canvas-viewport[data-connecting="true"] { cursor: crosshair; }
+.ath-canvas-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ath-canvas-empty {
+  position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; color: var(--dsw-alias-label-secondary); font-size: 12.5px; pointer-events: none;
+}
+.ath-node-card {
+  position: absolute; width: 200px;
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+  cursor: grab;
+}
+.ath-node-card:active { cursor: grabbing; }
+.ath-node-card[data-selected="true"] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent);
+}
+.ath-node-head {
+  height: 38px; padding: 5px 10px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto;
+  column-gap: 5px; align-content: center;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.ath-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-node-tag {
+  grid-column: 2; grid-row: 1; align-self: center;
+  font-size: 8.5px; line-height: 1.5; color: var(--dsw-alias-state-warn-primary);
+  border: 1px solid currentColor; border-radius: 3px; padding: 0 3px;
+}
+.ath-node-sub { grid-column: 1 / -1; grid-row: 2; font-size: 9.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-node-ports { padding: 0; }
+.ath-port-row { height: 22px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; }
+.ath-port-name { font-size: 9.5px; color: var(--dsw-alias-label-secondary); max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-port-out-name { text-align: right; margin-left: auto; }
+.ath-node-noports { height: 22px; display: flex; align-items: center; padding: 0 10px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); }
+.ath-port-dot {
+  position: absolute; z-index: 2; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--dsw-alias-bg-base); border: 2px solid var(--dsw-alias-label-secondary);
+  cursor: crosshair;
+}
+.ath-port-in { left: -7px; }
+.ath-port-out { right: -7px; border-color: var(--dsw-alias-brand-primary); }
+.ath-port-dot:hover { transform: scale(1.3); border-color: var(--dsw-alias-brand-primary); }
+.ath-edges { pointer-events: none; overflow: visible; }
+.ath-edge { fill: none; stroke: var(--dsw-alias-border-l2); stroke-width: 1.6; }
+.ath-edge[data-selected="true"] { stroke: var(--dsw-alias-brand-primary); stroke-width: 2.4; }
+.ath-edge-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.ath-edge-pending { fill: none; stroke: var(--dsw-alias-brand-primary); stroke-width: 1.8; stroke-dasharray: 4 4; opacity: .85; }
+.ath-connect-origin { position: absolute; z-index: 3; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-brand-primary); opacity: .7; pointer-events: none; }
+.ath-marquee {
+  position: absolute; z-index: 5; pointer-events: none;
+  border: 1px dashed var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+}
+.ath-canvas-tools {
+  position: absolute; top: 10px; right: 10px; z-index: 6;
+  display: flex; align-items: center; gap: 4px; padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: 9px;
+  background: var(--dsw-alias-bg-overlay); box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+.ath-canvas-tools .ath-btn { padding: 4px 8px; font-size: 11.5px; }
+.ath-zoom-value {
+  border: 1px solid var(--dsw-alias-border-l1); background: transparent;
+  color: var(--dsw-alias-label-secondary); border-radius: 6px;
+  min-width: 44px; height: 24px; font-size: 10.5px; cursor: pointer;
+}
+.ath-tool-sep { width: 1px; height: 18px; background: var(--dsw-alias-border-l1); margin: 0 3px; }
+.ath-canvas-hint {
+  position: absolute; left: 12px; bottom: 10px; z-index: 4; max-width: 72%;
+  padding: 4px 7px; border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 84%, transparent);
+  color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1.5;
+  pointer-events: none;
+}
 .ath-inspector { display: flex; flex-direction: column; gap: 12px; }
 .ath-section-title { margin: 0 0 2px; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); text-transform: none; }
 .ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 24px; gap: 6px; align-items: center; }
@@ -672,6 +808,8 @@ window.__ModuleLoader__.load({
   .ath-workspace { max-width: 180px; }
 }
 @media (max-width: 720px) {
+  .ath-canvas-hint { display: none; }
+  .ath-canvas-viewport { height: 420px; }
   .ath-page { width: calc(100% - 24px); padding-top: 14px; }
   .ath-brand-sub { display: none; }
   .ath-topbar { padding: 10px 12px; }
@@ -810,31 +948,6 @@ window.__ModuleLoader__.load({
       return layers;
     }
 
-    function graphLayout(graph) {
-      const layers = localLayers(graph);
-      if (!layers) {
-        const positions = new Map();
-        graph.nodes.forEach((node, index) => {
-          positions.set(node.id, { x: 24, y: 24 + index * 92, col: 0, row: index });
-        });
-        return { positions, width: 360, height: Math.max(200, graph.nodes.length * 92 + 32), broken: true };
-      }
-      const positions = new Map();
-      let maxRows = 1;
-      layers.forEach((ids, col) => {
-        maxRows = Math.max(maxRows, ids.length);
-        ids.forEach((id, row) => {
-          positions.set(id, { x: 24 + col * 214, y: 24 + row * 92, col, row });
-        });
-      });
-      return {
-        positions,
-        width: Math.max(360, layers.length * 214 + 48),
-        height: Math.max(190, maxRows * 92 + 40),
-        broken: false,
-      };
-    }
-
     // ---------------------------------------------------------- 小部件
 
     function NavIcon({ size = 20, active = false }) {
@@ -926,6 +1039,55 @@ window.__ModuleLoader__.load({
             },
             t('common.addParam'),
           ),
+        ),
+      );
+    }
+
+    function PortsEditor({ t, label, ports, onChange }) {
+      const rows = Array.isArray(ports) ? ports : [];
+      return h(
+        'div',
+        { className: 'ath-field' },
+        h('label', { className: 'ath-label' }, label),
+        rows.map((port, index) =>
+          h(
+            'div',
+            { className: 'ath-port-edit-row', key: index },
+            h('input', {
+              className: 'ath-input ath-mono',
+              type: 'text',
+              value: port,
+              maxLength: 40,
+              placeholder: t('modules.portPlaceholder'),
+              onChange: (event) => {
+                const next = rows.slice();
+                next[index] = event.target.value;
+                onChange(next);
+              },
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ath-icon-btn',
+                title: t('action.remove'),
+                'aria-label': t('action.remove'),
+                onClick: () => onChange(rows.filter((_, position) => position !== index)),
+              },
+              '×',
+            ),
+          ),
+        ),
+        rows.length ? null : h('div', { className: 'ath-hint' }, t('canvas.none')),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'ath-btn ath-btn-ghost',
+            onClick: () => onChange([...rows, '']),
+            style: { alignSelf: 'flex-start', marginTop: 6 },
+          },
+          t('modules.addPort'),
         ),
       );
     }
@@ -1493,16 +1655,144 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // ---------------------------------------------------------- 图编辑器
+    // ---------------------------------------------------------- 实验画布
 
-    function GraphEditor({ t, modules, environments, draft, onDraftChange, onSave, onBack, onDelete, onValidate, saving, errors, plan }) {
+    const NODE_WIDTH = 200;
+    const NODE_HEADER = 38;
+    const PORT_ROW = 22;
+    const NODE_BOTTOM = 10;
+    const CANVAS_ZOOM_MIN = 0.3;
+    const CANVAS_ZOOM_MAX = 2.4;
+
+    function modulePorts(module) {
+      return {
+        inputs: Array.isArray(module && module.inputs) ? module.inputs : [],
+        outputs: Array.isArray(module && module.outputs) ? module.outputs : [],
+      };
+    }
+
+    function nodeHeightFor(module) {
+      const ports = modulePorts(module);
+      const rows = Math.max(1, ports.inputs.length, ports.outputs.length);
+      return NODE_HEADER + rows * PORT_ROW + NODE_BOTTOM + 2;
+    }
+
+    function portTop(index) {
+      return NODE_HEADER + index * PORT_ROW + PORT_ROW / 2;
+    }
+
+    function clampZoom(value) {
+      return Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, value));
+    }
+
+    function layoutNodes(graph, moduleById) {
+      const layers = localLayers(graph);
+      const columns = layers || [graph.nodes.map((node) => node.id)];
+      const positions = new Map();
+      const gapX = 92;
+      const gapY = 26;
+      const heights = [];
+      columns.forEach((ids, col) => {
+        let y = 0;
+        ids.forEach((id) => {
+          const node = graph.nodes.find((item) => item.id === id);
+          const height = nodeHeightFor(node ? moduleById.get(node.moduleId) : null);
+          positions.set(id, { x: col * (NODE_WIDTH + gapX), y });
+          y += height + gapY;
+        });
+        heights[col] = Math.max(0, y - gapY);
+      });
+      const tallest = heights.length ? Math.max(...heights) : 0;
+      columns.forEach((ids, col) => {
+        const offset = Math.max(0, (tallest - heights[col]) / 2);
+        ids.forEach((id) => {
+          const position = positions.get(id);
+          position.y += offset;
+        });
+      });
+      return positions;
+    }
+
+    function canvasBounds(graph, positions, moduleById) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const node of graph.nodes) {
+        const position = positions.get(node.id);
+        if (!position) continue;
+        minX = Math.min(minX, position.x);
+        minY = Math.min(minY, position.y);
+        maxX = Math.max(maxX, position.x + NODE_WIDTH);
+        maxY = Math.max(maxY, position.y + nodeHeightFor(moduleById.get(node.moduleId)));
+      }
+      if (!Number.isFinite(minX)) return { minX: 0, minY: 0, width: 320, height: 200 };
+      return { minX, minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+    }
+
+    function cubicMidpoint(x1, y1, x2, y2) {
+      const dx = Math.max(50, Math.abs(x2 - x1) * 0.5);
+      return {
+        x: (x1 + 3 * (x1 + dx) + 3 * (x2 - dx) + x2) / 8,
+        y: (y1 + 3 * y1 + 3 * y2 + y2) / 8,
+      };
+    }
+
+    function edgePath(x1, y1, x2, y2) {
+      const dx = Math.max(50, Math.abs(x2 - x1) * 0.5);
+      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    }
+
+    function ExperimentEditor({
+      t,
+      modules,
+      environments,
+      draft,
+      onDraftChange,
+      onSave,
+      onBack,
+      onDelete,
+      onValidate,
+      saving,
+      errors,
+      plan,
+    }) {
       const graph = draft.graph;
-      const selectedId = draft.selectedNodeId;
-      const selected = graph.nodes.find((node) => node.id === selectedId) || null;
-      const layout = graphLayout(graph);
       const moduleById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules]);
+      const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
+      const layoutPositions = useMemo(() => layoutNodes(graph, moduleById), [graph, moduleById]);
+      const positions = useMemo(() => {
+        const map = new Map();
+        for (const node of graph.nodes) {
+          const fallback = layoutPositions.get(node.id) || { x: 0, y: 0 };
+          map.set(
+            node.id,
+            Number.isFinite(node.x) && Number.isFinite(node.y) ? { x: node.x, y: node.y } : { x: fallback.x, y: fallback.y },
+          );
+        }
+        return map;
+      }, [graph, layoutPositions]);
+
+      const [view, setView] = useState({ x: 30, y: 24, zoom: 1 });
+      const [selection, setSelection] = useState({ nodes: [], edges: [] });
+      const [interaction, setInteraction] = useState(null);
+      const [marquee, setMarquee] = useState(null);
+      const [connecting, setConnecting] = useState(null);
       const [modulePick, setModulePick] = useState(() => (modules[0] ? modules[0].id : ''));
-      const [depPick, setDepPick] = useState('');
+
+      const canvasRef = useRef(null);
+      const viewRef = useRef(view);
+      viewRef.current = view;
+      const graphRef = useRef(graph);
+      graphRef.current = graph;
+      const positionsRef = useRef(positions);
+      positionsRef.current = positions;
+      const moduleByIdRef = useRef(moduleById);
+      moduleByIdRef.current = moduleById;
+      const selectionRef = useRef(selection);
+      selectionRef.current = selection;
+      const draftRef = useRef(draft);
+      draftRef.current = draft;
 
       useEffect(() => {
         if (!modules.some((module) => module.id === modulePick)) {
@@ -1510,59 +1800,495 @@ window.__ModuleLoader__.load({
         }
       }, [modules, modulePick]);
 
+      const portPoint = (nodeId, kind, portName) => {
+        const node = nodeById.get(nodeId);
+        const module = node ? moduleById.get(node.moduleId) : null;
+        const position = positions.get(nodeId);
+        if (!node || !position) return null;
+        const ports = kind === 'input' ? modulePorts(module).inputs : modulePorts(module).outputs;
+        let index = ports.indexOf(portName);
+        if (index < 0) index = 0;
+        return {
+          x: position.x + (kind === 'input' ? 0 : NODE_WIDTH),
+          y: position.y + portTop(index),
+        };
+      };
+
+      const edgeGeometry = useMemo(() => {
+        const list = [];
+        for (const edge of graph.edges) {
+          const fromNode = nodeById.get(edge.from);
+          const toNode = nodeById.get(edge.to);
+          if (!fromNode || !toNode) continue;
+          const fromModule = moduleById.get(fromNode.moduleId);
+          const toModule = moduleById.get(toNode.moduleId);
+          const fromPort = edge.fromPort || modulePorts(fromModule).outputs[0] || '';
+          const toPort = edge.toPort || modulePorts(toModule).inputs[0] || '';
+          const start = portPoint(edge.from, 'output', fromPort);
+          const end = portPoint(edge.to, 'input', toPort);
+          if (!start || !end) continue;
+          list.push({
+            ...edge,
+            start,
+            end,
+            d: edgePath(start.x, start.y, end.x, end.y),
+            mid: cubicMidpoint(start.x, start.y, end.x, end.y),
+          });
+        }
+        return list;
+      }, [graph.edges, nodeById, moduleById, positions]);
+
+      const fitTo = useCallback((positionMap, maxZoom = 1.15) => {
+        const element = canvasRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const bounds = canvasBounds(graphRef.current, positionMap, moduleByIdRef.current);
+        const padding = 54;
+        const zoom = clampZoom(
+          Math.min((rect.width - padding * 2) / bounds.width, (rect.height - padding * 2) / bounds.height, maxZoom),
+        );
+        setView({
+          zoom,
+          x: (rect.width - bounds.width * zoom) / 2 - bounds.minX * zoom,
+          y: (rect.height - bounds.height * zoom) / 2 - bounds.minY * zoom,
+        });
+      }, []);
+
       useEffect(() => {
-        if (!onValidate) return undefined;
+        setSelection({ nodes: [], edges: [] });
+        setInteraction(null);
+        setMarquee(null);
+        setConnecting(null);
+        const frame = requestAnimationFrame(() => fitTo(positionsRef.current));
+        return () => cancelAnimationFrame(frame);
+      }, [draft.graph.id, fitTo]);
+
+      const zoomTo = useCallback((targetZoom) => {
+        const element = canvasRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        const px = rect.width / 2;
+        const py = rect.height / 2;
+        setView((previous) => {
+          const zoom = clampZoom(targetZoom);
+          const worldX = (px - previous.x) / previous.zoom;
+          const worldY = (py - previous.y) / previous.zoom;
+          return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+        });
+      }, []);
+
+      const zoomBy = useCallback((factor) => {
+        setView((previous) => {
+          const element = canvasRef.current;
+          if (!element) return previous;
+          const rect = element.getBoundingClientRect();
+          const px = rect.width / 2;
+          const py = rect.height / 2;
+          const zoom = clampZoom(previous.zoom * factor);
+          const worldX = (px - previous.x) / previous.zoom;
+          const worldY = (py - previous.y) / previous.zoom;
+          return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+        });
+      }, []);
+
+      const applyLayout = useCallback(
+        (fit, clearSelection) => {
+          const layout = layoutNodes(graphRef.current, moduleByIdRef.current);
+          const current = draftRef.current;
+          onDraftChange({
+            ...current,
+            graph: {
+              ...current.graph,
+              nodes: current.graph.nodes.map((node) => {
+                const position = layout.get(node.id);
+                return position ? { ...node, x: position.x, y: position.y } : node;
+              }),
+            },
+          });
+          if (clearSelection) setSelection({ nodes: [], edges: [] });
+          if (fit) requestAnimationFrame(() => fitTo(layout));
+        },
+        [fitTo, onDraftChange],
+      );
+
+      const deleteSelection = useCallback(() => {
+        const current = draftRef.current;
+        const selected = selectionRef.current;
+        if (!selected.nodes.length && !selected.edges.length) return;
+        const nodeIds = new Set(selected.nodes);
+        const edgeIds = new Set(selected.edges);
+        onDraftChange({
+          ...current,
+          graph: {
+            ...current.graph,
+            nodes: current.graph.nodes.filter((node) => !nodeIds.has(node.id)),
+            edges: current.graph.edges.filter(
+              (edge) => !edgeIds.has(edge.id) && !nodeIds.has(edge.from) && !nodeIds.has(edge.to),
+            ),
+          },
+        });
+        setSelection({ nodes: [], edges: [] });
+      }, [onDraftChange]);
+
+      useEffect(() => {
+        const onKey = (event) => {
+          const target = event.target;
+          const tag = target && target.tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable)) return;
+          if (event.key === 'Escape') {
+            setSelection({ nodes: [], edges: [] });
+            setInteraction(null);
+            setConnecting(null);
+            setMarquee(null);
+            return;
+          }
+          if ((event.key === 'Delete' || event.key === 'Backspace') && (selectionRef.current.nodes.length || selectionRef.current.edges.length)) {
+            event.preventDefault();
+            deleteSelection();
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [deleteSelection]);
+
+      useEffect(() => {
+        if (!onValidate || interaction) return undefined;
         const timer = window.setTimeout(() => {
           void onValidate(graph);
         }, 450);
         return () => window.clearTimeout(timer);
-      }, [graph, onValidate]);
+      }, [graph, onValidate, interaction]);
 
-      const patchGraph = (patch) => onDraftChange({ ...draft, graph: { ...graph, ...patch } });
-      const patchNode = (nodeId, patch) =>
+      useEffect(() => {
+        const element = canvasRef.current;
+        if (!element) return undefined;
+        const onWheel = (event) => {
+          event.preventDefault();
+          const rect = element.getBoundingClientRect();
+          const px = event.clientX - rect.left;
+          const py = event.clientY - rect.top;
+          setView((previous) => {
+            const zoom = clampZoom(previous.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12));
+            const worldX = (px - previous.x) / previous.zoom;
+            const worldY = (py - previous.y) / previous.zoom;
+            return { zoom, x: px - worldX * zoom, y: py - worldY * zoom };
+          });
+        };
+        element.addEventListener('wheel', onWheel, { passive: false });
+        return () => element.removeEventListener('wheel', onWheel);
+      }, []);
+
+      const addEdge = (fromId, fromPort, toId, toPort) => {
+        const current = draftRef.current;
+        if (!fromPort || !toPort) return;
+        if (current.graph.edges.some((edge) => edge.from === fromId && edge.to === toId && edge.fromPort === fromPort && edge.toPort === toPort)) {
+          return;
+        }
+        const edgeId = `edge-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
         onDraftChange({
-          ...draft,
-          graph: { ...graph, nodes: graph.nodes.map((node) => (node.id === nodeId ? { ...node, ...patch } : node)) },
+          ...current,
+          graph: {
+            ...current.graph,
+            edges: [...current.graph.edges, { id: edgeId, from: fromId, to: toId, fromPort, toPort }],
+          },
         });
+        setSelection({ nodes: [], edges: [edgeId] });
+      };
+
+      useEffect(() => {
+        if (!interaction) return undefined;
+        const onMove = (event) => {
+          if (interaction.type === 'pan') {
+            setView({
+              ...interaction.origin,
+              x: interaction.origin.x + event.clientX - interaction.startX,
+              y: interaction.origin.y + event.clientY - interaction.startY,
+            });
+            return;
+          }
+          if (interaction.type === 'node') {
+            const zoom = viewRef.current.zoom;
+            const dx = (event.clientX - interaction.startX) / zoom;
+            const dy = (event.clientY - interaction.startY) / zoom;
+            const current = draftRef.current;
+            const origins = new Map(interaction.origins.map((item) => [item.id, item]));
+            onDraftChange({
+              ...current,
+              graph: {
+                ...current.graph,
+                nodes: current.graph.nodes.map((node) =>
+                  origins.has(node.id)
+                    ? { ...node, x: origins.get(node.id).x + dx, y: origins.get(node.id).y + dy }
+                    : node,
+                ),
+              },
+            });
+            return;
+          }
+          if (interaction.type === 'marquee') {
+            const rect = interaction.rect;
+            setMarquee({
+              x1: interaction.startX,
+              y1: interaction.startY,
+              x2: event.clientX - rect.left,
+              y2: event.clientY - rect.top,
+            });
+            return;
+          }
+          if (interaction.type === 'connect') {
+            const element = canvasRef.current;
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const zoom = viewRef.current.zoom;
+            setConnecting((current) =>
+              current
+                ? {
+                    ...current,
+                    current: {
+                      x: (event.clientX - rect.left - viewRef.current.x) / zoom,
+                      y: (event.clientY - rect.top - viewRef.current.y) / zoom,
+                    },
+                  }
+                : current,
+            );
+          }
+        };
+
+        const onUp = (event) => {
+          if (interaction.type === 'marquee') {
+            const rect = interaction.rect;
+            const localX = event.clientX - rect.left;
+            const localY = event.clientY - rect.top;
+            const screen = {
+              x1: Math.min(interaction.startX, localX),
+              y1: Math.min(interaction.startY, localY),
+              x2: Math.max(interaction.startX, localX),
+              y2: Math.max(interaction.startY, localY),
+            };
+            const zoom = viewRef.current.zoom;
+            const world = {
+              x1: (screen.x1 - viewRef.current.x) / zoom,
+              y1: (screen.y1 - viewRef.current.y) / zoom,
+              x2: (screen.x2 - viewRef.current.x) / zoom,
+              y2: (screen.y2 - viewRef.current.y) / zoom,
+            };
+            const nodes = [];
+            for (const node of graphRef.current.nodes) {
+              const position = positionsRef.current.get(node.id);
+              if (!position) continue;
+              const height = nodeHeightFor(moduleByIdRef.current.get(node.moduleId));
+              if (
+                position.x < world.x2 &&
+                position.x + NODE_WIDTH > world.x1 &&
+                position.y < world.y2 &&
+                position.y + height > world.y1
+              ) {
+                nodes.push(node.id);
+              }
+            }
+            const edges = [];
+            for (const edge of graphRef.current.edges) {
+              const fromNode = graphRef.current.nodes.find((node) => node.id === edge.from);
+              const toNode = graphRef.current.nodes.find((node) => node.id === edge.to);
+              if (!fromNode || !toNode) continue;
+              const fromPort = edge.fromPort || modulePorts(moduleByIdRef.current.get(fromNode.moduleId)).outputs[0] || '';
+              const toPort = edge.toPort || modulePorts(moduleByIdRef.current.get(toNode.moduleId)).inputs[0] || '';
+              const start = portPoint(edge.from, 'output', fromPort);
+              const end = portPoint(edge.to, 'input', toPort);
+              if (!start || !end) continue;
+              const mid = cubicMidpoint(start.x, start.y, end.x, end.y);
+              if (mid.x >= world.x1 && mid.x <= world.x2 && mid.y >= world.y1 && mid.y <= world.y2) edges.push(edge.id);
+            }
+            setSelection({ nodes, edges });
+            setMarquee(null);
+            setInteraction(null);
+            return;
+          }
+          if (interaction.type === 'connect') {
+            const target = document.elementFromPoint(event.clientX, event.clientY);
+            const portElement = target && target.closest ? target.closest('[data-port-node]') : null;
+            if (portElement) {
+              const nodeId = portElement.getAttribute('data-port-node');
+              const portName = portElement.getAttribute('data-port-name');
+              const portKind = portElement.getAttribute('data-port-kind');
+              const from = interaction.from;
+              if (portKind !== from.kind && nodeId !== from.nodeId) {
+                const outputSide = from.kind === 'output' ? from : { nodeId, port: portName };
+                const inputSide = from.kind === 'input' ? from : { nodeId, port: portName };
+                addEdge(outputSide.nodeId, outputSide.port, inputSide.nodeId, inputSide.port);
+              }
+            }
+            setConnecting(null);
+            setInteraction(null);
+            return;
+          }
+          setInteraction(null);
+        };
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
+        return () => {
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onUp);
+        };
+      }, [interaction, onDraftChange]);
 
       const addNode = () => {
         const module = moduleById.get(modulePick);
         if (!module) return;
-        const id = uniqueNodeId(graph, module.id);
+        const current = draftRef.current;
+        const id = uniqueNodeId(current.graph, module.id);
+        const element = canvasRef.current;
+        const rect = element ? element.getBoundingClientRect() : null;
+        const zoom = viewRef.current.zoom;
+        const centerX = rect ? (rect.width / 2 - viewRef.current.x) / zoom : 120;
+        const centerY = rect ? (rect.height / 2 - viewRef.current.y) / zoom : 80;
+        const offset = (current.graph.nodes.length % 4) * 18;
         onDraftChange({
-          selectedNodeId: id,
+          ...current,
           graph: {
-            ...graph,
-            nodes: [...graph.nodes, { id, moduleId: module.id, label: '', params: { ...(module.params || {}) } }],
+            ...current.graph,
+            nodes: [
+              ...current.graph.nodes,
+              {
+                id,
+                moduleId: module.id,
+                label: '',
+                params: { ...(module.params || {}) },
+                x: centerX - NODE_WIDTH / 2 + offset,
+                y: centerY - 40 + offset,
+              },
+            ],
+          },
+        });
+        setSelection({ nodes: [id], edges: [] });
+      };
+
+      const onViewportPointerDown = (event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.button === 2) {
+          if (!event.shiftKey) return;
+          event.preventDefault();
+          setSelection({ nodes: [], edges: [] });
+          setMarquee({ x1: event.clientX - rect.left, y1: event.clientY - rect.top, x2: event.clientX - rect.left, y2: event.clientY - rect.top });
+          setInteraction({
+            type: 'marquee',
+            startX: event.clientX - rect.left,
+            startY: event.clientY - rect.top,
+            rect,
+          });
+          return;
+        }
+        if (event.button !== 0 && event.button !== 1) return;
+        if (event.button === 0) setSelection({ nodes: [], edges: [] });
+        setInteraction({
+          type: 'pan',
+          startX: event.clientX,
+          startY: event.clientY,
+          origin: { ...viewRef.current },
+        });
+      };
+
+      const onNodePointerDown = (event, node) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        const additive = event.shiftKey;
+        let dragIds = [];
+        if (additive) {
+          dragIds = selectionRef.current.nodes.includes(node.id)
+            ? selectionRef.current.nodes.filter((id) => id !== node.id)
+            : [...selectionRef.current.nodes, node.id];
+          setSelection({ nodes: dragIds, edges: [] });
+        } else if (selectionRef.current.nodes.includes(node.id) && selectionRef.current.nodes.length > 0) {
+          dragIds = selectionRef.current.nodes;
+        } else {
+          dragIds = [node.id];
+          setSelection({ nodes: dragIds, edges: [] });
+        }
+        if (!dragIds.length) return;
+        const origins = dragIds.map((id) => ({ id, ...(positionsRef.current.get(id) || { x: 0, y: 0 }) }));
+        setInteraction({ type: 'node', startX: event.clientX, startY: event.clientY, origins });
+      };
+
+      const onPortPointerDown = (event, nodeId, kind, portName) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const start = portPoint(nodeId, kind, portName);
+        if (!start) return;
+        setConnecting({ from: { nodeId, port: portName, kind }, start, current: start });
+        setInteraction({ type: 'connect', from: { nodeId, port: portName, kind } });
+      };
+
+      const onEdgePointerDown = (event, edgeId) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        const additive = event.shiftKey;
+        setSelection((previous) =>
+          additive
+            ? {
+                nodes: previous.nodes,
+                edges: previous.edges.includes(edgeId)
+                  ? previous.edges.filter((id) => id !== edgeId)
+                  : [...previous.edges, edgeId],
+              }
+            : { nodes: [], edges: [edgeId] },
+        );
+      };
+
+      const changeNodeModule = (nodeId, moduleId) => {
+        const module = moduleById.get(moduleId);
+        if (!module) return;
+        const current = draftRef.current;
+        const outputs = modulePorts(module).outputs;
+        const inputs = modulePorts(module).inputs;
+        const nodes = current.graph.nodes.map((node) =>
+          node.id === nodeId ? { ...node, moduleId, params: { ...(module.params || {}) } } : node,
+        );
+        const edges = current.graph.edges.filter((edge) => {
+          if (edge.from === nodeId && edge.fromPort && !outputs.includes(edge.fromPort)) return false;
+          if (edge.to === nodeId && edge.toPort && !inputs.includes(edge.toPort)) return false;
+          return true;
+        });
+        onDraftChange({ ...current, graph: { ...current.graph, nodes, edges } });
+      };
+
+      const patchNode = (nodeId, patch) => {
+        const current = draftRef.current;
+        onDraftChange({
+          ...current,
+          graph: {
+            ...current.graph,
+            nodes: current.graph.nodes.map((node) => (node.id === nodeId ? { ...node, ...patch } : node)),
           },
         });
       };
 
-      const removeNode = (nodeId) => {
-        onDraftChange({
-          selectedNodeId: '',
-          graph: {
-            ...graph,
-            nodes: graph.nodes.filter((node) => node.id !== nodeId),
-            edges: graph.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId),
-          },
-        });
-      };
+      const selectedNodes = selection.nodes.map((id) => nodeById.get(id)).filter(Boolean);
+      const selectedEdges = selection.edges
+        .map((id) => graph.edges.find((edge) => edge.id === id))
+        .filter(Boolean);
+      const singleNode = selectedNodes.length === 1 && selectedEdges.length === 0 ? selectedNodes[0] : null;
+      const singleEdge = selectedEdges.length === 1 && selectedNodes.length === 0 ? selectedEdges[0] : null;
+      const selectedCount = selectedNodes.length + selectedEdges.length;
+      const bounds = canvasBounds(graph, positions, moduleById);
+      const padding = 500;
+      const svgLeft = bounds.minX - padding;
+      const svgTop = bounds.minY - padding;
+      const svgWidth = bounds.width + padding * 2;
+      const svgHeight = bounds.height + padding * 2;
+      const broken = !localLayers(graph);
 
-      const addDependency = () => {
-        if (!selected || !depPick) return;
-        if (depPick === selected.id) return;
-        if (graph.edges.some((edge) => edge.from === depPick && edge.to === selected.id)) return;
-        patchGraph({
-          edges: [...graph.edges, { id: `edge-${Date.now().toString(36)}`, from: depPick, to: selected.id }],
-        });
-        setDepPick('');
+      const edgeLabel = (edge) => {
+        const fromNode = nodeById.get(edge.from);
+        const toNode = nodeById.get(edge.to);
+        return `${fromNode ? fromNode.label || fromNode.id : edge.from} · ${edge.fromPort || '—'} → ${
+          toNode ? toNode.label || toNode.id : edge.to
+        } · ${edge.toPort || '—'}`;
       };
-
-      const removeEdge = (edgeId) => patchGraph({ edges: graph.edges.filter((edge) => edge.id !== edgeId) });
-      const depOptions = graph.nodes.filter(
-        (node) => selected && node.id !== selected.id && !graph.edges.some((edge) => edge.from === node.id && edge.to === selected.id),
-      );
 
       return h(
         'div',
@@ -1576,9 +2302,17 @@ window.__ModuleLoader__.load({
             { className: 'ath-actions' },
             h('button', { type: 'button', className: 'ath-btn', onClick: onBack, disabled: saving }, t('action.back')),
             graph.id
-              ? h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: onDelete, disabled: saving }, t('action.delete'))
+              ? h(
+                  'button',
+                  { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: onDelete, disabled: saving },
+                  t('action.delete'),
+                )
               : null,
-            h('button', { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onSave, disabled: saving || modules.length === 0 }, saving ? t('graphs.saving') : t('graphs.save')),
+            h(
+              'button',
+              { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onSave, disabled: saving || modules.length === 0 },
+              saving ? t('graphs.saving') : t('graphs.save'),
+            ),
           ),
         ),
         errors.length
@@ -1604,7 +2338,10 @@ window.__ModuleLoader__.load({
                 type: 'text',
                 value: graph.name,
                 maxLength: 120,
-                onChange: (event) => patchGraph({ name: event.target.value }),
+                onChange: (event) => {
+                  const current = draftRef.current;
+                  onDraftChange({ ...current, graph: { ...current.graph, name: event.target.value } });
+                },
               }),
             ),
             h(
@@ -1616,7 +2353,10 @@ window.__ModuleLoader__.load({
                 type: 'text',
                 value: graph.description,
                 maxLength: 300,
-                onChange: (event) => patchGraph({ description: event.target.value }),
+                onChange: (event) => {
+                  const current = draftRef.current;
+                  onDraftChange({ ...current, graph: { ...current.graph, description: event.target.value } });
+                },
               }),
             ),
           ),
@@ -1632,43 +2372,83 @@ window.__ModuleLoader__.load({
               { className: 'ath-card', style: { padding: 10 } },
               h(
                 'div',
-                { className: 'ath-row' },
+                { className: 'ath-row', style: { flexWrap: 'wrap' } },
                 h(
                   'select',
                   {
                     className: 'ath-select',
                     value: modulePick,
                     onChange: (event) => setModulePick(event.target.value),
-                    style: { maxWidth: 320 },
+                    style: { maxWidth: 300 },
                   },
                   modules.length === 0
                     ? h('option', { value: '' }, t('graphs.noModules'))
-                    : modules.map((module) => h('option', { key: module.id, value: module.id }, `${module.name}${module.kind === 'graph' ? ` (${t('graphs.subgraph')})` : ''}`)),
+                    : modules.map((module) =>
+                        h(
+                          'option',
+                          { key: module.id, value: module.id },
+                          `${module.name}${module.kind === 'graph' ? ` (${t('graphs.subgraph')})` : ''}`,
+                        ),
+                      ),
                 ),
                 h('button', { type: 'button', className: 'ath-btn', onClick: addNode, disabled: !modulePick }, t('graphs.addNode')),
-                h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, tr(t, 'graphs.planNodes', { n: (plan && plan.nodes ? plan.nodes.length : graph.nodes.length) })),
+                selectedCount
+                  ? h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'ath-btn ath-btn-ghost ath-btn-danger',
+                        onClick: deleteSelection,
+                      },
+                      `${t('canvas.deleteSelected')} (${selectedCount})`,
+                    )
+                  : null,
+                h(
+                  'span',
+                  { className: 'ath-hint', style: { marginLeft: 'auto' } },
+                  tr(t, 'graphs.planNodes', { n: plan && plan.nodes ? plan.nodes.length : graph.nodes.length }),
+                ),
               ),
             ),
             h(
               'div',
-              { className: 'ath-canvas-wrap' },
+              {
+                className: 'ath-canvas-viewport',
+                ref: canvasRef,
+                onPointerDown: onViewportPointerDown,
+                onContextMenu: (event) => event.preventDefault(),
+                'data-panning': interaction && interaction.type === 'pan' ? 'true' : 'false',
+                'data-connecting': connecting ? 'true' : 'false',
+              },
               graph.nodes.length === 0
-                ? h('div', { className: 'ath-empty', style: { border: 0 } }, h('strong', null, t('graphs.canvasEmpty')))
-                : h(
-                    'div',
-                    { className: 'ath-canvas', style: { width: layout.width, height: layout.height } },
-                    h(
+                ? h('div', { className: 'ath-canvas-empty' }, h('strong', null, t('graphs.canvasEmpty')))
+                : null,
+              h(
+                'div',
+                {
+                  className: 'ath-canvas-layer',
+                  style: { transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` },
+                },
+                graph.nodes.length
+                  ? h(
                       'svg',
-                      { width: layout.width, height: layout.height, 'aria-hidden': 'true' },
+                      {
+                        className: 'ath-edges',
+                        width: svgWidth,
+                        height: svgHeight,
+                        viewBox: `${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`,
+                        style: { left: svgLeft, top: svgTop, position: 'absolute' },
+                        'aria-hidden': 'true',
+                      },
                       h(
                         'defs',
                         null,
                         h(
                           'marker',
                           {
-                            id: 'ath-arrow',
+                            id: 'ath-edge-arrow',
                             viewBox: '0 0 10 10',
-                            refX: 9,
+                            refX: 8,
                             refY: 5,
                             markerWidth: 6,
                             markerHeight: 6,
@@ -1677,53 +2457,134 @@ window.__ModuleLoader__.load({
                           h('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: 'var(--dsw-alias-border-l2)' }),
                         ),
                       ),
-                      graph.edges.map((edge) => {
-                        const from = layout.positions.get(edge.from);
-                        const to = layout.positions.get(edge.to);
-                        if (!from || !to) return null;
-                        const x1 = from.x + 168;
-                        const y1 = from.y + 34;
-                        const x2 = to.x;
-                        const y2 = to.y + 34;
-                        const curve = Math.max(26, Math.abs(x2 - x1) / 2);
-                        return h('path', {
-                          key: edge.id,
-                          d: `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`,
-                          fill: 'none',
-                          stroke: 'var(--dsw-alias-border-l2)',
-                          strokeWidth: 1.3,
-                          markerEnd: 'url(#ath-arrow)',
-                        });
+                      edgeGeometry.map((edge) =>
+                        h(
+                          'g',
+                          { key: edge.id },
+                          h('path', {
+                            d: edge.d,
+                            className: 'ath-edge',
+                            markerEnd: 'url(#ath-edge-arrow)',
+                            'data-selected': selection.edges.includes(edge.id) ? 'true' : 'false',
+                          }),
+                          h('path', {
+                            d: edge.d,
+                            className: 'ath-edge-hit',
+                            onPointerDown: (event) => onEdgePointerDown(event, edge.id),
+                          }),
+                        ),
+                      ),
+                      connecting
+                        ? h('path', {
+                            d: edgePath(connecting.start.x, connecting.start.y, connecting.current.x, connecting.current.y),
+                            className: 'ath-edge-pending',
+                          })
+                        : null,
+                    )
+                  : null,
+                graph.nodes.map((node) => {
+                  const module = moduleById.get(node.moduleId);
+                  const ports = modulePorts(module);
+                  const position = positions.get(node.id) || { x: 0, y: 0 };
+                  const height = nodeHeightFor(module);
+                  const selected = selection.nodes.includes(node.id);
+                  const rows = Math.max(ports.inputs.length, ports.outputs.length);
+                  return h(
+                    'div',
+                    {
+                      key: node.id,
+                      className: 'ath-node-card',
+                      'data-selected': selected ? 'true' : 'false',
+                      style: { left: position.x, top: position.y, height },
+                      onPointerDown: (event) => onNodePointerDown(event, node),
+                    },
+                    h(
+                      'div',
+                      { className: 'ath-node-head' },
+                      h('span', { className: 'ath-node-title' }, node.label || (module ? module.name : node.moduleId)),
+                      module && module.kind === 'graph' ? h('span', { className: 'ath-node-tag' }, t('graphs.subgraph')) : null,
+                      h('span', { className: 'ath-node-sub' }, module ? module.name : node.moduleId),
+                    ),
+                    rows
+                      ? h(
+                          'div',
+                          { className: 'ath-node-ports' },
+                          Array.from({ length: rows }).map((_, row) =>
+                            h(
+                              'div',
+                              { className: 'ath-port-row', key: row },
+                              h('span', { className: 'ath-port-name ath-port-in-name' }, ports.inputs[row] || ''),
+                              h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
+                            ),
+                          ),
+                        )
+                      : h('div', { className: 'ath-node-noports' }, t('canvas.noPorts')),
+                    ports.inputs.map((port, index) =>
+                      h('div', {
+                        key: `in-${port}`,
+                        className: 'ath-port-dot ath-port-in',
+                        style: { top: portTop(index) - 6 },
+                        'data-port-node': node.id,
+                        'data-port-name': port,
+                        'data-port-kind': 'input',
+                        title: `${t('canvas.input')}: ${port}`,
+                        onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
                       }),
                     ),
-                    graph.nodes.map((node) => {
-                      const position = layout.positions.get(node.id) || { x: 24, y: 24 };
-                      const module = moduleById.get(node.moduleId);
-                      return h(
-                        'button',
-                        {
-                          key: node.id,
-                          type: 'button',
-                          className: 'ath-canvas-node',
-                          'data-selected': node.id === selectedId ? 'true' : 'false',
-                          'data-kind': module && module.kind === 'graph' ? 'graph' : 'command',
-                          style: { left: position.x, top: position.y },
-                          onClick: () => onDraftChange({ ...draft, selectedNodeId: node.id }),
-                        },
-                        h('span', { className: 'ath-canvas-node-title' }, node.label || (module ? module.name : node.moduleId)),
-                        h(
-                          'span',
-                          { className: 'ath-canvas-node-meta' },
-                          module && module.kind === 'graph' ? h('span', { className: 'ath-node-tag' }, t('graphs.subgraph')) : null,
-                          h('span', null, module ? module.name : node.moduleId),
-                        ),
-                      );
-                    }),
-                  ),
+                    ports.outputs.map((port, index) =>
+                      h('div', {
+                        key: `out-${port}`,
+                        className: 'ath-port-dot ath-port-out',
+                        style: { top: portTop(index) - 6 },
+                        'data-port-node': node.id,
+                        'data-port-name': port,
+                        'data-port-kind': 'output',
+                        title: `${t('canvas.output')}: ${port}`,
+                        onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
+                      }),
+                    ),
+                  );
+                }),
+                connecting
+                  ? h('div', {
+                      className: 'ath-connect-origin',
+                      style: { left: connecting.start.x - 4, top: connecting.start.y - 4 },
+                    })
+                  : null,
+              ),
+              marquee
+                ? h('div', {
+                    className: 'ath-marquee',
+                    style: {
+                      left: Math.min(marquee.x1, marquee.x2),
+                      top: Math.min(marquee.y1, marquee.y2),
+                      width: Math.abs(marquee.x2 - marquee.x1),
+                      height: Math.abs(marquee.y2 - marquee.y1),
+                    },
+                  })
+                : null,
+              h(
+                'div',
+                {
+                  className: 'ath-canvas-tools',
+                  onPointerDown: (event) => event.stopPropagation(),
+                },
+                h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => applyLayout(false, false) }, t('canvas.tidy')),
+                h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => applyLayout(true, true) }, t('canvas.reset')),
+                h('span', { className: 'ath-tool-sep' }),
+                h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1 / 1.2), title: t('canvas.zoomOut') }, '−'),
+                h(
+                  'button',
+                  { type: 'button', className: 'ath-zoom-value', onClick: () => zoomTo(1), title: t('canvas.zoomReset') },
+                  `${Math.round(view.zoom * 100)}%`,
+                ),
+                h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1.2), title: t('canvas.zoomIn') }, '+'),
+              ),
+              h('div', { className: 'ath-canvas-hint' }, t('canvas.hint')),
             ),
             h(
               'div',
-              { className: 'ath-card' },
+              { className: 'ath-card', style: { marginTop: 12 } },
               h('h4', { className: 'ath-section-title' }, t('graphs.nodesTitle')),
               graph.nodes.length === 0
                 ? h('div', { className: 'ath-hint' }, t('graphs.canvasEmpty'))
@@ -1732,19 +2593,16 @@ window.__ModuleLoader__.load({
                     { className: 'ath-dep-list' },
                     graph.nodes.map((node) => {
                       const module = moduleById.get(node.moduleId);
-                      const deps = graph.edges.filter((edge) => edge.to === node.id);
+                      const incident = graph.edges.filter((edge) => edge.from === node.id || edge.to === node.id);
                       return h(
                         'div',
                         { className: 'ath-dep-row', key: node.id },
                         h('code', null, node.id),
                         h('span', null, node.label || (module ? module.name : node.moduleId)),
-                        depOptions.length || deps.length ? h('span', { className: 'ath-dep-arrow' }, '←') : null,
                         h(
                           'span',
                           { className: 'ath-hint', style: { marginLeft: 'auto' } },
-                          deps.length
-                            ? deps.map((edge) => graph.nodes.find((item) => item.id === edge.from)?.label || edge.from).join(', ')
-                            : t('graphs.noDeps'),
+                          `${incident.length} ${t('common.edges')}`,
                         ),
                         h(
                           'button',
@@ -1753,7 +2611,18 @@ window.__ModuleLoader__.load({
                             className: 'ath-icon-btn',
                             title: t('graphs.deleteNode'),
                             'aria-label': t('graphs.deleteNode'),
-                            onClick: () => removeNode(node.id),
+                            onClick: () => {
+                              const current = draftRef.current;
+                              onDraftChange({
+                                ...current,
+                                graph: {
+                                  ...current.graph,
+                                  nodes: current.graph.nodes.filter((item) => item.id !== node.id),
+                                  edges: current.graph.edges.filter((edge) => edge.from !== node.id && edge.to !== node.id),
+                                },
+                              });
+                              setSelection({ nodes: [], edges: [] });
+                            },
                           },
                           '×',
                         ),
@@ -1769,7 +2638,7 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'ath-card ath-inspector' },
               h('h4', { className: 'ath-section-title' }, t('graphs.inspector')),
-              selected
+              singleNode
                 ? h(
                     'div',
                     null,
@@ -1780,10 +2649,10 @@ window.__ModuleLoader__.load({
                       h('input', {
                         className: 'ath-input',
                         type: 'text',
-                        value: selected.label,
+                        value: singleNode.label,
                         placeholder: t('graphs.nodeLabelPlaceholder'),
                         maxLength: 120,
-                        onChange: (event) => patchNode(selected.id, { label: event.target.value }),
+                        onChange: (event) => patchNode(singleNode.id, { label: event.target.value }),
                       }),
                     ),
                     h(
@@ -1794,26 +2663,27 @@ window.__ModuleLoader__.load({
                         'select',
                         {
                           className: 'ath-select',
-                          value: selected.moduleId,
-                          onChange: (event) => {
-                            const nextModule = moduleById.get(event.target.value);
-                            patchNode(selected.id, {
-                              moduleId: event.target.value,
-                              params: nextModule ? { ...(nextModule.params || {}) } : {},
-                            });
-                          },
+                          value: singleNode.moduleId,
+                          onChange: (event) => changeNodeModule(singleNode.id, event.target.value),
                         },
                         modules.map((module) => h('option', { key: module.id, value: module.id }, module.name)),
                       ),
                     ),
                     (() => {
-                      const module = moduleById.get(selected.moduleId);
+                      const module = moduleById.get(singleNode.moduleId);
+                      const ports = modulePorts(module);
+                      return h(
+                        'div',
+                        { className: 'ath-hint', style: { marginTop: 8 } },
+                        `${t('canvas.inputs')}: ${ports.inputs.length ? ports.inputs.join(', ') : t('canvas.none')} · ${t(
+                          'canvas.outputs',
+                        )}: ${ports.outputs.length ? ports.outputs.join(', ') : t('canvas.none')}`,
+                      );
+                    })(),
+                    (() => {
+                      const module = moduleById.get(singleNode.moduleId);
                       return module && module.kind === 'graph'
-                        ? h(
-                            'div',
-                            { className: 'ath-hint', style: { marginTop: 8 } },
-                            tr(t, 'graphs.subgraphTip', { name: module.name }),
-                          )
+                        ? h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'graphs.subgraphTip', { name: module.name }))
                         : null;
                     })(),
                     h(
@@ -1821,10 +2691,10 @@ window.__ModuleLoader__.load({
                       { className: 'ath-field', style: { marginTop: 14 } },
                       h('label', { className: 'ath-label' }, t('common.params')),
                       h(ParamsEditor, {
-                        key: `${selected.id}:${selected.moduleId}`,
+                        key: `${singleNode.id}:${singleNode.moduleId}`,
                         t,
-                        value: selected.params,
-                        onChange: (params) => patchNode(selected.id, { params }),
+                        value: singleNode.params,
+                        onChange: (params) => patchNode(singleNode.id, { params }),
                       }),
                     ),
                     h(
@@ -1835,14 +2705,12 @@ window.__ModuleLoader__.load({
                         'div',
                         { className: 'ath-dep-list' },
                         graph.edges
-                          .filter((edge) => edge.to === selected.id)
-                          .map((edge) => {
-                            const upstream = graph.nodes.find((node) => node.id === edge.from);
-                            return h(
+                          .filter((edge) => edge.to === singleNode.id || edge.from === singleNode.id)
+                          .map((edge) =>
+                            h(
                               'div',
                               { className: 'ath-dep-row', key: edge.id },
-                              h('span', { className: 'ath-dep-arrow' }, '←'),
-                              h('span', null, upstream ? upstream.label || upstream.id : edge.from),
+                              h('span', { className: 'ath-hint', style: { flex: 1, overflowWrap: 'anywhere' } }, edgeLabel(edge)),
                               h(
                                 'button',
                                 {
@@ -1850,48 +2718,98 @@ window.__ModuleLoader__.load({
                                   className: 'ath-icon-btn',
                                   title: t('graphs.removeEdge'),
                                   'aria-label': t('graphs.removeEdge'),
-                                  onClick: () => removeEdge(edge.id),
+                                  onClick: () => {
+                                    const current = draftRef.current;
+                                    onDraftChange({
+                                      ...current,
+                                      graph: {
+                                        ...current.graph,
+                                        edges: current.graph.edges.filter((item) => item.id !== edge.id),
+                                      },
+                                    });
+                                  },
                                 },
                                 '×',
                               ),
-                            );
-                          }),
-                        graph.edges.some((edge) => edge.to === selected.id)
+                            ),
+                          ),
+                        graph.edges.some((edge) => edge.to === singleNode.id || edge.from === singleNode.id)
                           ? null
                           : h('div', { className: 'ath-hint' }, t('graphs.noDeps')),
                       ),
-                      h(
-                        'div',
-                        { className: 'ath-row', style: { marginTop: 8 } },
-                        h(
-                          'select',
-                          {
-                            className: 'ath-select',
-                            value: depPick,
-                            onChange: (event) => setDepPick(event.target.value),
-                          },
-                          h('option', { value: '' }, t('graphs.depPlaceholder')),
-                          depOptions.map((node) => {
-                            const module = moduleById.get(node.moduleId);
-                            return h('option', { key: node.id, value: node.id }, node.label || (module ? module.name : node.id));
-                          }),
-                        ),
-                        h('button', { type: 'button', className: 'ath-btn', onClick: addDependency, disabled: !depPick }, t('graphs.addDep')),
-                      ),
+                      h('div', { className: 'ath-hint', style: { marginTop: 8 } }, t('canvas.connectHint')),
                     ),
                     h(
                       'div',
                       { style: { marginTop: 14 } },
                       h(
                         'button',
-                        { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => removeNode(selected.id) },
+                        {
+                          type: 'button',
+                          className: 'ath-btn ath-btn-ghost ath-btn-danger',
+                          onClick: () => {
+                            const current = draftRef.current;
+                            onDraftChange({
+                              ...current,
+                              graph: {
+                                ...current.graph,
+                                nodes: current.graph.nodes.filter((item) => item.id !== singleNode.id),
+                                edges: current.graph.edges.filter(
+                                  (edge) => edge.from !== singleNode.id && edge.to !== singleNode.id,
+                                ),
+                              },
+                            });
+                            setSelection({ nodes: [], edges: [] });
+                          },
+                        },
                         t('graphs.deleteNode'),
                       ),
                     ),
                   )
-                : h('div', { className: 'ath-hint' }, t('graphs.selectNode')),
+                : singleEdge
+                  ? h(
+                      'div',
+                      { className: 'ath-detail', style: { gap: 10 } },
+                      h('div', { className: 'ath-hint' }, t('canvas.edgeSelected')),
+                      h('div', { className: 'ath-mono', style: { fontSize: 11.5, overflowWrap: 'anywhere' } }, edgeLabel(singleEdge)),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'ath-btn ath-btn-ghost ath-btn-danger',
+                          onClick: () => {
+                            const current = draftRef.current;
+                            onDraftChange({
+                              ...current,
+                              graph: {
+                                ...current.graph,
+                                edges: current.graph.edges.filter((edge) => edge.id !== singleEdge.id),
+                              },
+                            });
+                            setSelection({ nodes: [], edges: [] });
+                          },
+                        },
+                        t('graphs.removeEdge'),
+                      ),
+                    )
+                  : selectedCount
+                    ? h(
+                        'div',
+                        { className: 'ath-detail', style: { gap: 10 } },
+                        h(
+                          'div',
+                          { className: 'ath-hint' },
+                          `${selectedNodes.length} ${t('common.nodes')} · ${selectedEdges.length} ${t('common.edges')}`,
+                        ),
+                        h(
+                          'button',
+                          { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: deleteSelection },
+                          t('canvas.deleteSelected'),
+                        ),
+                      )
+                    : h('div', { className: 'ath-hint' }, t('graphs.selectNode')),
             ),
-            layout.broken ? h('div', { className: 'ath-error' }, t('graphs.cycle')) : null,
+            broken ? h('div', { className: 'ath-error' }, t('graphs.cycle')) : null,
             plan && plan.nodes && plan.nodes.length
               ? h(
                   'div',
@@ -1977,6 +2895,11 @@ window.__ModuleLoader__.load({
                     { className: 'ath-stat-row' },
                     module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
                     h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
+                    h(
+                      'span',
+                      null,
+                      `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${(module.outputs || []).length}`,
+                    ),
                     h('span', null, module.usedBy && module.usedBy.length ? tr(t, 'modules.usedByCount', { n: module.usedBy.length }) : t('modules.notUsed')),
                   ),
                   h(
@@ -2127,6 +3050,23 @@ window.__ModuleLoader__.load({
                   `${environmentHint(t, currentEnvironment)} ${t('modules.environmentHint')}`.trim(),
                 ),
               ),
+              h(
+                'div',
+                { className: 'ath-grid-2', style: { marginTop: 12 } },
+                h(PortsEditor, {
+                  t,
+                  label: t('modules.inputs'),
+                  ports: module.inputs || [],
+                  onChange: (inputs) => patch({ inputs }),
+                }),
+                h(PortsEditor, {
+                  t,
+                  label: t('modules.outputs'),
+                  ports: module.outputs || [],
+                  onChange: (outputs) => patch({ outputs }),
+                }),
+              ),
+              h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.portsHint')),
               module.kind === 'graph'
                 ? h(
                     'div',
@@ -2254,9 +3194,9 @@ window.__ModuleLoader__.load({
       const [tab, setTab] = useState(() => {
         try {
           const stored = localStorage.getItem(TAB_KEY);
-          return stored === 'graphs' || stored === 'modules' || stored === 'experiments' ? stored : 'experiments';
+          return stored === 'runs' || stored === 'experiments' || stored === 'modules' ? stored : 'runs';
         } catch {
-          return 'experiments';
+          return 'runs';
         }
       });
       const [filter, setFilter] = useState('all');
@@ -2394,7 +3334,7 @@ window.__ModuleLoader__.load({
 
       const firstRunId = data && data.experiments && data.experiments.length ? data.experiments[0].id : '';
       useEffect(() => {
-        if (tab !== 'experiments' || runId || !firstRunId) return;
+        if (tab !== 'runs' || runId || !firstRunId) return;
         void openRun(firstRunId);
       }, [tab, runId, firstRunId, openRun]);
 
@@ -2425,7 +3365,7 @@ window.__ModuleLoader__.load({
           setSubmitOpen(false);
           pushToast(t('toast.submitted'));
           await loadState(true);
-          setTab('experiments');
+          setTab('runs');
           setRunId(payload.experiment.id);
           setRunDetail(payload.experiment);
         } catch (error) {
@@ -2520,7 +3460,7 @@ window.__ModuleLoader__.load({
             selectedNodeId: '',
           });
         }
-        setTab('graphs');
+        setTab('experiments');
       };
 
       const validateDraft = useCallback(
@@ -2596,6 +3536,8 @@ window.__ModuleLoader__.load({
               cwd: '',
               timeoutSec: 300,
               params: {},
+              inputs: ['input'],
+              outputs: ['output'],
               graphId: '',
             },
             isNew: true,
@@ -2670,7 +3612,7 @@ window.__ModuleLoader__.load({
           );
         }
         if (!data) return null;
-        if (tab === 'graphs') {
+        if (tab === 'experiments') {
           return h(GraphsView, {
             t,
             data,
@@ -2701,7 +3643,7 @@ window.__ModuleLoader__.load({
 
       let content;
       if (graphDraft) {
-        content = h(GraphEditor, {
+        content = h(ExperimentEditor, {
           t,
           modules: data ? data.modules : [],
           environments: data ? data.environments : [],
@@ -2771,7 +3713,7 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'ath-tabs' },
-              ['experiments', 'graphs', 'modules'].map((key) =>
+              ['runs', 'experiments', 'modules'].map((key) =>
                 h(
                   'button',
                   {
@@ -2786,9 +3728,9 @@ window.__ModuleLoader__.load({
                     ? h(
                         'span',
                         { className: 'ath-tab-count' },
-                        key === 'experiments'
+                        key === 'runs'
                           ? (data.experiments || []).length
-                          : key === 'graphs'
+                          : key === 'experiments'
                             ? (data.graphs || []).length
                             : (data.modules || []).length,
                       )
