@@ -52,6 +52,7 @@ function runDir(id) {
 }
 
 let stateCache = null;
+let stateLoading = null;
 let recoveredRuns = false;
 
 function emptyState() {
@@ -183,6 +184,15 @@ function normalizeState(raw) {
 
 async function readState() {
   if (stateCache) return stateCache;
+  if (!stateLoading) {
+    stateLoading = loadState().finally(() => {
+      stateLoading = null;
+    });
+  }
+  return stateLoading;
+}
+
+async function loadState() {
   await fsp.mkdir(dataDir(), { recursive: true });
   try {
     const text = await fsp.readFile(statePath(), 'utf8');
@@ -222,13 +232,28 @@ async function readState() {
   return stateCache;
 }
 
+async function renameWithRetry(source, target) {
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fsp.rename(source, target);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error && error.code !== 'EPERM' && error.code !== 'EBUSY') throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 async function writeState(next) {
   stateCache = next;
   await fsp.mkdir(dataDir(), { recursive: true });
   const text = JSON.stringify(next, null, 2);
   const tmp = `${statePath()}.${randomUUID()}.tmp`;
   await fsp.writeFile(tmp, text, 'utf8');
-  await fsp.rename(tmp, statePath());
+  await renameWithRetry(tmp, statePath());
 }
 
 // ------------------------------------------------------------- 运行记录

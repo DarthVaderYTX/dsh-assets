@@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
       'tab.modules': '模块',
       workspace: '工作区',
       'language.title': '插件语言',
-      'language.auto': '跟随系统',
+      'language.auto': '自动',
       'language.zh': '中文',
       'language.en': 'English',
       'action.refresh': '刷新',
@@ -91,6 +91,8 @@ window.__ModuleLoader__.load({
       'experiments.logEmpty': '这个节点还没有输出。',
       'experiments.cancel': '取消运行',
       'experiments.rerun': '重跑',
+      'experiments.copy': '复制',
+      'experiments.copyOpened': '已复制为实验草稿，保存后创建新实验',
       'experiments.delete': '删除记录',
       'experiments.openDir': '打开运行目录',
       'experiments.name': '运行名称',
@@ -272,6 +274,9 @@ window.__ModuleLoader__.load({
       'log.copy': '复制全部',
       'graphEditor.new': '新建实验',
       'graphEditor.edit': '编辑实验',
+      'graphEditor.copy': '副本',
+      'graphEditor.copyHint': '这是复制的实验草稿；保存后会创建一个新实验，不会修改原实验。',
+      'graphs.copySuffix': '副本',
       'moduleEditor.new': '新建模块',
       'moduleEditor.edit': '编辑模块',
     };
@@ -284,7 +289,7 @@ window.__ModuleLoader__.load({
       'tab.modules': 'Modules',
       workspace: 'Workspace',
       'language.title': 'Plugin language',
-      'language.auto': 'System',
+      'language.auto': 'Auto',
       'language.zh': '中文',
       'language.en': 'English',
       'action.refresh': 'Refresh',
@@ -351,6 +356,8 @@ window.__ModuleLoader__.load({
       'experiments.logEmpty': 'This node has no output yet.',
       'experiments.cancel': 'Cancel run',
       'experiments.rerun': 'Run again',
+      'experiments.copy': 'Copy',
+      'experiments.copyOpened': 'Copied to an experiment draft; saving creates a new experiment',
       'experiments.delete': 'Delete record',
       'experiments.openDir': 'Open run folder',
       'experiments.name': 'Run name',
@@ -532,6 +539,9 @@ window.__ModuleLoader__.load({
       'log.copy': 'Copy all',
       'graphEditor.new': 'New experiment',
       'graphEditor.edit': 'Edit experiment',
+      'graphEditor.copy': 'Copy',
+      'graphEditor.copyHint': 'This is a copied experiment draft; saving creates a new experiment and leaves the original untouched.',
+      'graphs.copySuffix': 'copy',
       'moduleEditor.new': 'New module',
       'moduleEditor.edit': 'Edit module',
     };
@@ -1233,6 +1243,17 @@ window.__ModuleLoader__.load({
       return JSON.parse(JSON.stringify(value));
     }
 
+    function uniqueExperimentName(base, graphs, suffix) {
+      const taken = new Set((graphs || []).map((graph) => String(graph.name || '').toLowerCase()));
+      const stem = `${String(base || 'experiment').trim()} · ${suffix}`.slice(0, 110);
+      if (!taken.has(stem.toLowerCase())) return stem;
+      for (let index = 2; index < 1000; index += 1) {
+        const candidate = `${stem} ${index}`;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return `${stem} ${Date.now().toString(36)}`;
+    }
+
     /** 本地分层；有环时返回 null，画布退回单列布局。 */
     function localLayers(graph) {
       const ids = new Set(graph.nodes.map((node) => node.id));
@@ -1722,6 +1743,7 @@ window.__ModuleLoader__.load({
       onOpenRun,
       onNew,
       onCancelRun,
+      onCopyRun,
       onRerun,
       onDeleteRun,
       onOpenFolder,
@@ -1855,6 +1877,7 @@ window.__ModuleLoader__.load({
                       current.status === 'running'
                         ? h('button', { type: 'button', className: 'ath-btn ath-btn-danger', onClick: () => onCancelRun(current) }, t('experiments.cancel'))
                         : null,
+                      h('button', { type: 'button', className: 'ath-btn', onClick: () => onCopyRun(current) }, t('experiments.copy')),
                       h('button', { type: 'button', className: 'ath-btn', onClick: () => onRerun(current) }, t('experiments.rerun')),
                       h('button', { type: 'button', className: 'ath-btn', onClick: () => onOpenFolder(current) }, t('experiments.openDir')),
                       current.status !== 'running'
@@ -3347,6 +3370,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'ath-editor-head' },
           h('h2', { className: 'ath-editor-title' }, graph.id ? t('graphEditor.edit') : t('graphEditor.new')),
+          draft.isCopy ? h('span', { className: 'ath-badge' }, t('graphEditor.copy')) : null,
           h(
             'div',
             { className: 'ath-actions' },
@@ -3379,6 +3403,7 @@ window.__ModuleLoader__.load({
               errors.map((error, index) => h('div', { className: 'ath-error', key: index }, `· ${error}`)),
             )
           : null,
+        draft.isCopy ? h('div', { className: 'ath-hint', style: { marginBottom: 8 } }, t('graphEditor.copyHint')) : null,
         h(
           'div',
           { className: 'ath-editor-meta' },
@@ -4713,6 +4738,59 @@ window.__ModuleLoader__.load({
         });
       };
 
+      const copyRun = async (run) => {
+        try {
+          let graph = null;
+          if (run.graphId) {
+            try {
+              const payload = await request(`/graphs?id=${encodeURIComponent(run.graphId)}`);
+              graph = clone(payload.graph);
+            } catch {
+              graph = null;
+            }
+          }
+          if (!graph) {
+            const ids = new Map((run.nodes || []).map((node, index) => [node.path, `copy-${index + 1}`]));
+            graph = {
+              id: '',
+              name: run.graphName || run.name || '',
+              description: '',
+              layout: run.layout === 'horizontal' ? 'horizontal' : 'vertical',
+              nodes: (run.nodes || []).map((node) => ({
+                id: ids.get(node.path),
+                moduleId: node.moduleId,
+                label: node.label || '',
+                params: { ...(node.params || {}) },
+                x: null,
+                y: null,
+              })),
+              edges: (run.edges || []).map((edge, index) => ({
+                id: `copy-edge-${index + 1}`,
+                from: ids.get(edge.from),
+                to: ids.get(edge.to),
+                fromPort: edge.fromPort || '',
+                toPort: edge.toPort || '',
+              })),
+            };
+          }
+          graph.id = '';
+          delete graph.createdAt;
+          delete graph.updatedAt;
+          graph.name = uniqueExperimentName(
+            graph.name || run.graphName || run.name,
+            (data && data.graphs) || [],
+            t('graphs.copySuffix'),
+          );
+          graph.layout = graph.layout === 'horizontal' ? 'horizontal' : 'vertical';
+          setGraphDraft({ graph, selectedNodeId: '', isCopy: true });
+          setGraphErrors([]);
+          setTab('experiments');
+          pushToast(t('experiments.copyOpened'));
+        } catch (error) {
+          fail(error);
+        }
+      };
+
       const rerun = async (run) => {
         try {
           const payload = await request('/experiments/rerun', { method: 'POST', body: { id: run.id } });
@@ -4954,6 +5032,7 @@ window.__ModuleLoader__.load({
           onOpenRun: (id) => void openRun(id),
           onNew: openSubmit,
           onCancelRun: cancelRun,
+          onCopyRun: (run) => void copyRun(run),
           onRerun: (run) => void rerun(run),
           onDeleteRun: deleteRun,
           onOpenFolder: (run) => void openRunFolder(run),
