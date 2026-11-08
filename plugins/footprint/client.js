@@ -34,12 +34,12 @@ window.__ModuleLoader__.load({
       'welcome.eyebrow': 'FOOTPRINT · 旅行地球',
       'welcome.title': '下一站，去哪里？',
       'welcome.sub': '输入一个地点，FootPrint 会带你在 3D 地球上找到它，并告诉你这里的故事与值得去的地方。',
-      'welcome.hint': '拖动旋转 · 滚轮缩放 · 右键倾斜',
+      'welcome.hint': '拖动旋转 · 滚轮缩放 · 放大后自动加载更清晰的地图',
       'loading.globe': '正在铺开地球…',
       'loading.detail': '正在寻找这个地方…',
       'globe.failed': '地球加载失败',
       'globe.retry': '重新加载',
-      'globe.ready': 'CesiumJS · Natural Earth II',
+      'globe.ready': 'CesiumJS · 自适应底图',
       'globe.coords': '光标坐标',
       'place.located': '已定位',
       'place.guide': '内置导览',
@@ -55,8 +55,8 @@ window.__ModuleLoader__.load({
       'source.guide': 'FootPrint 内置旅行导览',
       'source.view': '在 Wikipedia 查看',
       'source.license': 'CC BY-SA 4.0',
-      'source.map': '地图影像 Natural Earth II · 3D 引擎 CesiumJS',
-      'source.data': '地名 © OpenStreetMap contributors',
+      'source.map': '全球底图 Natural Earth II · 放大后自动加载 OpenStreetMap 细节',
+      'source.data': '地图与地名 © OpenStreetMap contributors',
       'notice.guide': '在线资料暂不可用，以下为内置导览。',
       'empty.title': '从一个地方开始',
       'empty.body': '搜索后会在这里看到地点介绍、坐标和附近景点推荐。点击推荐景点，地球会飞过去。',
@@ -101,12 +101,12 @@ window.__ModuleLoader__.load({
       'welcome.eyebrow': 'FOOTPRINT · A TRAVEL GLOBE',
       'welcome.title': 'Where to next?',
       'welcome.sub': 'Type a place and FootPrint will find it on a 3D globe, then tell you its story and what is worth seeing nearby.',
-      'welcome.hint': 'Drag to rotate · Scroll to zoom · Right-drag to tilt',
+      'welcome.hint': 'Drag to rotate · Scroll to zoom · Higher-resolution maps load as you zoom in',
       'loading.globe': 'Unfolding the globe…',
       'loading.detail': 'Finding this place…',
       'globe.failed': 'The globe could not load',
       'globe.retry': 'Try again',
-      'globe.ready': 'CesiumJS · Natural Earth II',
+      'globe.ready': 'CesiumJS · adaptive basemap',
       'globe.coords': 'Cursor coordinates',
       'place.located': 'Located',
       'place.guide': 'Built-in guide',
@@ -122,8 +122,8 @@ window.__ModuleLoader__.load({
       'source.guide': 'FootPrint built-in travel guide',
       'source.view': 'View on Wikipedia',
       'source.license': 'CC BY-SA 4.0',
-      'source.map': 'Imagery Natural Earth II · 3D engine CesiumJS',
-      'source.data': 'Place data © OpenStreetMap contributors',
+      'source.map': 'Global basemap Natural Earth II · OpenStreetMap detail fades in as you zoom',
+      'source.data': 'Map and place data © OpenStreetMap contributors',
       'notice.guide': 'Online details are unavailable; showing the built-in guide.',
       'empty.title': 'Start with a place',
       'empty.body': 'After a search, this panel shows the introduction, coordinates and nearby recommendations. Click a recommendation to fly there.',
@@ -669,6 +669,8 @@ window.__ModuleLoader__.load({
         let viewer = null
         let handler = null
         let observer = null
+        let detailLayer = null
+        let updateDetailLayer = null
         setStatus('loading')
         setError('')
         loadCesium()
@@ -705,11 +707,48 @@ window.__ModuleLoader__.load({
             providerPromise
               .then((provider) => {
                 if (disposed || viewer.isDestroyed()) return
-                viewer.imageryLayers.addImageryProvider(provider)
+                // Keep the offline Natural Earth layer underneath, so the
+                // high-resolution layer can fail without leaving a blank globe.
+                viewer.imageryLayers.addImageryProvider(provider, 0)
               })
               .catch(() => {
                 // The ellipsoid base color still gives a usable globe if tiles are unavailable.
               })
+
+            // The detail layer fades in as the camera descends. Cesium then
+            // selects the appropriate OSM zoom level for the screen automatically,
+            // so the visible region gains detail instead of stretching the
+            // low-resolution Natural Earth texture.
+            try {
+              const detailProvider = new Cesium.UrlTemplateImageryProvider({
+                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                minimumLevel: 0,
+                maximumLevel: 19,
+                credit: new Cesium.Credit('© OpenStreetMap contributors'),
+              })
+              detailLayer = viewer.imageryLayers.addImageryProvider(detailProvider)
+              detailLayer.alpha = 0
+              detailLayer.show = false
+            } catch {
+              detailLayer = null
+            }
+
+            updateDetailLayer = () => {
+              if (!detailLayer || viewer.isDestroyed()) return
+              try {
+                const height = viewer.camera.positionCartographic.height
+                if (!Number.isFinite(height)) return
+                const alpha = Cesium.Math.clamp((9_000_000 - height) / 3_500_000, 0, 1)
+                detailLayer.alpha = alpha
+                detailLayer.show = alpha > 0.015
+                if (detailLayer.show) viewer.scene.requestRender()
+              } catch {
+                // A camera read during teardown is harmless.
+              }
+            }
+            viewer.camera.percentageChanged = 0.002
+            viewer.camera.changed.addEventListener(updateDetailLayer)
+            updateDetailLayer()
 
             handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
             handler.setInputAction((movement) => {
@@ -753,6 +792,13 @@ window.__ModuleLoader__.load({
               handler.destroy()
             } catch {
               // Ignore.
+            }
+          }
+          if (viewer && updateDetailLayer) {
+            try {
+              viewer.camera.changed.removeEventListener(updateDetailLayer)
+            } catch {
+              // The camera may already be disposed with the viewer.
             }
           }
           if (viewer && !viewer.isDestroyed()) {
