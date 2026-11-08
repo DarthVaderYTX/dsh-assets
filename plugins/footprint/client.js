@@ -55,8 +55,8 @@ window.__ModuleLoader__.load({
       'source.guide': 'FootPrint 内置旅行导览',
       'source.view': '在 Wikipedia 查看',
       'source.license': 'CC BY-SA 4.0',
-      'source.map': '全球底图 Natural Earth II · 放大后自动加载 OpenStreetMap 细节',
-      'source.data': '地图与地名 © OpenStreetMap contributors',
+      'source.map': '全球底图 Natural Earth II · 放大后自动加载 Esri 卫星影像',
+      'source.data': '卫星影像 © Esri · 地名 © OpenStreetMap contributors',
       'notice.guide': '在线资料暂不可用，以下为内置导览。',
       'empty.title': '从一个地方开始',
       'empty.body': '搜索后会在这里看到地点介绍、坐标和附近景点推荐。点击推荐景点，地球会飞过去。',
@@ -122,8 +122,8 @@ window.__ModuleLoader__.load({
       'source.guide': 'FootPrint built-in travel guide',
       'source.view': 'View on Wikipedia',
       'source.license': 'CC BY-SA 4.0',
-      'source.map': 'Global basemap Natural Earth II · OpenStreetMap detail fades in as you zoom',
-      'source.data': 'Map and place data © OpenStreetMap contributors',
+      'source.map': 'Global basemap Natural Earth II · Esri satellite imagery fades in as you zoom',
+      'source.data': 'Imagery © Esri · Place data © OpenStreetMap contributors',
       'notice.guide': 'Online details are unavailable; showing the built-in guide.',
       'empty.title': 'Start with a place',
       'empty.body': 'After a search, this panel shows the introduction, coordinates and nearby recommendations. Click a recommendation to fly there.',
@@ -716,15 +716,23 @@ window.__ModuleLoader__.load({
               })
 
             // The detail layer fades in as the camera descends. Cesium then
-            // selects the appropriate OSM zoom level for the screen automatically,
+            // selects the appropriate imagery level for the screen automatically,
             // so the visible region gains detail instead of stretching the
             // low-resolution Natural Earth texture.
+            //
+            // We use Esri World Imagery rather than the public OSM tile server:
+            // OSM blocks embedded apps that do not present a policy-compliant
+            // Referer, and returns an "Access blocked" placeholder even when the
+            // HTTP status is 200. Esri's imagery service serves the same kind of
+            // zoom-dependent tiles without that referer dependency.
             try {
               const detailProvider = new Cesium.UrlTemplateImageryProvider({
-                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 minimumLevel: 0,
                 maximumLevel: 19,
-                credit: new Cesium.Credit('© OpenStreetMap contributors'),
+                credit: new Cesium.Credit(
+                  'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+                ),
               })
               detailLayer = viewer.imageryLayers.addImageryProvider(detailProvider)
               detailLayer.alpha = 0
