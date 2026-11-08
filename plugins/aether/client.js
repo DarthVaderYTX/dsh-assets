@@ -72,6 +72,8 @@ window.__ModuleLoader__.load({
       'experiments.environments': '执行环境',
       'graphs.planEnv': '环境',
       'experiments.title': '运行记录',
+      'experiments.searchPlaceholder': '搜索运行 / 实验 / 模块 / 状态 / id',
+      'experiments.emptyResult': '没有匹配的运行记录',
       'experiments.subtitle': '每次运行是一张实验 DAG 的一次提交；这里查看进度、日志与产物。',
       'experiments.new': '运行实验',
       'experiments.empty': '还没有运行记录。先在「实验」里搭一张 DAG，再运行它。',
@@ -356,6 +358,8 @@ window.__ModuleLoader__.load({
       'experiments.environments': 'Environments',
       'graphs.planEnv': 'Environment',
       'experiments.title': 'Runs',
+      'experiments.searchPlaceholder': 'Search run / experiment / module / status / id',
+      'experiments.emptyResult': 'No runs match',
       'experiments.subtitle': 'Each run is one submission of an experiment DAG; inspect progress, logs and artifacts here.',
       'experiments.new': 'Run experiment',
       'experiments.empty': 'No runs yet. Build a DAG under Experiments, then run it.',
@@ -1852,11 +1856,22 @@ window.__ModuleLoader__.load({
       onOpenFolder,
       onOpenLog,
     }) {
+      const [query, setQuery] = useState('');
+      const keyword = query.trim().toLowerCase();
       const runs = (data.experiments || []).filter((run) => {
-        if (filter === 'running') return run.status === 'running';
-        if (filter === 'failed') return run.status === 'failed';
-        if (filter === 'finished') return run.status !== 'running';
-        return true;
+        if (filter === 'running' && run.status !== 'running') return false;
+        if (filter === 'failed' && run.status !== 'failed') return false;
+        if (filter === 'finished' && run.status === 'running') return false;
+        if (!keyword) return true;
+        const nodeText = (run.nodes || [])
+          .flatMap((node) => [node.label, node.moduleName, node.path])
+          .filter(Boolean)
+          .join(' ');
+        return [run.name, run.id, run.graphName, run.graphId, run.message, statusText(t, run.status), nodeText]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword);
       });
       const current = runDetail;
 
@@ -1888,6 +1903,14 @@ window.__ModuleLoader__.load({
           h(
             'div',
             null,
+            h('input', {
+              className: 'ath-input',
+              type: 'search',
+              value: query,
+              placeholder: t('experiments.searchPlaceholder'),
+              style: { marginBottom: 8 },
+              onChange: (event) => setQuery(event.target.value),
+            }),
             h(
               'div',
               { className: 'ath-chips', style: { marginBottom: 8 } },
@@ -1911,7 +1934,7 @@ window.__ModuleLoader__.load({
                   'div',
                   { className: 'ath-run-list' },
                   runs.length === 0
-                    ? h('div', { className: 'ath-hint', style: { padding: '14px' } }, t('common.empty'))
+                    ? h('div', { className: 'ath-hint', style: { padding: '14px' } }, t('experiments.emptyResult'))
                     : runs.map((run) =>
                         h(
                           'button',
