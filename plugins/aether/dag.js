@@ -10,9 +10,10 @@ const MAX_PORT_LABEL = 40;
 
 export const DEFAULT_TIMEOUT_SEC = 300;
 export const MAX_TIMEOUT_SEC = 86400;
-export const MODULE_KINDS = ['command', 'graph'];
+export const MODULE_KINDS = ['command', 'graph', 'dataset'];
 export const DEFAULT_INPUT_PORTS = ['input'];
 export const DEFAULT_OUTPUT_PORTS = ['output'];
+export const LAYOUT_DIRECTIONS = ['vertical', 'horizontal'];
 
 /**
  * 内置执行环境。执行环境是「模块在哪里跑」的声明，由执行器解析：
@@ -110,7 +111,7 @@ export function normalizeParams(raw) {  const params = {};
 
 export function normalizeModule(raw) {
   const source = isPlainObject(raw) ? raw : {};
-  const kind = source.kind === 'graph' ? 'graph' : 'command';
+  const kind = source.kind === 'graph' ? 'graph' : source.kind === 'dataset' ? 'dataset' : 'command';
   const timeout = Number(source.timeoutSec);
   return {
     id: String(source.id == null ? '' : source.id).trim(),
@@ -127,6 +128,8 @@ export function normalizeModule(raw) {
     inputs: normalizePorts(source.inputs, DEFAULT_INPUT_PORTS),
     outputs: normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS),
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
+    datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
+    datasetFormat: kind === 'dataset' ? String(source.datasetFormat == null ? '' : source.datasetFormat).trim() : '',
     environmentId: String(source.environmentId == null ? '' : source.environmentId).trim() || 'local',
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
@@ -166,6 +169,7 @@ export function normalizeGraph(raw) {
     description: String(source.description == null ? '' : source.description).trim(),
     nodes,
     edges,
+    layout: source.layout === 'horizontal' ? 'horizontal' : 'vertical',
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
   };
@@ -320,9 +324,13 @@ export function validateModule(module, modules = [], graphs = [], environments =
     if (!(module.timeoutSec >= 1 && module.timeoutSec <= MAX_TIMEOUT_SEC)) {
       errors.push(`超时需在 1–${MAX_TIMEOUT_SEC} 秒之间`);
     }
-  } else {
+  } else if (module.kind === 'graph') {
     if (!module.graphId) errors.push('子图模块需要选择一个实验');
     else if (!graphs.some((graph) => graph.id === module.graphId)) errors.push(`实验「${module.graphId}」不存在`);
+  } else if (module.kind === 'dataset') {
+    if (!module.datasetUri) errors.push('数据集模块需要填写 URI / 路径');
+    else if (module.datasetUri.length > 500) errors.push('数据集 URI 过长');
+    if ((module.datasetFormat || '').length > 40) errors.push('数据集格式名过长');
   }
   return errors;
 }
@@ -504,6 +512,8 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         environmentId: module?.environmentId || 'local',
         inputs: module?.inputs || [],
         outputs: module?.outputs || [],
+        datasetUri: module?.datasetUri || '',
+        datasetFormat: module?.datasetFormat || '',
       };
       plan.set(nodeId, { entries: [entry], exits: [entry] });
       nodes.push(entry);

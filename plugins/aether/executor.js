@@ -106,6 +106,10 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_ENVIRONMENT_NAME = node.environmentName || '';
   env.AETHER_EXECUTOR = node.executor || 'local';
   env.AETHER_PORTS = JSON.stringify({ inputs: node.inputs || [], outputs: node.outputs || [] });
+  if (node.kind === 'dataset') {
+    env.AETHER_DATASET_URI = node.datasetUri || '';
+    env.AETHER_DATASET_FORMAT = node.datasetFormat || '';
+  }
   env.AETHER_INPUT_FILE = inputFile;
   env.AETHER_PARAMS = JSON.stringify(node.params || {});
   env.AETHER_INPUTS = JSON.stringify(
@@ -375,6 +379,32 @@ export class LocalExecutor {
     await fsp
       .writeFile(inputFile, JSON.stringify({ run: run.id, node: node.path, params: node.params, inputs }, null, 2), 'utf8')
       .catch(() => {});
+
+    if (node.kind === 'dataset') {
+      // 数据集节点不启动命令：把数据集指针写成 stdout，交给下游读取。
+      const text = `${JSON.stringify({
+        kind: 'dataset',
+        name: node.moduleName,
+        uri: node.datasetUri || '',
+        format: node.datasetFormat || '',
+        params: node.params || {},
+      })}\n`;
+      const outLog = path.join(directory, 'stdout.log');
+      await fsp.writeFile(outLog, text, 'utf8').catch(() => {});
+      await fsp.writeFile(path.join(directory, 'stderr.log'), '', 'utf8').catch(() => {});
+      node.endedAt = Date.now();
+      node.durationMs = 0;
+      node.exitCode = 0;
+      node.stdoutTail = text;
+      node.stderrTail = '';
+      node.status = handle.cancelRequested ? 'cancelled' : 'succeeded';
+      node.error = handle.cancelRequested ? '已取消' : '';
+      await fsp
+        .copyFile(outLog, path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`))
+        .catch(() => {});
+      await this.persist(run).catch(() => {});
+      return;
+    }
 
     const builtins = {
       run_id: run.id,

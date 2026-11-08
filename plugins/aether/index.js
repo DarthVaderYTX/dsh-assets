@@ -24,7 +24,7 @@ import {
 import { LocalExecutor, resolvePlacements } from './executor.js';
 
 const API_PREFIX = '/aether-api';
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_CONCURRENCY = 8;
 const MAX_RUNS = 200;
@@ -113,6 +113,16 @@ function seedState() {
       outputs: [],
     }),
     normalizeModule({
+      id: 'demo-dataset',
+      name: '示例数据集',
+      description: '一个数据集节点：执行时把 URI 与格式写给下游，不启动命令。',
+      kind: 'dataset',
+      datasetUri: 'datasets/demo.jsonl',
+      datasetFormat: 'jsonl',
+      inputs: [],
+      outputs: ['rows'],
+    }),
+    normalizeModule({
       id: 'demo-pipeline',
       name: '演示流水线（子图）',
       description: '把“准备 → 训练 → 评估”打包成一个可复用的子图模块。',
@@ -177,10 +187,24 @@ async function readState() {
   try {
     const text = await fsp.readFile(statePath(), 'utf8');
     const parsed = JSON.parse(text);
+    const legacyLayout = new Set(
+      (Array.isArray(parsed.graphs) ? parsed.graphs : [])
+        .filter((graph) => graph && !graph.layout)
+        .map((graph) => graph.id),
+    );
     stateCache = normalizeState(parsed);
-    // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口。
-    for (const graph of stateCache.graphs) hydrateGraphPorts(graph, stateCache.modules);
-    if (Number(parsed.version) !== DATA_VERSION || !Array.isArray(parsed.environments)) {
+    // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
+    // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局。
+    for (const graph of stateCache.graphs) {
+      if (legacyLayout.has(graph.id)) {
+        for (const node of graph.nodes) {
+          node.x = null;
+          node.y = null;
+        }
+      }
+      hydrateGraphPorts(graph, stateCache.modules);
+    }
+    if (Number(parsed.version) !== DATA_VERSION || !Array.isArray(parsed.environments) || legacyLayout.size) {
       await writeState(stateCache);
     }
   } catch (error) {
@@ -223,6 +247,8 @@ function summarizeRun(run, { detail = false } = {}) {
     executor: node.executor || 'local',
     inputs: node.inputs || [],
     outputs: node.outputs || [],
+    datasetUri: node.datasetUri || '',
+    datasetFormat: node.datasetFormat || '',
     status: node.status,
     startedAt: node.startedAt || null,
     endedAt: node.endedAt || null,
@@ -434,6 +460,8 @@ async function startExperiment(input = {}) {
         executor: target.executor,
         inputs: node.inputs || [],
         outputs: node.outputs || [],
+        datasetUri: node.datasetUri || '',
+        datasetFormat: node.datasetFormat || '',
         status: 'pending',
         startedAt: null,
         endedAt: null,

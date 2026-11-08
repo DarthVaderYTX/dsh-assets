@@ -73,9 +73,10 @@ after(async () => {
 
 test('seeds a demo module library and graphs', async () => {
   const { payload } = await call('/state');
-  assert.equal(payload.modules.length, 5);
+  assert.equal(payload.modules.length, 6);
   assert.equal(payload.graphs.length, 2);
   assert.ok(payload.modules.some((module) => module.id === 'demo-pipeline' && module.kind === 'graph'));
+  assert.ok(payload.modules.some((module) => module.id === 'demo-dataset' && module.kind === 'dataset'));
   const nightly = payload.graphs.find((graph) => graph.id === 'nightly-experiment');
   assert.equal(nightly.nodeCount, 2);
   assert.equal(nightly.layerCount, 2);
@@ -261,6 +262,32 @@ test('module ports and canvas coordinates round-trip through the API', async () 
   });
   assert.equal(badPort.status, 400);
   assert.match(badPort.payload.error, /没有输入端口「missing」/);
+});
+
+test('dataset nodes emit their URI without starting a command', async () => {
+  const graph = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        name: 'Dataset graph',
+        layout: 'vertical',
+        nodes: [{ id: 'rows', moduleId: 'demo-dataset', x: 40, y: 40 }],
+        edges: [],
+      },
+    },
+  });
+  assert.equal(graph.status, 200);
+  assert.equal(graph.payload.graph.layout, 'vertical');
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: graph.payload.graph.id, concurrency: 1 },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.nodes[0].kind, 'dataset');
+  assert.equal(run.nodes[0].outputs[0], 'rows');
+  assert.match(run.nodes[0].stdoutTail, /datasets\/demo\.jsonl/);
+  assert.equal(run.nodes[0].exitCode, 0);
 });
 
 test('submitting a graph executes subgraph nodes in dependency order', async () => {

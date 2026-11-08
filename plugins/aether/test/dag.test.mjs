@@ -117,6 +117,17 @@ test('graph validation rejects unknown or missing ports', () => {
   assert.match(validateGraph(noInput, modules, []).join('\n'), /没有输入端口/);
 });
 
+test('dataset modules require a URI and graphs default to vertical layout', () => {
+  const empty = normalizeModule({ id: 'ds', name: 'Dataset', kind: 'dataset' });
+  assert.match(validateModule(empty, [], []).join('\n'), /URI/);
+  assert.deepEqual(
+    validateModule(normalizeModule({ id: 'ds', name: 'Dataset', kind: 'dataset', datasetUri: 'data/x.jsonl' }), [], []),
+    [],
+  );
+  assert.equal(normalizeGraph({ name: 'G' }).layout, 'vertical');
+  assert.equal(normalizeGraph({ name: 'G', layout: 'horizontal' }).layout, 'horizontal');
+});
+
 test('nodes keep canvas coordinates through normalization', () => {
   const graph = normalizeGraph({
     name: 'Positioned',
