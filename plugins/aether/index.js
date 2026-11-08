@@ -24,7 +24,7 @@ import {
 import { LocalExecutor, resolvePlacements } from './executor.js';
 
 const API_PREFIX = '/aether-api';
-const DATA_VERSION = 4;
+const DATA_VERSION = 5;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_CONCURRENCY = 8;
 const MAX_RUNS = 200;
@@ -194,7 +194,8 @@ async function readState() {
     );
     stateCache = normalizeState(parsed);
     // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
-    // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局。
+    // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
+    // v4 → v5 给模块补版本号与版本历史。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -238,6 +239,7 @@ function summarizeRun(run, { detail = false } = {}) {
     nodeId: node.nodeId,
     moduleId: node.moduleId,
     moduleName: node.moduleName,
+    moduleVersion: node.moduleVersion || 1,
     label: node.label,
     kind: node.kind,
     deps: node.deps,
@@ -442,6 +444,7 @@ async function startExperiment(input = {}) {
       nodeId: node.nodeId,
       moduleId: node.moduleId,
       moduleName: node.moduleName,
+      moduleVersion: node.moduleVersion || 1,
       label: node.label,
       kind: node.kind,
       params: node.params,
@@ -622,8 +625,11 @@ async function buildStatePayload() {
   const modules = state.modules.map((module) => {
     const usedBy = moduleUsage(state, module.id);
     const environment = state.environments.find((item) => item.id === module.environmentId);
+    const { versions = [], ...rest } = module;
     return {
-      ...module,
+      ...rest,
+      version: module.version || 1,
+      versionCount: versions.length,
       usedBy,
       environmentName: environment ? environment.name : module.environmentId,
       subgraphName:
@@ -732,6 +738,32 @@ function uniqueId(base, taken, fallback) {
   return `${root}-${Date.now().toString(36)}`;
 }
 
+function moduleContentFields(module) {
+  return {
+    name: module.name,
+    description: module.description,
+    kind: module.kind,
+    command: module.command,
+    cwd: module.cwd,
+    timeoutSec: module.timeoutSec,
+    params: module.params || {},
+    inputs: module.inputs || [],
+    outputs: module.outputs || [],
+    graphId: module.graphId,
+    datasetUri: module.datasetUri,
+    datasetFormat: module.datasetFormat,
+    environmentId: module.environmentId,
+  };
+}
+
+function sameModuleContent(left, right) {
+  return JSON.stringify(moduleContentFields(left)) === JSON.stringify(moduleContentFields(right));
+}
+
+function moduleSnapshot(module) {
+  return { version: module.version || 1, savedAt: Date.now(), ...moduleContentFields(module) };
+}
+
 async function saveModule(input, options = {}) {
   const state = await readState();
   const module = normalizeModule(input);
@@ -751,23 +783,35 @@ async function saveModule(input, options = {}) {
   const errors = validateModule(module, state.modules, state.graphs, state.environments);
   if (errors.length) throw httpError(400, errors.join('；'));
 
+  const overwriteVersion = Boolean(options.overwriteVersion);
+  let version = 1;
+  let versions = [];
+  if (existing) {
+    const existingVersions = Array.isArray(existing.versions) ? existing.versions : [];
+    if (sameModuleContent(existing, module) || overwriteVersion) {
+      version = existing.version || 1;
+      versions = existingVersions;
+    } else {
+      version = (existing.version || 1) + 1;
+      versions = [...existingVersions, moduleSnapshot(existing)].slice(-20);
+    }
+  }
+  const savedModule = {
+    ...module,
+    version,
+    versions,
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  };
+
   const moduleList = existing
-    ? state.modules.map((item) => (item.id === module.id ? module : item))
-    : [...state.modules, module];
+    ? state.modules.map((item) => (item.id === module.id ? savedModule : item))
+    : [...state.modules, savedModule];
   const refErrors = graphReferenceErrors(state.graphs, moduleList);
   if (refErrors.length) throw httpError(400, refErrors.join('；'));
 
-  const next = {
-    ...state,
-    modules: moduleList.map((item) =>
-      item.id === module.id
-        ? { ...module, createdAt: existing?.createdAt || Date.now(), updatedAt: Date.now() }
-        : item,
-    ),
-    updatedAt: Date.now(),
-  };
-  await writeState(next);
-  return module;
+  await writeState({ ...state, modules: moduleList, updatedAt: Date.now() });
+  return savedModule;
 }
 
 async function deleteModule(id) {
@@ -882,7 +926,10 @@ async function handleApi(req, res) {
 
   if (method === 'POST' && route === '/modules') {
     const body = await readBody(req);
-    const module = await saveModule(body.module || body, { create: Boolean(body.create) });
+    const module = await saveModule(body.module || body, {
+      create: Boolean(body.create),
+      overwriteVersion: Boolean(body.overwriteVersion),
+    });
     sendJson(res, 200, { ok: true, module });
     return;
   }

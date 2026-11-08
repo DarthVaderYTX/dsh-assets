@@ -131,6 +131,13 @@ export function normalizeModule(raw) {
     datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
     datasetFormat: kind === 'dataset' ? String(source.datasetFormat == null ? '' : source.datasetFormat).trim() : '',
     environmentId: String(source.environmentId == null ? '' : source.environmentId).trim() || 'local',
+    version:
+      Number.isFinite(Number(source.version)) && Number(source.version) > 0
+        ? Math.floor(Number(source.version))
+        : 1,
+    versions: Array.isArray(source.versions)
+      ? source.versions.filter((item) => item && typeof item === 'object').slice(-20)
+      : [],
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
   };
@@ -516,6 +523,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         outputs: module?.outputs || [],
         datasetUri: module?.datasetUri || '',
         datasetFormat: module?.datasetFormat || '',
+        moduleVersion: module?.version || 1,
       };
       plan.set(nodeId, { entries: [entry], exits: [entry] });
       nodes.push(entry);

@@ -291,6 +291,43 @@ test('dataset nodes emit their URI without starting a command', async () => {
   assert.equal(run.nodes[0].exitCode, 0);
 });
 
+test('module saves create a new version by default and can overwrite it', async () => {
+  const created = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'versioned', name: 'Versioned', kind: 'command', command: 'echo 1', inputs: [], outputs: ['out'],
+      },
+    },
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.payload.module.version, 1);
+  assert.equal(created.payload.module.versions.length, 0);
+
+  const updated = await call('/modules', {
+    method: 'POST',
+    body: { module: { ...created.payload.module, command: 'echo 2' } },
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.payload.module.version, 2);
+  assert.equal(updated.payload.module.versions.length, 1);
+
+  const overwritten = await call('/modules', {
+    method: 'POST',
+    body: { module: { ...updated.payload.module, command: 'echo 3' }, overwriteVersion: true },
+  });
+  assert.equal(overwritten.status, 200);
+  assert.equal(overwritten.payload.module.version, 2);
+  assert.equal(overwritten.payload.module.versions.length, 1);
+
+  const { payload } = await call('/state');
+  const module = payload.modules.find((item) => item.id === 'versioned');
+  assert.equal(module.version, 2);
+  assert.equal(module.versionCount, 1);
+  assert.equal(module.versions, undefined);
+});
+
 test('submitting a graph executes subgraph nodes in dependency order', async () => {
   const submitted = await call('/experiments', {
     method: 'POST',

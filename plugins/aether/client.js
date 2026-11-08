@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     const TAB_KEY = 'aether:active-tab-v2';
     const SIDEBAR_WIDTH_KEY = 'aether:sidebar-width';
     const PALETTE_HEIGHT_KEY = 'aether:palette-height';
+    const LANGUAGE_KEY = 'aether:language';
 
     // 术语：UI 的「实验」= 内部 graph（DAG 定义）；UI 的「运行」= 内部 experiment（一次提交）。
 
@@ -22,6 +23,10 @@ window.__ModuleLoader__.load({
       'tab.experiments': '实验',
       'tab.modules': '模块',
       workspace: '工作区',
+      'language.title': '插件语言',
+      'language.auto': '跟随系统',
+      'language.zh': '中文',
+      'language.en': 'English',
       'action.refresh': '刷新',
       'action.openFolder': '打开目录',
       'action.save': '保存',
@@ -216,6 +221,19 @@ window.__ModuleLoader__.load({
       'modules.envHint': 'AETHER_INPUT_FILE（上游输入 JSON 文件）、AETHER_NODE_DIR（节点目录）、AETHER_PARAMS（参数 JSON）、AETHER_INPUTS（上游摘要 JSON）、AETHER_RUN_ID / AETHER_NODE_PATH。',
       'modules.noGraphs': '还没有实验可选，先创建一个实验。',
       'modules.deleteHint': '删除后模块会从模块库移除；被图引用的模块不能直接删除。',
+      'modules.version': '版本',
+      'modules.versionLabel': 'v{version}',
+      'modules.overwriteVersion': '覆盖当前版本（不新建版本）',
+      'modules.versionHint': '默认保存为新版本（当前 v{version}）；勾选后覆盖当前版本。',
+      'modules.versionHistory': '历史版本：{n} 个',
+      'modules.searchPlaceholder': '搜索模块、子图、数据集',
+      'modules.emptyResult': '没有匹配的模块',
+      'newModule.title': '新建',
+      'newModule.subtitle': '选择要创建的类型',
+      'newModule.commandDesc': '一段通过 shell 执行的命令，可配置输入 / 输出与参数。',
+      'newModule.graphDesc': '引用另一个实验，作为子图内联执行。',
+      'newModule.datasetDesc': '数据集 URI / 路径，只有输出端口。',
+      'newModule.choose': '创建',
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
       'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
@@ -264,6 +282,10 @@ window.__ModuleLoader__.load({
       'tab.experiments': 'Experiments',
       'tab.modules': 'Modules',
       workspace: 'Workspace',
+      'language.title': 'Plugin language',
+      'language.auto': 'System',
+      'language.zh': '中文',
+      'language.en': 'English',
       'action.refresh': 'Refresh',
       'action.openFolder': 'Open folder',
       'action.save': 'Save',
@@ -458,6 +480,19 @@ window.__ModuleLoader__.load({
       'modules.envHint': 'AETHER_INPUT_FILE (upstream inputs JSON), AETHER_NODE_DIR (node folder), AETHER_PARAMS (params JSON), AETHER_INPUTS (upstream summary JSON), AETHER_RUN_ID / AETHER_NODE_PATH.',
       'modules.noGraphs': 'No experiments available; create one first.',
       'modules.deleteHint': 'Deleting removes the module from the library; modules used by graphs cannot be deleted.',
+      'modules.version': 'Version',
+      'modules.versionLabel': 'v{version}',
+      'modules.overwriteVersion': 'Overwrite the current version',
+      'modules.versionHint': 'Saving creates a new version by default (currently v{version}); check this to overwrite it.',
+      'modules.versionHistory': 'History: {n} versions',
+      'modules.searchPlaceholder': 'Search modules, subgraphs, datasets',
+      'modules.emptyResult': 'No modules match',
+      'newModule.title': 'New',
+      'newModule.subtitle': 'Choose what to create',
+      'newModule.commandDesc': 'A shell command with configurable ports and parameters.',
+      'newModule.graphDesc': 'Reference another experiment and inline it as a subgraph.',
+      'newModule.datasetDesc': 'A dataset URI / path with output ports only.',
+      'newModule.choose': 'Create',
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
       'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
@@ -544,7 +579,7 @@ window.__ModuleLoader__.load({
 .ath-brand-copy { display: flex; flex-direction: column; min-width: 0; }
 .ath-brand-title { font-size: 15px; font-weight: 650; letter-spacing: .01em; }
 .ath-brand-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ath-top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ath-top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
 .ath-workspace {
   display: inline-flex; align-items: center; gap: 6px; max-width: 320px;
   padding: 4px 9px; border-radius: 999px;
@@ -554,6 +589,11 @@ window.__ModuleLoader__.load({
   font-size: 11px;
 }
 .ath-workspace span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ath-lang-select {
+  border: 1px solid var(--ath-border-soft); border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
+  padding: 4px 7px; font-size: 11.5px; cursor: pointer;
+}
 .ath-tabs {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 2px;
@@ -717,6 +757,20 @@ window.__ModuleLoader__.load({
 .ath-node-params { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
 .ath-param-chip { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 5px; }
 .ath-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ath-module-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; }
+.ath-module-toolbar .ath-input { max-width: 340px; }
+.ath-version-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ath-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.ath-check input { accent-color: var(--ath-accent); }
+.ath-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ath-type-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+  padding: 12px; border: 1px solid var(--ath-border-soft); border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1); color: inherit; cursor: pointer;
+}
+.ath-type-card:hover { border-color: var(--ath-accent); background: var(--dsw-alias-bg-layer-2); }
+.ath-type-title { font-size: 13px; }
+.ath-type-action { margin-top: 6px; font-size: 11px; color: var(--ath-accent); font-weight: 600; }
 .ath-module-card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 11px; background: var(--dsw-alias-bg-layer-1); padding: 13px 14px; }
 .ath-module-card:hover { border-color: var(--dsw-alias-border-l2); }
 .ath-module-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -1068,7 +1122,9 @@ window.__ModuleLoader__.load({
   .ath-canvas-viewport { height: auto; min-height: 60vh; }
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
+  .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
   .ath-brand-sub { display: none; }
+  .ath-workspace { display: none; }
   .ath-topbar { padding: 10px 12px; }
   .ath-node-row { grid-template-columns: minmax(110px, 1.4fr) 84px 56px 52px; }
   .ath-node-row > :nth-child(2), .ath-node-row > :nth-child(4) { display: none; }
@@ -1612,6 +1668,38 @@ window.__ModuleLoader__.load({
                   )
                 : null,
             ),
+      );
+    }
+
+    function NewModuleDialog({ t, onClose, onPick }) {
+      const options = [
+        { kind: 'command', desc: 'newModule.commandDesc' },
+        { kind: 'graph', desc: 'newModule.graphDesc' },
+        { kind: 'dataset', desc: 'newModule.datasetDesc' },
+      ];
+      return h(
+        Modal,
+        { t, title: t('newModule.title'), onClose },
+        h('div', { className: 'ath-hint', style: { marginBottom: 12 } }, t('newModule.subtitle')),
+        h(
+          'div',
+          { className: 'ath-type-grid' },
+          options.map((option) =>
+            h(
+              'button',
+              {
+                key: option.kind,
+                type: 'button',
+                className: 'ath-type-card',
+                onClick: () => onPick(option.kind),
+              },
+              h('span', { className: 'ath-badge', 'data-kind': option.kind }, t(`modules.kind.${option.kind}`)),
+              h('strong', { className: 'ath-type-title' }, t(`modules.kind.${option.kind}`)),
+              h('span', { className: 'ath-hint' }, t(option.desc)),
+              h('span', { className: 'ath-type-action' }, t('newModule.choose')),
+            ),
+          ),
+        ),
       );
     }
 
@@ -2378,7 +2466,9 @@ window.__ModuleLoader__.load({
                       h(
                         'span',
                         { className: 'ath-node-sub' },
-                        `${runStatusLabel(t, node.status)} · ${node.moduleName || node.moduleId}`,
+                        `${runStatusLabel(t, node.status)} · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
+                          version: node.moduleVersion || 1,
+                        })}`,
                       ),
                     ),
                     direction === 'vertical'
@@ -2499,6 +2589,11 @@ window.__ModuleLoader__.load({
                   ),
                   h('strong', { className: 'ath-run-nodebar-title' }, selectedNode.label || selectedNode.path),
                   h('code', { className: 'ath-run-nodebar-path' }, selectedNode.path),
+                  h(
+                    'span',
+                    { className: 'ath-run-nodebar-meta' },
+                    tr(t, 'modules.versionLabel', { version: selectedNode.moduleVersion || 1 }),
+                  ),
                   h('span', { className: 'ath-run-nodebar-meta' }, formatDuration(selectedNode.startedAt, selectedNode.endedAt)),
                   selectedNode.exitCode !== null && selectedNode.exitCode !== undefined
                     ? h('span', { className: 'ath-run-nodebar-meta' }, `${t('experiments.exitCode')} ${selectedNode.exitCode}`)
@@ -3609,6 +3704,7 @@ window.__ModuleLoader__.load({
                           { className: 'ath-palette-meta' },
                           tr(t, 'canvas.portSummary', { inputs: ports.inputs.length, outputs: ports.outputs.length }),
                           ` · ${t('common.params')} ${Object.keys(module.params || {}).length}`,
+                          ` · ${tr(t, 'modules.versionLabel', { version: module.version || 1 })}`,
                           module.environmentName ? ` · ${module.environmentName}` : '',
                         ),
                         h(
@@ -3657,6 +3753,13 @@ window.__ModuleLoader__.load({
                                 'span',
                                 { className: 'ath-badge', 'data-kind': module.kind },
                                 t(`modules.kind.${module.kind}`),
+                              )
+                            : null,
+                          module
+                            ? h(
+                                'span',
+                                { className: 'ath-badge' },
+                                tr(t, 'modules.versionLabel', { version: module.version || 1 }),
                               )
                             : null,
                           module
@@ -3851,6 +3954,30 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------- 模块
 
     function ModulesView({ t, data, onNew, onEdit, onDelete }) {
+      const [query, setQuery] = useState('');
+      const [filter, setFilter] = useState('all');
+      const modules = data.modules || [];
+      const keyword = query.trim().toLowerCase();
+      const filtered = modules
+        .filter((module) => filter === 'all' || module.kind === filter)
+        .filter((module) => {
+          if (!keyword) return true;
+          const haystack = [
+            module.name,
+            module.id,
+            module.description,
+            module.kind,
+            t(`modules.kind.${module.kind}`),
+            module.datasetUri || '',
+            module.subgraphName || '',
+            module.graphId || '',
+            ...(module.inputs || []),
+            ...(module.outputs || []),
+          ]
+            .join(' ')
+            .toLowerCase();
+          return haystack.includes(keyword);
+        });
       return h(
         'div',
         { className: 'ath-page' },
@@ -3869,62 +3996,92 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onNew }, t('modules.new')),
           ),
         ),
-        (data.modules || []).length === 0
+        h(
+          'div',
+          { className: 'ath-card ath-module-toolbar' },
+          h('input', {
+            className: 'ath-input',
+            type: 'search',
+            value: query,
+            placeholder: t('modules.searchPlaceholder'),
+            onChange: (event) => setQuery(event.target.value),
+          }),
+          h(
+            'div',
+            { className: 'ath-chips' },
+            ['all', 'command', 'graph', 'dataset'].map((key) =>
+              h(
+                'button',
+                {
+                  key,
+                  type: 'button',
+                  className: 'ath-chip',
+                  'data-active': filter === key ? 'true' : 'false',
+                  onClick: () => setFilter(key),
+                },
+                t(`canvas.filter.${key}`),
+              ),
+            ),
+          ),
+        ),
+        modules.length === 0
           ? h(EmptyState, { title: t('modules.empty') })
-          : h(
-              'div',
-              { className: 'ath-card-grid' },
-              data.modules.map((module) =>
-                h(
-                  'div',
-                  { className: 'ath-module-card', key: module.id },
+          : filtered.length === 0
+            ? h(EmptyState, { title: t('modules.emptyResult') })
+            : h(
+                'div',
+                { className: 'ath-card-grid' },
+                filtered.map((module) =>
                   h(
                     'div',
-                    { className: 'ath-module-head' },
-                    h('span', { className: 'ath-module-name' }, module.name),
-                    h(
-                      'span',
-                      { className: 'ath-badge', 'data-kind': module.kind },
-                      t(`modules.kind.${module.kind}`),
-                    ),
-                    h(
-                      'span',
-                      { className: 'ath-badge' },
-                      environmentName(t, data.environments, module.environmentId, module.environmentName),
-                    ),
-                  ),
-                  h('div', { className: 'ath-module-desc' }, module.description || ''),
-                  module.kind === 'graph'
-                    ? h('div', { className: 'ath-module-code' }, `${t('modules.graphRef')}: ${module.subgraphName || module.graphId}`)
-                    : module.kind === 'dataset'
-                      ? h('div', { className: 'ath-module-code' }, `${module.datasetUri || ''}${module.datasetFormat ? ` · ${module.datasetFormat}` : ''}`)
-                      : h('pre', { className: 'ath-module-code' }, module.command || ''),
-                  h(
-                    'div',
-                    { className: 'ath-stat-row' },
-                    module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
-                    h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
-                    h(
-                      'span',
-                      null,
-                      `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${(module.outputs || []).length}`,
-                    ),
-                    h('span', null, module.usedBy && module.usedBy.length ? tr(t, 'modules.usedByCount', { n: module.usedBy.length }) : t('modules.notUsed')),
-                  ),
-                  h(
-                    'div',
-                    { className: 'ath-module-foot' },
-                    h('span', { className: 'ath-hint ath-mono' }, module.id),
+                    { className: 'ath-module-card', key: module.id },
                     h(
                       'div',
-                      { className: 'ath-actions' },
-                      h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onEdit(module) }, t('modules.edit')),
-                      h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => onDelete(module) }, t('modules.delete')),
+                      { className: 'ath-module-head' },
+                      h('span', { className: 'ath-module-name' }, module.name),
+                      h('span', { className: 'ath-badge', 'data-kind': module.kind }, t(`modules.kind.${module.kind}`)),
+                      h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
+                      h(
+                        'span',
+                        { className: 'ath-badge' },
+                        environmentName(t, data.environments, module.environmentId, module.environmentName),
+                      ),
+                    ),
+                    h('div', { className: 'ath-module-desc' }, module.description || ''),
+                    module.kind === 'graph'
+                      ? h('div', { className: 'ath-module-code' }, `${t('modules.graphRef')}: ${module.subgraphName || module.graphId}`)
+                      : module.kind === 'dataset'
+                        ? h('div', { className: 'ath-module-code' }, `${module.datasetUri || ''}${module.datasetFormat ? ` · ${module.datasetFormat}` : ''}`)
+                        : h('pre', { className: 'ath-module-code' }, module.command || ''),
+                    h(
+                      'div',
+                      { className: 'ath-stat-row' },
+                      module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
+                      h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
+                      h(
+                        'span',
+                        null,
+                        `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${(module.outputs || []).length}`,
+                      ),
+                      module.versionCount
+                        ? h('span', null, tr(t, 'modules.versionHistory', { n: module.versionCount }))
+                        : null,
+                      h('span', null, module.usedBy && module.usedBy.length ? tr(t, 'modules.usedByCount', { n: module.usedBy.length }) : t('modules.notUsed')),
+                    ),
+                    h(
+                      'div',
+                      { className: 'ath-module-foot' },
+                      h('span', { className: 'ath-hint ath-mono' }, module.id),
+                      h(
+                        'div',
+                        { className: 'ath-actions' },
+                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onEdit(module) }, t('modules.edit')),
+                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => onDelete(module) }, t('modules.delete')),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
       );
     }
 
@@ -3942,6 +4099,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'ath-editor-head' },
           h('h2', { className: 'ath-editor-title' }, module.id && !draft.isNew ? t('moduleEditor.edit') : t('moduleEditor.new')),
+          h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
           h(
             'div',
             { className: 'ath-actions' },
@@ -3958,6 +4116,23 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'ath-card', style: { borderColor: 'var(--ath-red)', marginBottom: 12 } },
               errors.map((error, index) => h('div', { className: 'ath-error', key: index }, `· ${error}`)),
+            )
+          : null,
+        !draft.isNew
+          ? h(
+              'div',
+              { className: 'ath-card ath-version-bar' },
+              h(
+                'label',
+                { className: 'ath-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: Boolean(draft.overwriteVersion),
+                  onChange: (event) => setDraft({ ...draft, overwriteVersion: event.target.checked }),
+                }),
+                h('span', null, t('modules.overwriteVersion')),
+              ),
+              h('span', { className: 'ath-hint' }, tr(t, 'modules.versionHint', { version: module.version || 1 })),
             )
           : null,
         h(
@@ -4225,6 +4400,20 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'ath-card' },
+              h('h4', { className: 'ath-section-title' }, t('modules.version')),
+              h(
+                'div',
+                { className: 'ath-stat-row' },
+                h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
+                module.versionCount
+                  ? h('span', { className: 'ath-hint' }, tr(t, 'modules.versionHistory', { n: module.versionCount }))
+                  : null,
+              ),
+              h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'modules.versionHint', { version: module.version || 1 })),
+            ),
+            h(
+              'div',
+              { className: 'ath-card' },
               h('h4', { className: 'ath-section-title' }, t('modules.envTitle')),
               h('div', { className: 'ath-hint' }, t('modules.envHint')),
             ),
@@ -4252,10 +4441,26 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------- 主面板
 
-    function AetherPanel({ t }) {
+    function AetherPanel({ t: hostT }) {
       const [data, setData] = useState(null);
       const [phase, setPhase] = useState('loading');
       const [loadError, setLoadError] = useState('');
+      const [language, setLanguage] = useState(() => {
+        try {
+          const stored = localStorage.getItem(LANGUAGE_KEY);
+          return stored === 'zh' || stored === 'en' ? stored : 'auto';
+        } catch {
+          return 'auto';
+        }
+      });
+      const dictionary = language === 'zh' ? ZH : language === 'en' ? EN : null;
+      const t = useCallback(
+        (key) => {
+          if (dictionary && Object.prototype.hasOwnProperty.call(dictionary, key)) return dictionary[key];
+          return hostT(key);
+        },
+        [dictionary, hostT],
+      );
       const [tab, setTab] = useState(() => {
         try {
           const stored = localStorage.getItem(TAB_KEY);
@@ -4274,6 +4479,7 @@ window.__ModuleLoader__.load({
       const [graphErrors, setGraphErrors] = useState([]);
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
+      const [newModuleOpen, setNewModuleOpen] = useState(false);
       const [moduleErrors, setModuleErrors] = useState([]);
       const [moduleSaving, setModuleSaving] = useState(false);
       const [confirm, setConfirm] = useState(null);
@@ -4288,6 +4494,14 @@ window.__ModuleLoader__.load({
           // 记住页签是尽力而为。
         }
       }, [tab]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(LANGUAGE_KEY, language);
+        } catch {
+          // 记住插件语言是尽力而为。
+        }
+      }, [language]);
 
       useEffect(
         () => () => {
@@ -4568,28 +4782,32 @@ window.__ModuleLoader__.load({
         });
       };
 
-      const startModule = (module) => {
+      const startModule = (module, kind = 'command') => {
         setModuleErrors([]);
         if (module) {
-          setModuleDraft({ module: clone(module), isNew: false });
+          setModuleDraft({ module: clone(module), isNew: false, overwriteVersion: false });
         } else {
+          const nextKind = kind === 'graph' ? 'graph' : kind === 'dataset' ? 'dataset' : 'command';
           setModuleDraft({
             module: {
               id: '',
               name: '',
               description: '',
-              kind: 'command',
+              kind: nextKind,
               command: '',
               cwd: '',
               timeoutSec: 300,
               params: {},
-              inputs: ['input'],
+              inputs: nextKind === 'dataset' ? [] : ['input'],
               outputs: ['output'],
               graphId: '',
               datasetUri: '',
               datasetFormat: '',
+              version: 1,
+              versions: [],
             },
             isNew: true,
+            overwriteVersion: false,
           });
         }
         setTab('modules');
@@ -4602,7 +4820,11 @@ window.__ModuleLoader__.load({
         try {
           await request('/modules', {
             method: 'POST',
-            body: { module: moduleDraft.module, create: Boolean(moduleDraft.isNew) },
+            body: {
+              module: moduleDraft.module,
+              create: Boolean(moduleDraft.isNew),
+              overwriteVersion: Boolean(moduleDraft.overwriteVersion),
+            },
           });
           pushToast(t('toast.saved'));
           setModuleDraft(null);
@@ -4671,7 +4893,13 @@ window.__ModuleLoader__.load({
           });
         }
         if (tab === 'modules') {
-          return h(ModulesView, { t, data, onNew: () => startModule(null), onEdit: startModule, onDelete: deleteModule });
+          return h(ModulesView, {
+            t,
+            data,
+            onNew: () => setNewModuleOpen(true),
+            onEdit: (module) => startModule(module),
+            onDelete: deleteModule,
+          });
         }
         return h(ExperimentsView, {
           t,
@@ -4751,6 +4979,19 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'ath-top-actions' },
             data && data.workspace ? h('div', { className: 'ath-workspace', title: data.workspace }, h('span', null, data.workspace)) : null,
+            h(
+              'select',
+              {
+                className: 'ath-lang-select',
+                value: language,
+                title: t('language.title'),
+                'aria-label': t('language.title'),
+                onChange: (event) => setLanguage(event.target.value),
+              },
+              ['auto', 'zh', 'en'].map((value) =>
+                h('option', { key: value, value }, t(`language.${value}`)),
+              ),
+            ),
             h('button', { type: 'button', className: 'ath-btn', onClick: () => void refresh(false), disabled: phase === 'loading' }, t('action.refresh')),
             h('button', { type: 'button', className: 'ath-btn', onClick: () => void openWorkspace() }, t('action.openFolder')),
           ),
@@ -4786,6 +5027,16 @@ window.__ModuleLoader__.load({
             )
           : null,
         h('div', { className: 'ath-body' }, content),
+        newModuleOpen
+          ? h(NewModuleDialog, {
+              t,
+              onClose: () => setNewModuleOpen(false),
+              onPick: (kind) => {
+                setNewModuleOpen(false);
+                startModule(null, kind);
+              },
+            })
+          : null,
         submitOpen
           ? h(SubmitDialog, {
               t,
