@@ -623,6 +623,7 @@ window.__ModuleLoader__.load({
   --ath-red-ink: #b91c1c;
   --ath-gray-ink: #4b5563;
   --ath-lake: #2aa7c2;
+  --ath-lake-40: rgba(42, 167, 194, 0.4);
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 6px 18px rgba(32, 43, 61, .07);
@@ -1171,6 +1172,15 @@ window.__ModuleLoader__.load({
   border-color: var(--ath-status-40);
   background: var(--ath-status-40);
   box-shadow: inset 0 3px 0 var(--ath-status), 0 1px 2px rgba(32, 43, 61, .05);
+}
+.ath-run-node[data-kind="dataset"] {
+  background: var(--ath-lake-40);
+  border-color: var(--ath-lake-40);
+  box-shadow: inset 0 3px 0 var(--ath-status), inset 4px 0 0 var(--ath-lake), 0 1px 2px rgba(32, 43, 61, .05);
+}
+.ath-run-node[data-kind="dataset"][data-selected="true"] {
+  border-color: var(--ath-lake);
+  box-shadow: 0 0 0 2px var(--ath-lake-40), inset 0 3px 0 var(--ath-status), inset 4px 0 0 var(--ath-lake);
 }
 .ath-run-node[data-selected="true"] {
   border-color: var(--ath-status);
@@ -2780,6 +2790,7 @@ window.__ModuleLoader__.load({
                       key: node.path,
                       className: 'ath-node-card ath-run-node',
                       'data-selected': node.path === selectedPath ? 'true' : 'false',
+                      'data-kind': node.kind || 'command',
                       'data-direction': direction,
                       'data-group': group,
                       title: runParamTitle || undefined,
