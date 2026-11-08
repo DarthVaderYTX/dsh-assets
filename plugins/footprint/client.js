@@ -469,6 +469,19 @@ window.__ModuleLoader__.load({
 .fp-loc-hud[data-loading="true"] .fp-loc-name::after { opacity: .9; animation: fp-pulse 1.1s ease-in-out infinite; }
 .fp-loc-detail { margin-top: 2px; font-size: 10px; line-height: 1.35; color: rgba(220,235,250,.58); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fp-loc-coord { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.3; color: rgba(220,235,250,.78); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.fp-spot-callout { position: absolute; z-index: 6; transform: translate(-50%, -100%); min-width: 178px; max-width: 248px; padding: 8px 10px; border-radius: 11px; border: 1px solid rgba(244,176,74,.5); background: rgba(6,14,24,.92); backdrop-filter: blur(12px); box-shadow: 0 10px 32px rgba(0,0,0,.35); color: #eef7ff; pointer-events: auto; }
+.fp-spot-callout::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: rgba(6,14,24,.92); border-right: 1px solid rgba(244,176,74,.5); border-bottom: 1px solid rgba(244,176,74,.5); }
+.fp-callout-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fp-callout-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+.fp-callout-close { margin-left: auto; flex: 0 0 auto; appearance: none; border: 0; background: transparent; color: rgba(220,235,250,.55); cursor: pointer; font: inherit; font-size: 16px; line-height: 1; padding: 0 1px; }
+.fp-callout-close:hover { color: #fff; }
+.fp-callout-meta { margin-top: 2px; font-size: 9.5px; color: rgba(220,235,250,.58); }
+.fp-callout-actions { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+.fp-callout-btn { appearance: none; cursor: pointer; border: 1px solid rgba(244,176,74,.35); border-radius: 7px; background: rgba(244,176,74,.13); color: var(--fp-amber); font: inherit; font-size: 10.5px; font-weight: 600; padding: 5px 8px; white-space: nowrap; }
+.fp-callout-btn:hover:not(:disabled) { background: rgba(244,176,74,.22); }
+.fp-callout-btn:disabled { cursor: default; color: var(--fp-teal); border-color: rgba(99,230,213,.3); background: rgba(99,230,213,.08); }
+.fp-callout-link { margin-left: auto; font-size: 9.5px; color: rgba(220,235,250,.72); text-decoration: none; white-space: nowrap; }
+.fp-callout-link:hover { color: #fff; text-decoration: underline; }
 @keyframes fp-pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 .fp-map-attribution { position: absolute; z-index: 2; left: 16px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; max-width: calc(100% - 120px); font-size: 9px; line-height: 1.4; color: rgba(226,238,250,.52); pointer-events: none; }
 .fp-map-attribution a { color: inherit; pointer-events: auto; }
@@ -953,12 +966,13 @@ window.__ModuleLoader__.load({
       if (viewer.scene?.requestRender) viewer.scene.requestRender()
     }
 
-    function useGlobe(containerRef, detail, onPickAttraction) {
+    function useGlobe(containerRef, detail, onPickAttraction, activeSpot) {
       const [status, setStatus] = React.useState('loading')
       const [error, setError] = React.useState('')
       const [attempt, setAttempt] = React.useState(0)
       const viewerRef = React.useRef(null)
       const markerRef = React.useRef(null)
+      const highlightRef = React.useRef(null)
       const attractionsRef = React.useRef([])
       const detailRef = React.useRef(detail)
       const pickRef = React.useRef(onPickAttraction)
@@ -1182,6 +1196,69 @@ window.__ModuleLoader__.load({
         if (!Cesium || !viewer || viewer.isDestroyed()) return
         paintPlace(Cesium, viewer, detail, markerRef, attractionsRef)
       }, [detail, status])
+
+      React.useEffect(() => {
+        if (status !== 'ready') return undefined
+        const Cesium = window.Cesium
+        const viewer = viewerRef.current
+        if (!Cesium || !viewer || viewer.isDestroyed()) return undefined
+        if (highlightRef.current) {
+          try {
+            viewer.entities.remove(highlightRef.current)
+          } catch {
+            // The entity may already be gone with a previous viewer.
+          }
+          highlightRef.current = null
+        }
+        if (
+          !activeSpot ||
+          !Number.isFinite(activeSpot.lat) ||
+          !Number.isFinite(activeSpot.lon)
+        ) {
+          return undefined
+        }
+        const category = activeSpot.category || 'attraction'
+        const radius = category === 'food' ? 500 : category === 'lodging' ? 600 : 1500
+        const warm = Cesium.Color.fromCssColorString('#f4b04a')
+        const entity = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(activeSpot.lon, activeSpot.lat, 0),
+          ellipse: {
+            semiMajorAxis: radius,
+            semiMinorAxis: radius,
+            height: 0,
+            material: warm.withAlpha(0.18),
+            outline: true,
+            outlineColor: warm.withAlpha(0.88),
+            outlineWidth: 2,
+          },
+          point: {
+            pixelSize: 12,
+            color: warm,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2.5,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          polyline: {
+            positions: [
+              Cesium.Cartesian3.fromDegrees(activeSpot.lon, activeSpot.lat, 0),
+              Cesium.Cartesian3.fromDegrees(activeSpot.lon, activeSpot.lat, 1800),
+            ],
+            width: 1.5,
+            material: warm.withAlpha(0.7),
+          },
+        })
+        highlightRef.current = entity
+        return () => {
+          if (highlightRef.current === entity && !viewer.isDestroyed()) {
+            try {
+              viewer.entities.remove(entity)
+            } catch {
+              // Ignore a teardown race.
+            }
+          }
+          if (highlightRef.current === entity) highlightRef.current = null
+        }
+      }, [activeSpot, status])
 
       const focusAttraction = React.useCallback((attraction) => {
         const Cesium = window.Cesium
@@ -1533,6 +1610,7 @@ window.__ModuleLoader__.load({
                   title: `${t('attractions.focus')}: ${item.name}`,
                   onClick: () =>
                     onAttraction({
+                      ...addable,
                       id: item.localId || item.id,
                       lat: item.lat,
                       lon: item.lon,
@@ -1789,6 +1867,8 @@ window.__ModuleLoader__.load({
       const [detailBusy, setDetailBusy] = React.useState(false)
       const [detailError, setDetailError] = React.useState('')
       const [activeAttraction, setActiveAttraction] = React.useState('')
+      const [activeSpot, setActiveSpot] = React.useState(null)
+      const [spotCallout, setSpotCallout] = React.useState(null)
       const [copied, setCopied] = React.useState(false)
       const [cursor, setCursor] = React.useState(null)
       const [cursorPlace, setCursorPlace] = React.useState(null)
@@ -2103,6 +2183,7 @@ window.__ModuleLoader__.load({
           setDetailError('')
           setDetail(null)
           setActiveAttraction('')
+          setActiveSpot(null)
           setCopied(false)
           try {
             const params = new URLSearchParams({
@@ -2175,16 +2256,46 @@ window.__ModuleLoader__.load({
         if (cursor) scheduleReverse(cursor.lat, cursor.lon)
       }, [lang])
 
-      const onGlobePick = React.useCallback((attractionId) => {
-        setActiveAttraction(attractionId)
-      }, [])
+      const findSpotById = React.useCallback(
+        (id) => {
+          if (!detail) return null
+          const candidates = [
+            ...(Array.isArray(detail.attractions) ? detail.attractions : []),
+            ...['attraction', 'food', 'lodging'].flatMap((category) =>
+              (detail.recommendations?.[category] || []).flatMap((section) =>
+                (section.items || []).map((item) => ({
+                  ...item,
+                  category: item.category || category,
+                })),
+              ),
+            ),
+          ]
+          return (
+            candidates.find(
+              (item) => item.id === id || item.localId === id,
+            ) || null
+          )
+        },
+        [detail],
+      )
 
-      const globe = useGlobe(globeRef, detail, onGlobePick)
+      const onGlobePick = React.useCallback(
+        (attractionId) => {
+          setActiveAttraction(attractionId)
+          const spot = findSpotById(attractionId)
+          setActiveSpot(spot ? { ...spot, category: spot.category || 'attraction' } : null)
+        },
+        [findSpotById],
+      )
+
+      const globe = useGlobe(globeRef, detail, onGlobePick, activeSpot)
 
       const focusTripItem = React.useCallback(
         (item) => {
           setTripDrawerOpen(false)
           if (Number.isFinite(item.lat) && Number.isFinite(item.lon)) {
+            setActiveAttraction(item.localId || item.id)
+            setActiveSpot({ ...item, category: item.category || 'attraction' })
             globe.focusAttraction(item)
           } else if (item.url) {
             window.open(item.url, '_blank', 'noopener,noreferrer')
@@ -2196,10 +2307,67 @@ window.__ModuleLoader__.load({
       const selectAttraction = React.useCallback(
         (attraction) => {
           setActiveAttraction(attraction.id)
+          setActiveSpot({ ...attraction, category: attraction.category || 'attraction' })
           globe.focusAttraction(attraction)
         },
         [globe],
       )
+
+      React.useEffect(() => {
+        const element = globeRef.current
+        const viewer = element?.__footprintViewer
+        if (
+          !activeSpot ||
+          !Number.isFinite(activeSpot.lat) ||
+          !Number.isFinite(activeSpot.lon) ||
+          !viewer ||
+          !window.Cesium
+        ) {
+          setSpotCallout(null)
+          return undefined
+        }
+        const Cesium = window.Cesium
+        let frame = null
+        const update = () => {
+          try {
+            if (!element || viewer.isDestroyed()) return
+            const screen = Cesium.SceneTransforms.worldToWindowCoordinates(
+              viewer.scene,
+              Cesium.Cartesian3.fromDegrees(activeSpot.lon, activeSpot.lat, 0),
+            )
+            if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) {
+              setSpotCallout(null)
+              return
+            }
+            const rect = element.getBoundingClientRect()
+            const x = Math.min(Math.max(screen.x, 132), Math.max(132, rect.width - 132))
+            const y = Math.min(Math.max(screen.y, 92), Math.max(92, rect.height - 34))
+            setSpotCallout((previous) =>
+              previous && Math.abs(previous.x - x) < 1 && Math.abs(previous.y - y) < 1
+                ? previous
+                : { x, y },
+            )
+          } catch {
+            setSpotCallout(null)
+          }
+        }
+        const onPostRender = () => {
+          if (frame) return
+          frame = window.requestAnimationFrame(() => {
+            frame = null
+            update()
+          })
+        }
+        viewer.scene.postRender.addEventListener(onPostRender)
+        update()
+        return () => {
+          if (frame) window.cancelAnimationFrame(frame)
+          if (!viewer.isDestroyed()) {
+            viewer.scene.postRender.removeEventListener(onPostRender)
+          }
+          setSpotCallout(null)
+        }
+      }, [activeSpot, globe.status])
 
       const copyCoordinates = React.useCallback(async () => {
         if (!detail) return
@@ -2598,6 +2766,70 @@ window.__ModuleLoader__.load({
                       ? h('div', { className: 'fp-loc-detail' }, cursorPlace.detail)
                       : null,
                     h('div', { className: 'fp-loc-coord' }, formatLatLon(cursor.lat, cursor.lon, lang)),
+                  ),
+                )
+              : null,
+            spotCallout && activeSpot
+              ? h(
+                  'div',
+                  {
+                    className: 'fp-spot-callout',
+                    style: { left: `${spotCallout.x}px`, top: `${spotCallout.y}px` },
+                  },
+                  h(
+                    'div',
+                    { className: 'fp-callout-head' },
+                    h('span', { className: 'fp-callout-name' }, activeSpot.name),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'fp-callout-close',
+                        title: t('trip.close'),
+                        'aria-label': t('trip.close'),
+                        onClick: () => {
+                          setActiveSpot(null)
+                          setActiveAttraction('')
+                        },
+                      },
+                      '×',
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'fp-callout-meta' },
+                    [
+                      t(`trip.category.${activeSpot.category || 'attraction'}`),
+                      activeSpot.rating ? `★ ${Number(activeSpot.rating).toFixed(1)}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · '),
+                  ),
+                  h(
+                    'div',
+                    { className: 'fp-callout-actions' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'fp-callout-btn fp-callout-primary',
+                        disabled: tripHasItem(activeSpot),
+                        onClick: () => handleAddToTrip(activeSpot),
+                      },
+                      tripHasItem(activeSpot) ? `✓ ${t('trip.added')}` : `+ ${t('trip.add')}`,
+                    ),
+                    activeSpot.url
+                      ? h(
+                          'a',
+                          {
+                            className: 'fp-callout-link',
+                            href: activeSpot.url,
+                            target: '_blank',
+                            rel: 'noreferrer',
+                          },
+                          t('social.external'),
+                        )
+                      : null,
                   ),
                 )
               : null,
