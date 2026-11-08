@@ -12,14 +12,25 @@
   },
   "files": [
     "index.js",
+    "constants.js",
+    "seed.js",
+    "http.js",
     "dag.js",
     "executor.js",
     "client.js",
+    "client/src",
+    "scripts",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "ARCHITECTURE.md"
   ],
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "check": "node scripts/build-client.mjs --check",
+    "test": "node --test test"
+  },
   "engines": {
     "dsh": ">=0.2.0 <0.3.0"
   },

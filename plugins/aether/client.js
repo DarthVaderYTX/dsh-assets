@@ -1,3 +1,4 @@
+// ---- client/src/00-header.js ----
 window.__ModuleLoader__.load({
   id: 'aether',
   factory(require) {
@@ -14,6 +15,7 @@ window.__ModuleLoader__.load({
 
     // 术语：UI 的「实验」= 内部 graph（DAG 定义）；UI 的「运行」= 内部 experiment（一次提交）。
 
+// ---- client/src/10-locales.js ----
     // ---------------------------------------------------------- 文案
 
     const ZH = {
@@ -608,6 +610,7 @@ window.__ModuleLoader__.load({
       'moduleEditor.edit': 'Edit module',
     };
 
+// ---- client/src/20-styles.js ----
     // ---------------------------------------------------------- 样式
 
     const STYLE = `
@@ -1347,6 +1350,7 @@ window.__ModuleLoader__.load({
 }
     `;
 
+// ---- client/src/30-utils.js ----
     // ---------------------------------------------------------- 工具
 
     function fill(template, values) {
@@ -1499,6 +1503,7 @@ window.__ModuleLoader__.load({
       return layers;
     }
 
+// ---- client/src/40-widgets.js ----
     // ---------------------------------------------------------- 小部件
 
     function NavIcon({ size = 20, active = false }) {
@@ -1773,6 +1778,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/50-run-views.js ----
     // ---------------------------------------------------------- 实验
 
     function LogModal({ t, runId, node, onClose }) {
@@ -2261,6 +2267,7 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------- 图列表
 
+// ---- client/src/55-graphs.js ----
     function GraphsView({ t, data, onNew, onEdit, onDelete }) {
       return h(
         'div',
@@ -2328,6 +2335,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/60-canvas.js ----
     // ---------------------------------------------------------- 实验画布
 
     const NODE_WIDTH = 200;
@@ -3145,6 +3153,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/70-experiment-editor.js ----
     function ExperimentEditor({
       t,
       modules,
@@ -4583,6 +4592,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/80-modules.js ----
     // ---------------------------------------------------------- 模块
 
     function ModulesView({ t, data, onNew, onEdit, onDelete }) {
@@ -5230,6 +5240,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/90-panel.js ----
     // ---------------------------------------------------------- 主面板
 
     function AetherPanel({ t: hostT }) {
@@ -6077,6 +6088,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+// ---- client/src/99-register.js ----
     // ---------------------------------------------------------- 注册
 
     return {
@@ -6108,3 +6120,4 @@ window.__ModuleLoader__.load({
     };
   },
 });
+

@@ -195,16 +195,21 @@ storages/aether/
 
 ## 实现说明
 
+代码分层与客户端构建方式见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
 - `index.js`：宿主插件。注册 `/aether-api` 路由；保存模块 / 实验 / 环境目录；提交时解析环境 → 执行器；退出时取消仍在跑的句柄。
+- `constants.js` / `seed.js` / `http.js`：数据版本与上限、首次启动示例数据、HTTP 基础设施。
 - `dag.js`：纯函数核心——参数 / 模块 / 端口 / 实验 / 环境的归一化、校验、拓扑分层、子图展开、图引用环检测、旧连线端口补全。
 - `executor.js`：执行后端边界。`resolvePlacements` 把节点的执行环境解析成执行器；`LocalExecutor` 是本机实现，`start / cancel / readLog` 之外的存储与 API 不感知执行位置。
-- `client.js`：Web 面板。注册 `sidebar.panellist` 图标与 `main` 面板；实验编辑器是可平移缩放、端口连线、框选的画布，样式全部使用 `--dsw-alias-*` 主题令牌。
+- `client.js`：构建产物，唯一被 DSH 加载的客户端文件。源码在 `client/src/` 按职责拆成文案、样式、工具、小部件、运行视图、图列表、画布、实验编辑器、模块库、主面板与注册片段；修改源码后运行 `npm run build`。
 - `test/dag.test.mjs`：图核心单测（拓扑、环、子图展开、嵌套子图、参数继承、环境与端口校验、坐标与布局方向、旧连线迁移）。
 - `test/executor.test.mjs`：环境解析与执行器描述。
 - `test/host.test.mjs`：用假 `ctx` 起真实 HTTP 服务，覆盖种子数据、CRUD 保护、环拒绝、子图不可单独运行、端口与坐标往返、必填输入校验、数据集节点、模块版本、模块文件上传与无命令执行、子图执行、失败传播、取消与 placement 快照。
+- `test/client-build.test.mjs`：确保 `client.js` 与 `client/src/` 片段一致。
 
 ```bash
-node --test plugins/aether/test/
+npm run build
+npm test
 ```
 
 宿主侧没有注册 agent 工具，操作入口只有面板与 HTTP 接口；如果后续要让 agent 提交实验，建议复用同一套 `startExperiment` / `saveGraph` 逻辑再注册 `tools.register`。
