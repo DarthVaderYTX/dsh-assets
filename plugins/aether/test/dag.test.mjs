@@ -5,6 +5,8 @@ import {
   expandGraph,
   findCycle,
   graphReferenceErrors,
+  normalizeEnvironment,
+  normalizeEnvironments,
   normalizeGraph,
   normalizeModule,
   slugify,
@@ -69,6 +71,22 @@ test('validateModule enforces command and subgraph requirements', () => {
   const sub = normalizeModule({ id: 'sub', name: 'Sub', kind: 'graph', graphId: 'nope' });
   assert.match(validateModule(sub, [], graphs).join('\n'), /不存在/);
   assert.deepEqual(validateModule(normalizeModule({ ...sub, graphId: 'g1' }), [], graphs), []);
+});
+
+test('modules default to the local environment and reject unknown ones', () => {
+  const module = normalizeModule({ id: 'm', name: 'M', kind: 'command', command: 'echo' });
+  assert.equal(module.environmentId, 'local');
+  assert.deepEqual(validateModule(module, [], [], []), []);
+
+  const environments = normalizeEnvironments([
+    { id: 'gpu', name: 'GPU', executor: 'remote' },
+    normalizeEnvironment({ id: 'local', name: '本机', executor: 'local', builtin: true }),
+  ]);
+  const onGpu = { ...module, environmentId: 'gpu' };
+  assert.deepEqual(validateModule(onGpu, [], [], environments), []);
+
+  const unknown = { ...module, environmentId: 'nope' };
+  assert.match(validateModule(unknown, [], [], environments).join('\n'), /执行环境「nope」不存在/);
 });
 
 test('expandGraph inlines subgraphs and rewires dependencies', () => {

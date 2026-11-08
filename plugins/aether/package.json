@@ -13,6 +13,7 @@
   "files": [
     "index.js",
     "dag.js",
+    "executor.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",

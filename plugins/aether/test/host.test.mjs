@@ -79,6 +79,29 @@ test('seeds a demo module library and graphs', async () => {
   const nightly = payload.graphs.find((graph) => graph.id === 'nightly-experiment');
   assert.equal(nightly.nodeCount, 2);
   assert.equal(nightly.layerCount, 2);
+  assert.equal(payload.environments[0].id, 'local');
+  assert.equal(payload.environments[0].executor, 'local');
+  assert.equal(payload.executors.find((executor) => executor.id === 'local').available, true);
+  assert.ok(payload.modules.every((module) => module.environmentId === 'local'));
+});
+
+test('modules record their execution environment', async () => {
+  const created = await call('/modules', {
+    method: 'POST',
+    body: { create: true, module: { name: 'Env module', kind: 'command', command: 'echo env' } },
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.payload.module.environmentId, 'local');
+
+  const rejected = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: { name: 'Remote module', kind: 'command', command: 'echo remote', environmentId: 'gpu-a100' },
+    },
+  });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.payload.error, /执行环境「gpu-a100」不存在/);
 });
 
 test('module and graph CRUD with usage protection', async () => {
@@ -193,12 +216,16 @@ test('submitting a graph executes subgraph nodes in dependency order', async () 
   assert.equal(submitted.status, 200);
   const run = await waitForRun(submitted.payload.experiment.id);
   assert.equal(run.status, 'succeeded', JSON.stringify(run.nodes));
+  assert.equal(run.executor, 'local');
   assert.deepEqual(
     run.nodes.map((node) => node.path),
     ['pipeline/prepare', 'pipeline/train', 'pipeline/evaluate', 'report'],
   );
   for (const node of run.nodes) {
     assert.equal(node.status, 'succeeded', `${node.path}: ${node.error}`);
+    assert.equal(node.environmentId, 'local');
+    assert.equal(node.environmentName, '本机');
+    assert.equal(node.executor, 'local');
   }
   assert.match(run.nodes.find((node) => node.path === 'pipeline/train').stdoutTail, /training lr=0\.02/);
 

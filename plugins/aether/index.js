@@ -1,9 +1,9 @@
 // Aether — 有向无环图任务执行管理器（宿主侧）。
 //
-// 职责：保存模块、图与实验记录；把图展开成 DAG 计划并按依赖调度执行；通过
-// /aether-api 把状态与操作暴露给左侧栏面板。数据放在
-// $DSH_HOME/storages/aether，运行产物按实验分目录保存。
-import { promises as fsp, createWriteStream } from 'node:fs';
+// 职责：保存模块、图、执行环境与实验记录；把图展开成 DAG 计划，解析每个节点的
+// 执行环境并交给对应 Executor；通过 /aether-api 把状态与操作暴露给左侧栏面板。
+// 数据放在 $DSH_HOME/storages/aether，运行产物按实验分目录保存。
+import { promises as fsp } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import {
   expandGraph,
   graphReferenceErrors,
+  normalizeEnvironments,
   normalizeGraph,
   normalizeModule,
   slugify,
@@ -19,10 +20,10 @@ import {
   validateGraph,
   validateModule,
 } from './dag.js';
+import { LocalExecutor, resolvePlacements } from './executor.js';
 
 const API_PREFIX = '/aether-api';
-const DATA_VERSION = 1;
-const NODE_TAIL_LIMIT = 20000;
+const DATA_VERSION = 2;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_CONCURRENCY = 8;
 const MAX_RUNS = 200;
@@ -49,19 +50,18 @@ function runDir(id) {
   return path.join(runsDir(), id);
 }
 
-/** 节点路径里的 `/` 会被换成 `__`，避免在磁盘上建嵌套目录。 */
-function safeSegment(value) {
-  return String(value || 'node')
-    .replace(/[\\/]+/g, '__')
-    .replace(/[^A-Za-z0-9_.-]+/g, '_')
-    .slice(0, 120) || 'node';
-}
-
 let stateCache = null;
 let recoveredRuns = false;
 
 function emptyState() {
-  return { version: DATA_VERSION, modules: [], graphs: [], createdAt: Date.now(), updatedAt: Date.now() };
+  return {
+    version: DATA_VERSION,
+    modules: [],
+    graphs: [],
+    environments: normalizeEnvironments([]),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
 }
 
 function seedState() {
@@ -141,6 +141,7 @@ function seedState() {
     version: DATA_VERSION,
     modules: modules.map((module) => ({ ...module, createdAt: now, updatedAt: now })),
     graphs: graphs.map((graph) => ({ ...graph, createdAt: now, updatedAt: now })),
+    environments: normalizeEnvironments([]),
     createdAt: now,
     updatedAt: now,
     seeded: true,
@@ -153,6 +154,7 @@ function normalizeState(raw) {
     version: DATA_VERSION,
     modules: (Array.isArray(source.modules) ? source.modules : []).map(normalizeModule).filter((m) => m.id),
     graphs: (Array.isArray(source.graphs) ? source.graphs : []).map(normalizeGraph).filter((g) => g.id),
+    environments: normalizeEnvironments(source.environments),
     createdAt: Number(source.createdAt) || Date.now(),
     updatedAt: Number(source.updatedAt) || Date.now(),
   };
@@ -163,7 +165,12 @@ async function readState() {
   await fsp.mkdir(dataDir(), { recursive: true });
   try {
     const text = await fsp.readFile(statePath(), 'utf8');
-    stateCache = normalizeState(JSON.parse(text));
+    const parsed = JSON.parse(text);
+    stateCache = normalizeState(parsed);
+    // v1 → v2：补上执行环境目录 / 模块 environmentId，并把迁移结果写回。
+    if (Number(parsed.version) !== DATA_VERSION || !Array.isArray(parsed.environments)) {
+      await writeState(stateCache);
+    }
   } catch (error) {
     if (error && error.code === 'ENOENT') {
       stateCache = seedState();
@@ -199,6 +206,9 @@ function summarizeRun(run, { detail = false } = {}) {
     kind: node.kind,
     deps: node.deps,
     params: node.params,
+    environmentId: node.environmentId || 'local',
+    environmentName: node.environmentName || '',
+    executor: node.executor || 'local',
     status: node.status,
     startedAt: node.startedAt || null,
     endedAt: node.endedAt || null,
@@ -221,6 +231,7 @@ function summarizeRun(run, { detail = false } = {}) {
     startedAt: run.startedAt || null,
     endedAt: run.endedAt || null,
     concurrency: run.concurrency,
+    executor: run.executor || 'local',
     message: run.message || '',
     rerunOf: run.rerunOf || null,
     dir: run.dir,
@@ -307,6 +318,7 @@ async function recoverInterruptedRuns() {
 // -------------------------------------------------------------- 执行引擎
 
 const activeRuns = new Map();
+const executorRegistry = new Map();
 
 function clampConcurrency(value) {
   const number = Number(value);
@@ -314,352 +326,36 @@ function clampConcurrency(value) {
   return Math.min(MAX_CONCURRENCY, Math.max(1, Math.round(number)));
 }
 
-function renderTemplate(text, params, builtins) {
-  return String(text || '').replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(params, key)) return String(params[key]);
-    if (Object.prototype.hasOwnProperty.call(builtins, key)) return String(builtins[key]);
-    return match;
-  });
+function registerExecutor(executor) {
+  const descriptor = executor.describe();
+  executorRegistry.set(descriptor.id, executor);
+  return descriptor;
 }
 
-function resolveCwd(raw) {
-  const text = String(raw || '').trim();
-  if (!text) return process.cwd();
-  let expanded = text;
-  if (expanded === '~') expanded = os.homedir();
-  else if (expanded.startsWith('~/') || expanded.startsWith('~\\')) expanded = path.join(os.homedir(), expanded.slice(2));
-  return path.resolve(expanded);
+/** 内置本机执行器。未来远端执行器在这里注册，其余代码不用改。 */
+registerExecutor(new LocalExecutor({ persist: persistRun }));
+
+function availableExecutorIds() {
+  return [...executorRegistry.values()]
+    .filter((executor) => executor.describe().available)
+    .map((executor) => executor.describe().id);
 }
 
-function paramEnvKey(key) {
-  return `AETHER_PARAM_${String(key).toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`;
+function executorFor(executorId) {
+  return executorRegistry.get(executorId || 'local') || null;
 }
 
-function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
-  const env = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) env[key] = value;
-  }
-  env.AETHER_RUN_ID = run.id;
-  env.AETHER_RUN_DIR = run.dir;
-  env.AETHER_NODE_ID = node.nodeId;
-  env.AETHER_NODE_PATH = node.path;
-  env.AETHER_NODE_DIR = nodeDirectory;
-  env.AETHER_GRAPH_ID = run.graphId;
-  env.AETHER_GRAPH_NAME = run.graphName;
-  env.AETHER_INPUT_FILE = inputFile;
-  env.AETHER_PARAMS = JSON.stringify(node.params || {});
-  env.AETHER_INPUTS = JSON.stringify(
-    Object.fromEntries(
-      Object.entries(inputs).map(([key, value]) => [
-        key,
-        { label: value.label, exitCode: value.exitCode, stdoutFile: value.stdoutFile, text: value.text },
-      ]),
-    ),
-  );
-  for (const [key, value] of Object.entries(node.params || {})) {
-    env[paramEnvKey(key)] = String(value);
-  }
-  return env;
+function executorDescriptors() {
+  return [...executorRegistry.values()].map((executor) => executor.describe());
 }
 
-function appendTail(store, chunk) {
-  store.push(chunk);
-  let length = 0;
-  for (let index = store.length - 1; index >= 0; index -= 1) {
-    length += store[index].length;
-    if (length > NODE_TAIL_LIMIT * 2) {
-      store.splice(0, index);
-      break;
-    }
-  }
-}
-
-function joinTail(store) {
-  const text = store.join('');
-  return text.length > NODE_TAIL_LIMIT ? `…${text.slice(-NODE_TAIL_LIMIT)}` : text;
-}
-
-function killTree(child) {
-  if (!child) return;
-  if (process.platform === 'win32') {
-    const pid = child.pid;
-    if (!pid) return;
-    const executable = process.env.SystemRoot
-      ? path.join(process.env.SystemRoot, 'System32', 'taskkill.exe')
-      : 'taskkill';
-    let killer;
-    try {
-      killer = spawn(executable, ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-    } catch {
-      killer = null;
-    }
-    if (!killer) {
-      try {
-        child.kill();
-      } catch {
-        // 忽略：进程可能已经退出。
-      }
-      return;
-    }
-    // 只结束 shell 父进程会让命令行留下的孙进程继续跑，所以优先整棵树；
-    // taskkill 失败时再退回单进程结束。
-    killer.on('error', () => {
-      try {
-        child.kill();
-      } catch {
-        // 同上。
-      }
-    });
-    killer.on('exit', (code) => {
-      if (code !== 0) {
-        try {
-          child.kill();
-        } catch {
-          // 同上。
-        }
-      }
-    });
-    return;
-  }
-  try {
-    child.kill('SIGTERM');
-  } catch {
-    // 同上。
-  }
-  setTimeout(() => {
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      // 同上。
-    }
-  }, 3000).unref?.();
-}
-
-async function readTextHead(file, limit = 4000) {
-  let handle;
-  try {
-    handle = await fsp.open(file, 'r');
-    const buffer = Buffer.alloc(limit);
-    const { bytesRead } = await handle.read(buffer, 0, limit, 0);
-    return buffer.subarray(0, bytesRead).toString('utf8');
-  } catch {
-    return '';
-  } finally {
-    if (handle) await handle.close().catch(() => {});
-  }
-}
-
-async function executeNode(handle, node, byPath) {
-  const { run } = handle;
-  if (node.status !== 'pending') return;
-  node.status = 'running';
-  node.startedAt = Date.now();
-  node.endedAt = null;
-  node.exitCode = null;
-  node.error = '';
-  await persistRun(run).catch(() => {});
-
-  const directory = path.join(run.dir, 'nodes', safeSegment(node.path));
-  await fsp.mkdir(directory, { recursive: true });
-  const inputs = {};
-  for (const depPath of node.deps || []) {
-    const dep = byPath.get(depPath);
-    const stdoutFile = path.join(run.dir, 'outputs', `${safeSegment(depPath)}.out`);
-    const text = await readTextHead(stdoutFile);
-    inputs[depPath] = {
-      label: dep?.label || depPath,
-      status: dep?.status || 'unknown',
-      exitCode: dep?.exitCode ?? null,
-      stdoutFile,
-      text,
-    };
-  }
-  const inputFile = path.join(directory, 'inputs.json');
-  await fsp
-    .writeFile(inputFile, JSON.stringify({ run: run.id, node: node.path, params: node.params, inputs }, null, 2), 'utf8')
-    .catch(() => {});
-
-  const builtins = {
-    run_id: run.id,
-    run_dir: run.dir,
-    node_id: node.nodeId,
-    node_path: node.path,
-    node_dir: directory,
-    graph_id: run.graphId,
-    input_file: inputFile,
-  };
-  const command = renderTemplate(node.command, node.params || {}, builtins);
-  const outLog = path.join(directory, 'stdout.log');
-  const errLog = path.join(directory, 'stderr.log');
-  const outStream = createWriteStream(outLog);
-  const errStream = createWriteStream(errLog);
-  const outTail = [];
-  const errTail = [];
-
-  let timedOut = false;
-  const startedAt = Date.now();
-  const timeoutMs = Math.max(1, Number(node.timeoutSec) || 300) * 1000;
-  let child;
-  let closeResult = { code: null, signal: null };
-  let spawnError = null;
-
-  try {
-    child = spawn(command, {
-      shell: true,
-      cwd: resolveCwd(node.cwd),
-      env: buildEnv(run, node, directory, inputFile, inputs),
-      windowsHide: true,
-    });
-  } catch (error) {
-    spawnError = error;
-  }
-
-  if (child) {
-    handle.children.add(child);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree(child);
-    }, timeoutMs);
-    timer.unref?.();
-    await new Promise((resolve) => {
-      child.stdout?.on('data', (chunk) => {
-        outStream.write(chunk);
-        appendTail(outTail, String(chunk));
-      });
-      child.stderr?.on('data', (chunk) => {
-        errStream.write(chunk);
-        appendTail(errTail, String(chunk));
-      });
-      child.on('error', (error) => {
-        spawnError = error;
-        resolve();
-      });
-      child.on('close', (code, signal) => {
-        closeResult = { code, signal };
-        resolve();
-      });
-    });
-    clearTimeout(timer);
-    handle.children.delete(child);
-  }
-
-  await Promise.all([
-    new Promise((resolve) => outStream.end(resolve)),
-    new Promise((resolve) => errStream.end(resolve)),
-  ]);
-
-  node.endedAt = Date.now();  node.exitCode = closeResult.code;
-  node.stdoutTail = joinTail(outTail);
-  node.stderrTail = joinTail(errTail);
-  node.durationMs = node.endedAt - startedAt;
-
-  if (handle.cancelRequested) {
-    node.status = 'cancelled';
-    node.error = '已取消';
-  } else if (timedOut) {
-    node.status = 'failed';
-    node.error = `超时（${Math.round(timeoutMs / 1000)} 秒）`;
-  } else if (spawnError) {
-    node.status = 'failed';
-    node.error = String(spawnError.message || spawnError);
-  } else if (closeResult.code === 0) {
-    node.status = 'succeeded';
-    node.error = '';
-  } else if (closeResult.code === null) {
-    node.status = 'failed';
-    node.error = closeResult.signal ? `被信号 ${closeResult.signal} 终止` : '进程未能启动';
-  } else {
-    node.status = 'failed';
-    node.error = `退出码 ${closeResult.code}`;
-  }
-
-  await fsp
-    .copyFile(outLog, path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`))
-    .catch(() => {});
-  await persistRun(run).catch(() => {});
-}
-
-async function executeRun(handle) {
-  const { run } = handle;
-  const byPath = new Map(run.nodes.map((node) => [node.path, node]));
-  await persistRun(run).catch(() => {});
-
-  await new Promise((resolve) => {
-    let finished = false;
-    const finish = (status, message) => {
-      if (finished) return;
-      finished = true;
-      run.status = status;
-      run.message = message;
-      run.endedAt = Date.now();
-      activeRuns.delete(run.id);
-      void persistRun(run).catch(() => {});
-      resolve();
-    };
-    const pump = () => {
-      if (finished) return;
-      if (handle.cancelRequested) {
-        for (const node of run.nodes) {
-          if (node.status === 'pending') node.status = 'cancelled';
-        }
-        if (handle.children.size === 0) {
-          finish('cancelled', '已取消');
-          return;
-        }
-      }
-      let running = 0;
-      for (const node of run.nodes) if (node.status === 'running') running += 1;
-      let launched = false;
-      for (const node of run.nodes) {
-        if (node.status !== 'pending') continue;
-        if (handle.cancelRequested) {
-          node.status = 'cancelled';
-          continue;
-        }
-        const depStatuses = (node.deps || []).map((dep) => byPath.get(dep)?.status || 'failed');
-        if (depStatuses.some((status) => status === 'failed' || status === 'skipped' || status === 'cancelled')) {
-          node.status = 'skipped';
-          node.error = '上游节点未成功';
-          continue;
-        }
-        if (!depStatuses.every((status) => status === 'succeeded')) continue;
-        if (running >= run.concurrency) continue;
-        running += 1;
-        launched = true;
-        void executeNode(handle, node, byPath)
-          .catch(async (error) => {
-            node.status = 'failed';
-            node.endedAt = Date.now();
-            node.error = String(error?.message || error);
-            await persistRun(run).catch(() => {});
-          })
-          .finally(() => pump());
-      }
-      if (finished) return;
-      const settled = run.nodes.every((node) =>
-        ['succeeded', 'failed', 'skipped', 'cancelled'].includes(node.status),
-      );
-      if (settled) {
-        const succeeded = run.nodes.filter((node) => node.status === 'succeeded').length;
-        const failed = run.nodes.some((node) => node.status === 'failed');
-        const cancelled = run.nodes.some((node) => node.status === 'cancelled');
-        finish(cancelled ? 'cancelled' : failed ? 'failed' : 'succeeded', `${succeeded}/${run.nodes.length} 个节点成功`);
-        return;
-      }
-      if (!launched && running === 0) {
-        for (const node of run.nodes) {
-          if (node.status === 'pending') {
-            node.status = 'skipped';
-            node.error = '调度失败';
-          }
-        }
-        finish('failed', '调度失败：没有可执行的节点');
-      }
-    };
-    handle.wake = pump;
-    pump();
-  });
+/**
+ * 计划 → placement。当前在本机按环境目录解析；接入服务器调度时，把这个函数
+ * 换成「把展开后的 plan 提交给调度器并读取 placement」即可，后续创建与执行
+ * 流程不用改。返回 { placements, executors, errors }。
+ */
+async function placePlan(plan, state) {
+  return resolvePlacements(plan.nodes, state.environments, availableExecutorIds());
 }
 
 async function startExperiment(input = {}) {
@@ -669,6 +365,18 @@ async function startExperiment(input = {}) {
   const plan = expandGraph(graph, state.modules, state.graphs);
   if (plan.error) throw httpError(400, plan.error);
   if (!plan.nodes.length) throw httpError(400, '图里没有节点，无法提交实验');
+
+  // 执行环境 → 执行器。当前只有本机；将来这里换成向服务器提交计划、由调度器
+  // 返回 placement，节点字段与存储格式保持不变。
+  const placement = await placePlan(plan, state);
+  if (placement.errors.length) throw httpError(400, placement.errors.join('；'));
+  if (placement.executors.length > 1) {
+    throw httpError(400, '这个计划需要多个执行器；跨执行器的调度需要服务器支持，当前只支持单一执行器');
+  }
+  const executor = executorFor(placement.executors[0] || 'local');
+  if (!executor || !executor.describe().available) {
+    throw httpError(400, '没有可用的执行器');
+  }
 
   const now = Date.now();
   const id = `exp-${now.toString(36)}-${randomUUID().slice(0, 4)}`;
@@ -685,51 +393,72 @@ async function startExperiment(input = {}) {
     concurrency,
     message: '',
     rerunOf: input.rerunOf || null,
+    executor: executor.describe().id,
     dir: runDir(id),
-    nodes: plan.nodes.map((node) => ({
-      path: node.path,
-      nodeId: node.nodeId,
-      moduleId: node.moduleId,
-      moduleName: node.moduleName,
-      label: node.label,
-      kind: node.kind,
-      params: node.params,
-      deps: node.deps,
-      command: node.command,
-      cwd: node.cwd,
-      timeoutSec: node.timeoutSec,
-      status: 'pending',
-      startedAt: null,
-      endedAt: null,
-      exitCode: null,
-      error: '',
-      stdoutTail: '',
-      stderrTail: '',
-    })),
+    nodes: plan.nodes.map((node) => {
+      const target = placement.placements[node.path] || {
+        environmentId: node.environmentId || 'local',
+        environmentName: '',
+        executor: 'local',
+      };
+      return {
+        path: node.path,
+        nodeId: node.nodeId,
+        moduleId: node.moduleId,
+        moduleName: node.moduleName,
+        label: node.label,
+        kind: node.kind,
+        params: node.params,
+        deps: node.deps,
+        command: node.command,
+        cwd: node.cwd,
+        timeoutSec: node.timeoutSec,
+        environmentId: target.environmentId,
+        environmentName: target.environmentName,
+        executor: target.executor,
+        status: 'pending',
+        startedAt: null,
+        endedAt: null,
+        exitCode: null,
+        error: '',
+        stdoutTail: '',
+        stderrTail: '',
+      };
+    }),
   };
   await fsp.mkdir(path.join(run.dir, 'nodes'), { recursive: true });
   await fsp.mkdir(path.join(run.dir, 'outputs'), { recursive: true });
   await fsp.mkdir(path.join(run.dir, 'logs'), { recursive: true });
   await persistRun(run);
 
-  const handle = { run, cancelRequested: false, children: new Set(), wake: null };
-  activeRuns.set(run.id, handle);
-  void executeRun(handle).catch(async (error) => {
+  let handle;
+  try {
+    handle = executor.start(run, plan);
+  } catch (error) {
     run.status = 'failed';
-    run.message = `执行失败：${error?.message || error}`;
+    run.message = `执行器启动失败：${error && error.message ? error.message : error}`;
     run.endedAt = Date.now();
-    activeRuns.delete(run.id);
     await persistRun(run).catch(() => {});
-  });
+    throw httpError(500, run.message);
+  }
+  activeRuns.set(run.id, handle);
+  void Promise.resolve(handle.done)
+    .catch(async (error) => {
+      run.status = 'failed';
+      run.message = `执行失败：${error && error.message ? error.message : error}`;
+      run.endedAt = Date.now();
+      await persistRun(run).catch(() => {});
+    })
+    .finally(() => {
+      if (activeRuns.get(run.id) === handle) activeRuns.delete(run.id);
+    });
   return summarizeRun(run, { detail: true });
 }
 
 async function cancelExperiment(id) {
   const handle = activeRuns.get(id);
   if (handle) {
-    handle.cancelRequested = true;
-    for (const child of handle.children) killTree(child);
-    handle.wake?.();
+    await handle.cancel();
     return { ok: true, id, cancelling: true };
   }
   const run = await readRunFromDisk(id);
@@ -806,9 +535,11 @@ async function buildStatePayload() {
   const runs = await listRunsFromDisk();
   const modules = state.modules.map((module) => {
     const usedBy = moduleUsage(state, module.id);
+    const environment = state.environments.find((item) => item.id === module.environmentId);
     return {
       ...module,
       usedBy,
+      environmentName: environment ? environment.name : module.environmentId,
       subgraphName:
         module.kind === 'graph' ? state.graphs.find((graph) => graph.id === module.graphId)?.name || '' : '',
     };
@@ -824,6 +555,8 @@ async function buildStatePayload() {
     workspace: dataDir(),
     modules,
     graphs,
+    environments: state.environments,
+    executors: executorDescriptors(),
     experiments: runs.map(summarizeRunLight),
     activeRuns: activeRuns.size,
     maxConcurrency: MAX_CONCURRENCY,
@@ -852,6 +585,8 @@ function planSummary(graph, state) {
       kind: node.kind,
       params: node.params,
       deps: node.deps,
+      environmentId: node.environmentId || 'local',
+      environmentName: state.environments.find((item) => item.id === (node.environmentId || 'local'))?.name || '',
       layer: depth.get(node.path) || 0,
     })),
   };
@@ -927,7 +662,7 @@ async function saveModule(input, options = {}) {
   }
   const existing = state.modules.find((item) => item.id === module.id);
   if (!create && !existing) throw httpError(404, '模块不存在');
-  const errors = validateModule(module, state.modules, state.graphs);
+  const errors = validateModule(module, state.modules, state.graphs, state.environments);
   if (errors.length) throw httpError(400, errors.join('；'));
 
   const moduleList = existing
@@ -1087,16 +822,13 @@ async function handleApi(req, res) {
   if (method === 'GET' && route === '/experiments/logs') {
     const id = url.searchParams.get('run') || '';
     const nodePath = url.searchParams.get('node') || '';
-    const stream = url.searchParams.get('stream') === 'err' ? 'stderr.log' : 'stdout.log';
+    const stream = url.searchParams.get('stream') === 'err' ? 'err' : 'out';
     if (!id || !nodePath) throw httpError(400, '缺少 run 或 node 参数');
-    const file = path.join(runDir(id), 'nodes', safeSegment(nodePath), stream);
-    let text = '';
-    try {
-      text = await fsp.readFile(file, 'utf8');
-    } catch {
-      text = '';
-    }
-    if (text.length > 400000) text = `…${text.slice(-400000)}`;
+    const run = activeRuns.get(id)?.run || (await readRunFromDisk(id));
+    if (!run) throw httpError(404, '实验不存在');
+    const executor = executorFor(run.executor);
+    if (!executor) throw httpError(501, `执行器「${run.executor || 'local'}」未注册`);
+    const text = await executor.readLog(run, nodePath, stream);
     sendText(res, 200, text);
     return;
   }
@@ -1181,8 +913,7 @@ export function apply(ctx) {
   ctx.effect(
     () => () => {
       for (const handle of activeRuns.values()) {
-        handle.cancelRequested = true;
-        for (const child of handle.children) killTree(child);
+        void handle.cancel?.();
       }
     },
     'aether: stop running experiments',

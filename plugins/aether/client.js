@@ -50,6 +50,13 @@ window.__ModuleLoader__.load({
       'status.failed': '失败',
       'status.skipped': '跳过',
       'status.cancelled': '已取消',
+      'environment.local': '本机',
+      'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
+      'executor.local': '本机执行器',
+      'executor.remote': '远程执行器',
+      'experiments.executor': '执行器',
+      'experiments.environments': '执行环境',
+      'graphs.planEnv': '环境',
       'experiments.title': '实验记录',
       'experiments.subtitle': '提交一张图，Aether 按依赖顺序执行其中的模块使用。',
       'experiments.new': '提交实验',
@@ -146,6 +153,8 @@ window.__ModuleLoader__.load({
       'modules.paramsHint': '节点会继承这里的默认值，可在节点上覆盖。',
       'modules.graphRef': '引用的图',
       'modules.graphRefHint': '该图会在使用此模块的节点处内联执行。',
+      'modules.environment': '执行环境',
+      'modules.environmentHint': '决定模块由哪个执行器运行。当前只有本机执行器；接入远程执行器后，由调度器按环境选择执行位置。',
       'modules.usedBy': '被使用',
       'modules.usedByCount': '{n} 张图',
       'modules.notUsed': '尚未被使用',
@@ -233,6 +242,13 @@ window.__ModuleLoader__.load({
       'status.failed': 'Failed',
       'status.skipped': 'Skipped',
       'status.cancelled': 'Cancelled',
+      'environment.local': 'Local',
+      'environment.localHint': 'Run on the machine hosting the dsh process.',
+      'executor.local': 'Local executor',
+      'executor.remote': 'Remote executor',
+      'experiments.executor': 'Executor',
+      'experiments.environments': 'Environments',
+      'graphs.planEnv': 'Environment',
       'experiments.title': 'Experiments',
       'experiments.subtitle': 'Submit a graph and Aether runs its module usages in dependency order.',
       'experiments.new': 'Submit experiment',
@@ -329,6 +345,8 @@ window.__ModuleLoader__.load({
       'modules.paramsHint': 'Nodes inherit these defaults and can override them.',
       'modules.graphRef': 'Graph',
       'modules.graphRefHint': 'This graph is inlined where the module is used.',
+      'modules.environment': 'Execution environment',
+      'modules.environmentHint': 'Chooses which executor runs the module. Only the local executor exists today; a remote executor will let a scheduler pick a location per environment.',
       'modules.usedBy': 'Used by',
       'modules.usedByCount': '{n} graphs',
       'modules.notUsed': 'Not used yet',
@@ -592,6 +610,7 @@ window.__ModuleLoader__.load({
 .ath-canvas-node-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; white-space: nowrap; }
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
 .ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--dsw-alias-state-warn-primary); flex: 0 0 auto; }
+.ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .ath-inspector { display: flex; flex-direction: column; gap: 12px; }
 .ath-section-title { margin: 0 0 2px; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); text-transform: none; }
 .ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 24px; gap: 6px; align-items: center; }
@@ -700,6 +719,29 @@ window.__ModuleLoader__.load({
 
     function statusClass(status) {
       return status;
+    }
+
+    function environmentLabel(t, environment) {
+      if (!environment) return '';
+      if (environment.builtin && environment.id === 'local') return t('environment.local');
+      return environment.name || environment.id;
+    }
+
+    function environmentHint(t, environment) {
+      if (!environment) return '';
+      if (environment.builtin && environment.id === 'local') return t('environment.localHint');
+      return environment.description || '';
+    }
+
+    /** 在环境目录里找名字；目录里没有时退回节点快照里的名字。 */
+    function environmentName(t, environments, environmentId, fallback) {
+      const environment = (environments || []).find((item) => item.id === environmentId);
+      if (environment) return environmentLabel(t, environment);
+      return fallback || environmentId || t('environment.local');
+    }
+
+    function executorLabel(t, executorId) {
+      return executorId === 'local' ? t('executor.local') : executorId || t('executor.local');
     }
 
     function paramsToRows(params) {
@@ -1059,7 +1101,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function SubmitDialog({ t, graphs, onClose, onSubmit, busy }) {
+    function SubmitDialog({ t, graphs, executors, onClose, onSubmit, busy }) {
       const [graphId, setGraphId] = useState(() => (graphs[0] ? graphs[0].id : ''));
       const [name, setName] = useState('');
       const [concurrency, setConcurrency] = useState(3);
@@ -1139,6 +1181,14 @@ window.__ModuleLoader__.load({
                       'div',
                       { className: 'ath-stat-row' },
                       h('span', null, tr(t, 'experiments.planSummary', { nodes: graph.nodeCount, layers: graph.layerCount })),
+                      h(
+                        'span',
+                        null,
+                        `${t('experiments.executor')} ${(executors || [])
+                          .filter((executor) => executor.available)
+                          .map((executor) => executorLabel(t, executor.id))
+                          .join(', ')}`,
+                      ),
                     ),
                   )
                 : null,
@@ -1279,6 +1329,7 @@ window.__ModuleLoader__.load({
                         h('span', null, `${t('experiments.startedAt')} ${formatDateTime(current.startedAt)}`),
                         h('span', null, `${t('experiments.endedAt')} ${formatDateTime(current.endedAt)}`),
                         h('span', null, `${t('experiments.concurrency')} ${current.concurrency}`),
+                        h('span', null, `${t('experiments.executor')} ${executorLabel(t, current.executor)}`),
                       ),
                       current.message ? h('div', { className: 'ath-hint', style: { marginTop: 4 } }, current.message) : null,
                     ),
@@ -1340,6 +1391,11 @@ window.__ModuleLoader__.load({
                         { className: 'ath-module-name', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
                         node.kind === 'graph' ? h('span', { className: 'ath-badge', 'data-kind': 'graph' }, t('experiments.subgraphNode')) : null,
                         ` ${node.moduleName}`,
+                        h(
+                          'span',
+                          { className: 'ath-node-env' },
+                          environmentName(t, data.environments, node.environmentId, node.environmentName),
+                        ),
                       ),
                       h('span', { className: 'ath-status', 'data-status': statusClass(node.status) }, statusText(t, node.status)),
                       h('span', { className: 'ath-muted' }, formatDuration(node.startedAt, node.endedAt)),
@@ -1439,7 +1495,7 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------- 图编辑器
 
-    function GraphEditor({ t, modules, draft, onDraftChange, onSave, onBack, onDelete, onValidate, saving, errors, plan }) {
+    function GraphEditor({ t, modules, environments, draft, onDraftChange, onSave, onBack, onDelete, onValidate, saving, errors, plan }) {
       const graph = draft.graph;
       const selectedId = draft.selectedNodeId;
       const selected = graph.nodes.find((node) => node.id === selectedId) || null;
@@ -1851,6 +1907,11 @@ window.__ModuleLoader__.load({
                         { className: 'ath-dep-row', key: node.path },
                         h('code', null, `L${node.layer}`),
                         h('span', null, node.label),
+                        h(
+                          'span',
+                          { className: 'ath-node-env' },
+                          environmentName(t, environments, node.environmentId, node.environmentName),
+                        ),
                         h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, node.deps.length ? `← ${node.deps.join(', ')}` : ''),
                       ),
                     ),
@@ -1901,6 +1962,11 @@ window.__ModuleLoader__.load({
                       { className: 'ath-badge', 'data-kind': module.kind },
                       module.kind === 'graph' ? t('modules.kind.graph') : t('modules.kind.command'),
                     ),
+                    h(
+                      'span',
+                      { className: 'ath-badge' },
+                      environmentName(t, data.environments, module.environmentId, module.environmentName),
+                    ),
                   ),
                   h('div', { className: 'ath-module-desc' }, module.description || ''),
                   module.kind === 'graph'
@@ -1932,6 +1998,9 @@ window.__ModuleLoader__.load({
 
     function ModuleEditor({ t, data, draft, setDraft, onSave, onBack, saving, errors }) {
       const module = draft.module;
+      const environments = data.environments || [];
+      const currentEnvironment =
+        environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
       return h(
@@ -2033,6 +2102,29 @@ window.__ModuleLoader__.load({
                       kind === 'graph' ? t('modules.kind.graph') : t('modules.kind.command'),
                     ),
                   ),
+                ),
+              ),
+              h(
+                'div',
+                { className: 'ath-field', style: { marginTop: 12 } },
+                h('label', { className: 'ath-label' }, t('modules.environment')),
+                h(
+                  'select',
+                  {
+                    className: 'ath-select',
+                    value: module.environmentId || 'local',
+                    onChange: (event) => patch({ environmentId: event.target.value }),
+                  },
+                  environments.length
+                    ? environments.map((environment) =>
+                        h('option', { key: environment.id, value: environment.id }, environmentLabel(t, environment)),
+                      )
+                    : h('option', { value: 'local' }, t('environment.local')),
+                ),
+                h(
+                  'div',
+                  { className: 'ath-hint' },
+                  `${environmentHint(t, currentEnvironment)} ${t('modules.environmentHint')}`.trim(),
                 ),
               ),
               module.kind === 'graph'
@@ -2612,6 +2704,7 @@ window.__ModuleLoader__.load({
         content = h(GraphEditor, {
           t,
           modules: data ? data.modules : [],
+          environments: data ? data.environments : [],
           draft: graphDraft,
           onDraftChange: setGraphDraft,
           onValidate: validateDraft,
@@ -2633,7 +2726,7 @@ window.__ModuleLoader__.load({
       } else if (moduleDraft) {
         content = h(ModuleEditor, {
           t,
-          data: data || { modules: [], graphs: [] },
+          data: data || { modules: [], graphs: [], environments: [], executors: [] },
           draft: moduleDraft,
           setDraft: setModuleDraft,
           onSave: () => void saveModule(),
@@ -2709,6 +2802,7 @@ window.__ModuleLoader__.load({
           ? h(SubmitDialog, {
               t,
               graphs: data ? data.graphs : [],
+              executors: data ? data.executors : [],
               busy: submitting,
               onClose: () => setSubmitOpen(false),
               onSubmit: (values) => void submitExperiment(values),

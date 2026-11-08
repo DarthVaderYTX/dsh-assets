@@ -10,6 +10,47 @@ export const DEFAULT_TIMEOUT_SEC = 300;
 export const MAX_TIMEOUT_SEC = 86400;
 export const MODULE_KINDS = ['command', 'graph'];
 
+/**
+ * 内置执行环境。执行环境是「模块在哪里跑」的声明，由执行器解析：
+ * `executor` 指向一个执行后端（当前只有 `local`），后续可以由服务器调度器
+ * 增补远程环境，模块只保存 `environmentId`。
+ */
+export const BUILTIN_ENVIRONMENTS = [
+  {
+    id: 'local',
+    name: '本机',
+    description: '在 dsh 宿主进程所在的机器上执行。',
+    executor: 'local',
+    builtin: true,
+  },
+];
+
+export function normalizeEnvironment(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    id: String(source.id == null ? '' : source.id).trim(),
+    name: String(source.name == null ? '' : source.name).trim() || String(source.id || ''),
+    description: String(source.description == null ? '' : source.description).trim(),
+    executor: String(source.executor == null ? '' : source.executor).trim() || 'local',
+    builtin: Boolean(source.builtin),
+  };
+}
+
+/** 环境目录：始终保留内置的 local，按 id 去重。 */
+export function normalizeEnvironments(raw) {
+  const list = (Array.isArray(raw) ? raw : []).map(normalizeEnvironment).filter((item) => item.id);
+  if (!list.some((item) => item.id === 'local')) list.unshift(normalizeEnvironment(BUILTIN_ENVIRONMENTS[0]));
+  else list.forEach((item) => {
+    if (item.id === 'local') item.builtin = true;
+  });
+  const seen = new Set();
+  return list.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 export function slugify(value, fallback = 'item') {
   const text = String(value == null ? '' : value)
     .toLowerCase()
@@ -67,6 +108,7 @@ export function normalizeModule(raw) {
         : DEFAULT_TIMEOUT_SEC,
     params: normalizeParams(source.params),
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
+    environmentId: String(source.environmentId == null ? '' : source.environmentId).trim() || 'local',
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
   };
@@ -194,7 +236,7 @@ export function topoLayers(nodes, edges) {
   return layers;
 }
 
-export function validateModule(module, modules = [], graphs = []) {
+export function validateModule(module, modules = [], graphs = [], environments = []) {
   const errors = [];
   if (!module.id) errors.push('模块 id 不能为空');
   else if (!MODULE_ID.test(module.id)) errors.push('模块 id 只能包含小写字母、数字和连字符，且不超过 63 个字符');
@@ -202,6 +244,10 @@ export function validateModule(module, modules = [], graphs = []) {
   if (!MODULE_KINDS.includes(module.kind)) errors.push('模块类型无效');
   if (modules.some((item) => item.id !== module.id && item.name.toLowerCase() === module.name.toLowerCase())) {
     errors.push(`模块名称「${module.name}」已被使用`);
+  }
+  const catalog = environments.length ? environments : BUILTIN_ENVIRONMENTS;
+  if (!catalog.some((item) => item.id === module.environmentId)) {
+    errors.push(`执行环境「${module.environmentId}」不存在`);
   }
   for (const [key, value] of Object.entries(module.params || {})) {
     if (!PARAM_KEY.test(key)) errors.push(`参数名「${key}」无效（字母或下划线开头，可含数字、点、横线）`);
@@ -372,6 +418,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         command: module?.command || '',
         cwd: module?.cwd || '',
         timeoutSec: module?.timeoutSec || DEFAULT_TIMEOUT_SEC,
+        environmentId: module?.environmentId || 'local',
       };
       plan.set(nodeId, { entries: [entry], exits: [entry] });
       nodes.push(entry);

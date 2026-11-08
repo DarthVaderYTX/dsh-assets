@@ -111,7 +111,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | `dsh-pet` | plugin | [plugins/dsh-pet](plugins/dsh-pet) | 悬浮像素宠物：十二个品种（狸花猫 / 白猫 / 黑猫 / 金渐层 / 老虎 / 狮子 / 金毛 / 萨摩耶 / 哈士奇 / 鹦鹉 / 绵羊 / 山羊），48×54 全代码绘制，正面与侧面三档转身、呼吸、眨眼、抖耳、摇尾、打盹、发疯都按品种性格逐帧重画；可拖到窗口任意位置，点一下会跳、冒爱心、说专属台词 |
 | `human-intelligence` | plugin | [plugins/human-intelligence](plugins/human-intelligence) | 左侧栏多模态人工标注工作台：文本/图片/视频标注任务与数据集分离管理，预设/自定义标注工具，网页排序，任务级多选配置，数据列表搜索/过滤/排序；自带标准 SKILL.md，插件加载时注册、卸载时注销 |
 | `tech-hub` | plugin | [plugins/tech-hub](plugins/tech-hub) | 评测任务工作台：数据集、任务模板、任务三页管理；模板支持全局参数、串行阶段、对外输出映射与阶段输入引用；任务按 Control/Treatment 分组并发执行，阶段产出 input 描述文件与 output，可查看日志/输出、打开目录、导出 ZIP；workspace 级项目导入导出（任务与 runs 可选）；内置主题、语言、可编辑文档和随插件自动注册的 `tech-hub` skill |
-| `aether` | plugin | [plugins/aether](plugins/aether) | 左侧栏 Aether 面板：有向无环图任务执行管理器。模块分命令模块与子图模块（可引用另一张图内联执行），图里用「模块使用」节点和连线表达依赖；画布按拓扑自动分层，保存前校验环与子图引用环；提交实验后宿主按依赖并发执行（并发 1–8），节点状态、stdout/stderr、上游输入与运行目录落盘，支持取消/重跑/删除；数据与运行产物在 `storages/aether`，样式全部使用主题令牌，内置图核心与真实 HTTP 集成测试 |
+| `aether` | plugin | [plugins/aether](plugins/aether) | 左侧栏 Aether 面板：有向无环图任务执行管理器。模块分命令模块与子图模块（可引用另一张图内联执行），模块带执行环境声明；图里用「模块使用」节点和连线表达依赖，画布按拓扑自动分层，保存前校验环与子图引用环；提交实验后按依赖并发执行（并发 1–8），执行以 Executor 为边界（当前为本机执行器，预留服务器按执行环境选择执行位置的调度接口），节点 placement、状态、stdout/stderr、上游输入与运行目录落盘，支持取消/重跑/删除；数据在 `storages/aether`，样式全部使用主题令牌，内置图核心、环境解析与真实 HTTP 集成测试 |
 
 ## 存放约定
 
