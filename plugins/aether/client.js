@@ -139,6 +139,7 @@ window.__ModuleLoader__.load({
       'graphs.save': '保存实验',
       'graphs.saving': '正在保存…',
       'graphs.cycle': '存在环，请调整连线',
+      'graphs.cycleBlocked': '这条连线会形成环，已取消',
       'graphs.planNodes': '{n} 个可执行节点',
       'graphs.unsaved': '有未保存的修改',
       'graphs.subgraph': '子图',
@@ -398,6 +399,7 @@ window.__ModuleLoader__.load({
       'graphs.save': 'Save experiment',
       'graphs.saving': 'Saving…',
       'graphs.cycle': 'The experiment contains a cycle',
+      'graphs.cycleBlocked': 'That connection would create a cycle and was cancelled',
       'graphs.planNodes': '{n} executable nodes',
       'graphs.unsaved': 'Unsaved changes',
       'graphs.subgraph': 'Subgraph',
@@ -974,6 +976,13 @@ window.__ModuleLoader__.load({
   outline: 2px dashed var(--ath-accent);
   outline-offset: -4px;
   background-color: color-mix(in srgb, var(--ath-accent) 5%, var(--dsw-alias-bg-base));
+}
+.ath-canvas-warning {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 8;
+  max-width: calc(100% - 40px); padding: 6px 10px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ath-red) 40%, var(--ath-border-soft));
+  background: var(--dsw-alias-bg-overlay); color: var(--ath-red);
+  box-shadow: var(--ath-shadow-soft); font-size: 11px; pointer-events: none;
 }
 .ath-canvas-tools { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 20px); }
 .ath-page-runs .ath-split > .ath-run-detail {
@@ -2676,6 +2685,8 @@ window.__ModuleLoader__.load({
         }
         return 280;
       });
+      const [cycleNotice, setCycleNotice] = useState('');
+      const cycleTimer = useRef(null);
 
       const canvasRef = useRef(null);
       const inspectorRef = useRef(null);
@@ -2807,6 +2818,13 @@ window.__ModuleLoader__.load({
           // 记住右侧栏高度占比是尽力而为。
         }
       }, [paletteHeight]);
+
+      useEffect(
+        () => () => {
+          if (cycleTimer.current) window.clearTimeout(cycleTimer.current);
+        },
+        [],
+      );
 
       const zoomTo = useCallback((targetZoom) => {
         const element = canvasRef.current;
@@ -2942,13 +2960,31 @@ window.__ModuleLoader__.load({
         return () => element.removeEventListener('wheel', onWheel);
       }, []);
 
+      const notifyCycle = () => {
+        setCycleNotice(t('graphs.cycleBlocked'));
+        if (cycleTimer.current) window.clearTimeout(cycleTimer.current);
+        cycleTimer.current = window.setTimeout(() => setCycleNotice(''), 3400);
+      };
+
       const addEdge = (fromId, fromPort, toId, toPort) => {
         const current = draftRef.current;
         if (!fromPort || !toPort) return;
         if (current.graph.edges.some((edge) => edge.from === fromId && edge.to === toId && edge.fromPort === fromPort && edge.toPort === toPort)) {
           return;
         }
+        const candidate = {
+          ...current.graph,
+          edges: [
+            ...current.graph.edges,
+            { id: '__cycle-check__', from: fromId, to: toId, fromPort, toPort },
+          ],
+        };
+        if (!localLayers(candidate)) {
+          notifyCycle();
+          return;
+        }
         const edgeId = `edge-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+        setCycleNotice('');
         onDraftChange({
           ...current,
           graph: {
@@ -3324,7 +3360,13 @@ window.__ModuleLoader__.load({
               : null,
             h(
               'button',
-              { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onSave, disabled: saving || modules.length === 0 },
+              {
+                type: 'button',
+                className: 'ath-btn ath-btn-primary',
+                onClick: onSave,
+                disabled: saving || modules.length === 0 || broken,
+                title: broken ? t('graphs.cycle') : undefined,
+              },
               saving ? t('graphs.saving') : t('graphs.save'),
             ),
           ),
@@ -3620,6 +3662,7 @@ window.__ModuleLoader__.load({
                 ),
                 h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1.2), title: t('canvas.zoomIn') }, '+'),
               ),
+              cycleNotice ? h('div', { className: 'ath-canvas-warning' }, cycleNotice) : null,
               h('div', { className: 'ath-canvas-hint' }, t('canvas.hint')),
             ),
           ),
