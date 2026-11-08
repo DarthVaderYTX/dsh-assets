@@ -8,6 +8,8 @@ window.__ModuleLoader__.load({
     const NS = 'aether';
     const API = '/aether-api';
     const TAB_KEY = 'aether:active-tab-v2';
+    const SIDEBAR_WIDTH_KEY = 'aether:sidebar-width';
+    const PALETTE_HEIGHT_KEY = 'aether:palette-height';
 
     // 术语：UI 的「实验」= 内部 graph（DAG 定义）；UI 的「运行」= 内部 experiment（一次提交）。
 
@@ -167,6 +169,8 @@ window.__ModuleLoader__.load({
       'canvas.paletteHint': '拖拽到画布或单击添加',
       'canvas.nodeParamsHint': '继承模块默认参数，可在这里覆盖。',
       'canvas.dropHint': '放到画布上',
+      'canvas.resizeSidebar': '拖动调整画布宽度',
+      'canvas.resizePalette': '拖动调整添加模块区高度',
       'canvas.portSummary': '{inputs} 入 · {outputs} 出',
       'canvas.direction': '布局',
       'canvas.vertical': '上下',
@@ -407,6 +411,8 @@ window.__ModuleLoader__.load({
       'canvas.paletteHint': 'Drag onto the canvas or click to add',
       'canvas.nodeParamsHint': 'Inherited from the module defaults; override them here.',
       'canvas.dropHint': 'Drop on the canvas',
+      'canvas.resizeSidebar': 'Drag to resize the canvas',
+      'canvas.resizePalette': 'Drag to resize the module palette',
       'canvas.portSummary': '{inputs} in · {outputs} out',
       'canvas.direction': 'Layout',
       'canvas.vertical': 'Vertical',
@@ -576,7 +582,20 @@ window.__ModuleLoader__.load({
 .ath-page-runs .ath-split > div:first-child { display: flex; flex-direction: column; overflow: hidden; }
 .ath-page-runs .ath-run-list { min-height: 0; overflow: auto; flex: 1 1 auto; }
 .ath-page-editor { overflow: hidden; }
-.ath-page-editor .ath-editor { flex: 1 1 auto; min-height: 0; }
+.ath-page-editor .ath-editor {
+  flex: 1 1 auto; min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 10px min(var(--ath-sidebar-width, 340px), 55%);
+  gap: 10px 4px;
+}
+.ath-editor-resizer {
+  align-self: stretch; position: relative; z-index: 2;
+  cursor: col-resize; touch-action: none;
+}
+.ath-editor-resizer::before {
+  content: ''; position: absolute; top: 6px; bottom: 6px; left: 4px; width: 2px;
+  border-radius: 2px; background: var(--ath-border-soft);
+}
+.ath-editor-resizer:hover::before, .ath-editor-resizer:active::before { background: var(--ath-accent); }
 .ath-page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; flex: 0 0 auto; }
 .ath-page-title { margin: 0; font-size: 17px; font-weight: 650; }
 .ath-page-sub { margin: 3px 0 0; font-size: 12px; color: var(--dsw-alias-label-secondary); max-width: 720px; }
@@ -855,12 +874,25 @@ window.__ModuleLoader__.load({
 .ath-seg-btn[data-active="true"] {
   background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-weight: 600;
 }
-.ath-palette { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
+.ath-palette {
+  display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto;
+  min-height: 0; max-height: calc(100% - 160px);
+}
 .ath-palette-head { display: flex; align-items: center; gap: 6px; }
 .ath-palette-list {
   display: flex; flex-direction: column; gap: 2px;
-  max-height: min(300px, 34vh); overflow: auto; padding-right: 2px;
+  flex: 1 1 auto; min-height: 0; max-height: none;
+  overflow: auto; padding-right: 2px;
 }
+.ath-palette-resizer {
+  flex: 0 0 auto; position: relative; height: 10px; margin: -4px 0;
+  cursor: row-resize; touch-action: none;
+}
+.ath-palette-resizer::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 2px;
+  border-radius: 2px; background: var(--ath-border-soft);
+}
+.ath-palette-resizer:hover::before, .ath-palette-resizer:active::before { background: var(--ath-accent); }
 .ath-palette-item {
   display: flex; flex-direction: column; gap: 2px; text-align: left;
   border: 1px solid transparent; border-radius: 8px;
@@ -1015,6 +1047,9 @@ window.__ModuleLoader__.load({
 @media (max-width: 980px) {
   .ath-split { grid-template-columns: minmax(0, 1fr); }
   .ath-editor { grid-template-columns: minmax(0, 1fr); }
+  .ath-page-editor .ath-editor { grid-template-columns: minmax(0, 1fr); }
+  .ath-editor-resizer, .ath-palette-resizer { display: none; }
+  .ath-palette { height: auto !important; max-height: 46vh; }
   .ath-page-editor { overflow: auto; }
   .ath-page-editor .ath-editor { flex: 0 0 auto; }
   .ath-page-runs { overflow: auto; }
@@ -2528,9 +2563,29 @@ window.__ModuleLoader__.load({
       const [paletteQuery, setPaletteQuery] = useState('');
       const [paletteFilter, setPaletteFilter] = useState('all');
       const [dragOver, setDragOver] = useState(false);
+      const [sidebarWidth, setSidebarWidth] = useState(() => {
+        try {
+          const value = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+          if (Number.isFinite(value) && value >= 260 && value <= 640) return value;
+        } catch {
+          // localStorage 不可用时使用默认值。
+        }
+        return 340;
+      });
+      const [paletteHeight, setPaletteHeight] = useState(() => {
+        try {
+          const value = Number(localStorage.getItem(PALETTE_HEIGHT_KEY));
+          if (Number.isFinite(value) && value >= 140) return value;
+        } catch {
+          // 同上。
+        }
+        return 280;
+      });
 
       const canvasRef = useRef(null);
       const inspectorRef = useRef(null);
+      const editorRef = useRef(null);
+      const sideRef = useRef(null);
       const draggingRef = useRef(false);
       const viewRef = useRef(view);
       viewRef.current = view;
@@ -2641,6 +2696,22 @@ window.__ModuleLoader__.load({
         );
         return () => cancelAnimationFrame(frame);
       }, [draft.graph.id, fitTo]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(sidebarWidth)));
+        } catch {
+          // 记住分栏宽度是尽力而为。
+        }
+      }, [sidebarWidth]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(PALETTE_HEIGHT_KEY, String(Math.round(paletteHeight)));
+        } catch {
+          // 记住右侧栏高度占比是尽力而为。
+        }
+      }, [paletteHeight]);
 
       const zoomTo = useCallback((targetZoom) => {
         const element = canvasRef.current;
@@ -2796,6 +2867,22 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (!interaction) return undefined;
         const onMove = (event) => {
+          if (interaction.type === 'resize-sidebar') {
+            const element = editorRef.current;
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const maximum = Math.max(280, Math.min(640, rect.width * 0.55, rect.width - 360));
+            setSidebarWidth(Math.min(maximum, Math.max(260, rect.right - event.clientX)));
+            return;
+          }
+          if (interaction.type === 'resize-palette') {
+            const element = sideRef.current;
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const maximum = Math.max(160, rect.height - 200);
+            setPaletteHeight(Math.min(maximum, Math.max(140, event.clientY - rect.top)));
+            return;
+          }
           if (interaction.type === 'pan') {
             setView({
               ...interaction.origin,
@@ -2979,6 +3066,20 @@ window.__ModuleLoader__.load({
           x: (event.clientX - rect.left - viewRef.current.x) / zoom,
           y: (event.clientY - rect.top - viewRef.current.y) / zoom,
         });
+      };
+
+      const startSidebarResize = (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setInteraction({ type: 'resize-sidebar' });
+      };
+
+      const startPaletteResize = (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setInteraction({ type: 'resize-palette' });
       };
 
       const onViewportPointerDown = (event) => {
@@ -3169,7 +3270,11 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
-          { className: 'ath-editor' },
+          {
+            className: 'ath-editor',
+            ref: editorRef,
+            style: { '--ath-sidebar-width': `${sidebarWidth}px` },
+          },
           h(
             'div',
             { className: 'ath-editor-main' },
@@ -3423,12 +3528,20 @@ window.__ModuleLoader__.load({
               h('div', { className: 'ath-canvas-hint' }, t('canvas.hint')),
             ),
           ),
+          h('div', {
+            className: 'ath-editor-resizer',
+            role: 'separator',
+            'aria-orientation': 'vertical',
+            'aria-label': t('canvas.resizeSidebar'),
+            title: t('canvas.resizeSidebar'),
+            onPointerDown: startSidebarResize,
+          }),
           h(
             'div',
-            { className: 'ath-editor-side' },
+            { className: 'ath-editor-side', ref: sideRef },
             h(
               'div',
-              { className: 'ath-card ath-palette' },
+              { className: 'ath-card ath-palette', style: { height: `${paletteHeight}px` } },
               h('div', { className: 'ath-palette-head' }, h('h4', { className: 'ath-section-title' }, t('canvas.paletteTitle'))),
               h('input', {
                 className: 'ath-input',
@@ -3512,6 +3625,14 @@ window.__ModuleLoader__.load({
                   : h('div', { className: 'ath-hint', style: { padding: '10px 0' } }, t('canvas.emptyPalette')),
               ),
             ),
+            h('div', {
+              className: 'ath-palette-resizer',
+              role: 'separator',
+              'aria-orientation': 'horizontal',
+              'aria-label': t('canvas.resizePalette'),
+              title: t('canvas.resizePalette'),
+              onPointerDown: startPaletteResize,
+            }),
             h(
               'div',
               { className: 'ath-card ath-inspector', ref: inspectorRef },
