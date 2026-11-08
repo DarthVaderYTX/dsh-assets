@@ -437,6 +437,15 @@ async function startExperiment(input = {}) {
   const state = await readState();
   const graph = state.graphs.find((item) => item.id === input.graphId);
   if (!graph) throw httpError(404, `实验不存在：${input.graphId || '（空）'}`);
+  const referencedBy = graphUsage(state, graph.id);
+  if (referencedBy.length) {
+    throw httpError(
+      400,
+      `「${graph.name}」是子图，不能单独运行；请在引用它的实验里运行（引用方：${referencedBy
+        .map((module) => module.name)
+        .join('、')}）`,
+    );
+  }
   const graphErrors = validateGraph(graph, state.modules, state.graphs);
   if (graphErrors.length) throw httpError(400, graphErrors.join('；'));
   const plan = expandGraph(graph, state.modules, state.graphs);
@@ -661,11 +670,15 @@ async function buildStatePayload() {
         module.kind === 'graph' ? state.graphs.find((graph) => graph.id === module.graphId)?.name || '' : '',
     };
   });
-  const graphs = state.graphs.map((graph) => ({
-    ...graphSummary(graph),
-    usedBy: graphUsage(state, graph.id),
-    nodeCount: graph.nodes.length,
-  }));
+  const graphs = state.graphs.map((graph) => {
+    const usedBy = graphUsage(state, graph.id);
+    return {
+      ...graphSummary(graph),
+      usedBy,
+      isSubgraph: usedBy.length > 0,
+      nodeCount: graph.nodes.length,
+    };
+  });
   return {
     ok: true,
     version: DATA_VERSION,

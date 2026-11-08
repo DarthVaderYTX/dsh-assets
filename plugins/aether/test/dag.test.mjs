@@ -216,6 +216,22 @@ test('expandGraph inlines subgraphs and rewires dependencies', () => {
   assert.deepEqual(plan.exits, ['n3']);
 });
 
+test('expandGraph supports nested subgraphs', () => {
+  const modules = [
+    command('a'),
+    normalizeModule({ id: 'sub-inner', name: 'Inner sub', kind: 'graph', graphId: 'g3' }),
+    normalizeModule({ id: 'sub-outer', name: 'Outer sub', kind: 'graph', graphId: 'g2' }),
+  ];
+  const graphs = [
+    normalizeGraph({ id: 'g3', name: 'Leaf', nodes: [node('leaf', 'a')], edges: [] }),
+    normalizeGraph({ id: 'g2', name: 'Middle', nodes: [node('inner', 'sub-inner')], edges: [] }),
+    normalizeGraph({ id: 'g1', name: 'Top', nodes: [node('outer', 'sub-outer')], edges: [] }),
+  ];
+  const plan = expandGraph(graphs[2], modules, graphs);
+  assert.equal(plan.error, null);
+  assert.deepEqual(plan.nodes.map((item) => item.path), ['outer/inner/leaf']);
+});
+
 test('subgraph reference cycles are rejected', () => {
   const modules = [
     command('a'),

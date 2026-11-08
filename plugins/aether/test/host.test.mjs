@@ -328,6 +328,18 @@ test('module saves create a new version by default and can overwrite it', async 
   assert.equal(module.versions, undefined);
 });
 
+test('a subgraph cannot be run on its own', async () => {
+  const { status, payload } = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: 'demo-pipeline' },
+  });
+  assert.equal(status, 400);
+  assert.match(payload.error, /子图/);
+
+  const state = await call('/state');
+  assert.equal(state.payload.graphs.find((graph) => graph.id === 'demo-pipeline').isSubgraph, true);
+});
+
 test('submitting a graph executes subgraph nodes in dependency order', async () => {
   const submitted = await call('/experiments', {
     method: 'POST',

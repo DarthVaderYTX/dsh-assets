@@ -102,6 +102,7 @@ window.__ModuleLoader__.load({
       'experiments.submit': '运行',
       'experiments.submitting': '正在提交…',
       'experiments.noGraphs': '还没有可运行的实验，先去「实验」里创建一个。',
+      'experiments.noRunnableGraphs': '没有可单独运行的实验；子图需要在引用它的实验里运行。',
       'experiments.plan': '执行计划',
       'experiments.planSummary': '{nodes} 个节点 · {layers} 层',
       'experiments.startedAt': '开始',
@@ -145,6 +146,10 @@ window.__ModuleLoader__.load({
       'graphs.planNodes': '{n} 个可执行节点',
       'graphs.unsaved': '有未保存的修改',
       'graphs.subgraph': '子图',
+      'graphs.openSubgraph': '在新标签页打开子图',
+      'graphs.subgraphRunHint': '子图不能单独运行；保存会更新引用它的实验。',
+      'confirm.closeTab.title': '关闭标签页？',
+      'confirm.closeTab.body': '「{name}」还有未保存的修改，关闭后会丢失。',
       'graphs.subgraphTip': '这个模块会把实验「{name}」内联进来执行；模块参数会作为内层节点的默认值。',
       'graphs.fixErrors': '请先修正实验上的问题',
       'graphs.deleteHint': '删除后这个实验不会再出现在运行列表里；历史运行记录仍然保留。',
@@ -367,6 +372,7 @@ window.__ModuleLoader__.load({
       'experiments.submit': 'Run',
       'experiments.submitting': 'Submitting…',
       'experiments.noGraphs': 'No experiments to run yet. Create one under Experiments first.',
+      'experiments.noRunnableGraphs': 'No standalone experiment to run; subgraphs run through their parent experiment.',
       'experiments.plan': 'Execution plan',
       'experiments.planSummary': '{nodes} nodes · {layers} layers',
       'experiments.startedAt': 'Started',
@@ -410,6 +416,10 @@ window.__ModuleLoader__.load({
       'graphs.planNodes': '{n} executable nodes',
       'graphs.unsaved': 'Unsaved changes',
       'graphs.subgraph': 'Subgraph',
+      'graphs.openSubgraph': 'Open subgraph in a new tab',
+      'graphs.subgraphRunHint': 'Subgraphs cannot run on their own; saving updates the experiments that reference them.',
+      'confirm.closeTab.title': 'Close this tab?',
+      'confirm.closeTab.body': '“{name}” has unsaved changes that will be lost.',
       'graphs.subgraphTip': 'This module inlines experiment “{name}” when run; module parameters become defaults for the inner nodes.',
       'graphs.fixErrors': 'Fix the experiment problems first',
       'graphs.deleteHint': 'Deleting removes the experiment from the run list; past runs keep their records.',
@@ -623,6 +633,38 @@ window.__ModuleLoader__.load({
 .ath-tab:hover { color: var(--dsw-alias-label-primary); }
 .ath-tab[data-active="true"] { color: var(--dsw-alias-label-primary); border-bottom-color: var(--ath-accent); font-weight: 600; }
 .ath-tab-count { margin-left: 6px; font-size: 10.5px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.ath-editor-tabs {
+  flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px;
+  padding: 6px 16px 0; overflow-x: auto; border-bottom: 1px solid var(--ath-border-soft);
+}
+.ath-editor-tab {
+  display: flex; align-items: center; min-width: 0; max-width: 260px;
+  border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+  background: transparent;
+}
+.ath-editor-tab[data-active="true"] {
+  background: var(--dsw-alias-bg-layer-1);
+  border-color: var(--ath-border-soft);
+}
+.ath-editor-tab-label {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  padding: 6px 4px 6px 10px; font-size: 11.5px;
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ath-editor-tab[data-active="true"] .ath-editor-tab-label { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.ath-editor-tab-badge {
+  flex: 0 0 auto; font-size: 9.5px; padding: 1px 4px; border-radius: 4px;
+  background: color-mix(in srgb, var(--ath-accent) 12%, transparent); color: var(--ath-accent);
+}
+.ath-editor-tab-close {
+  flex: 0 0 auto; width: 20px; height: 20px; margin-right: 4px;
+  border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1;
+}
+.ath-editor-tab-close:hover { background: color-mix(in srgb, var(--ath-red) 12%, transparent); color: var(--ath-red); }
+.ath-subgraph-link { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .ath-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .ath-page {
   flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
@@ -1948,6 +1990,7 @@ window.__ModuleLoader__.load({
                     { className: 'ath-module-head' },
                     h('span', { className: 'ath-module-name' }, graph.name),
                     h('span', { className: 'ath-badge' }, `DAG`),
+                    graph.isSubgraph ? h('span', { className: 'ath-badge' }, t('graphs.subgraph')) : null,
                   ),
                   h('div', { className: 'ath-module-desc' }, graph.description || ''),
                   h(
@@ -2651,9 +2694,11 @@ window.__ModuleLoader__.load({
       onDraftChange,
       onSave,
       onBack,
+      onOpenSubgraph,
       onDelete,
       saving,
       errors,
+      subgraph,
     }) {
       const graph = draft.graph;
       const direction = graph.layout === 'horizontal' ? 'horizontal' : 'vertical';
@@ -3371,6 +3416,7 @@ window.__ModuleLoader__.load({
           { className: 'ath-editor-head' },
           h('h2', { className: 'ath-editor-title' }, graph.id ? t('graphEditor.edit') : t('graphEditor.new')),
           draft.isCopy ? h('span', { className: 'ath-badge' }, t('graphEditor.copy')) : null,
+          subgraph ? h('span', { className: 'ath-badge' }, t('graphs.subgraph')) : null,
           h(
             'div',
             { className: 'ath-actions' },
@@ -3404,6 +3450,9 @@ window.__ModuleLoader__.load({
             )
           : null,
         draft.isCopy ? h('div', { className: 'ath-hint', style: { marginBottom: 8 } }, t('graphEditor.copyHint')) : null,
+        subgraph
+          ? h('div', { className: 'ath-hint', style: { marginBottom: 8 } }, t('graphs.subgraphRunHint'))
+          : null,
         h(
           'div',
           { className: 'ath-editor-meta' },
@@ -3887,7 +3936,22 @@ window.__ModuleLoader__.load({
                     (() => {
                       const module = moduleById.get(singleNode.moduleId);
                       return module && module.kind === 'graph'
-                        ? h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'graphs.subgraphTip', { name: module.name }))
+                        ? h(
+                            'div',
+                            { className: 'ath-subgraph-link' },
+                            h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'graphs.subgraphTip', { name: module.name })),
+                            module.graphId
+                              ? h(
+                                  'button',
+                                  {
+                                    type: 'button',
+                                    className: 'ath-btn ath-btn-ghost',
+                                    onClick: () => onOpenSubgraph(module.graphId),
+                                  },
+                                  t('graphs.openSubgraph'),
+                                )
+                              : null,
+                          )
                         : null;
                     })(),
                     h(
@@ -4543,7 +4607,13 @@ window.__ModuleLoader__.load({
       const [submitOpen, setSubmitOpen] = useState(false);
       const [submitting, setSubmitting] = useState(false);
       const [logView, setLogView] = useState(null);
-      const [graphDraft, setGraphDraft] = useState(null);
+      const [editorTabs, setEditorTabs] = useState([]);
+      const [activeEditorKey, setActiveEditorKey] = useState('');
+      const editorKeySeq = useRef(0);
+      const editorTabsRef = useRef(editorTabs);
+      editorTabsRef.current = editorTabs;
+      const activeEditor = editorTabs.find((entry) => entry.key === activeEditorKey) || null;
+      const graphDraft = activeEditor ? activeEditor.draft : null;
       const [graphErrors, setGraphErrors] = useState([]);
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
@@ -4697,8 +4767,8 @@ window.__ModuleLoader__.load({
       }, [hasRunning, refresh]);
 
       const openSubmit = () => {
-        if (!data || !(data.graphs || []).length) {
-          pushToast(t('experiments.noGraphs'), 'error');
+        if (!data || !(data.graphs || []).filter((graph) => !graph.isSubgraph).length) {
+          pushToast(t('experiments.noRunnableGraphs'), 'error');
           return;
         }
         setSubmitOpen(true);
@@ -4735,6 +4805,71 @@ window.__ModuleLoader__.load({
               fail(error);
             }
           },
+        });
+      };
+
+      const updateActiveDraft = (next) => {
+        setEditorTabs((tabs) =>
+          tabs.map((entry) =>
+            entry.key === activeEditorKey
+              ? { ...entry, draft: typeof next === 'function' ? next(entry.draft) : next }
+              : entry,
+          ),
+        );
+      };
+
+      const openEditorTab = (graph, options = {}) => {
+        if (graph.id) {
+          const existing = editorTabsRef.current.find((entry) => entry.draft.graph.id === graph.id);
+          if (existing) {
+            setActiveEditorKey(existing.key);
+            setGraphErrors([]);
+            setTab('experiments');
+            return;
+          }
+        }
+        const key = `editor-${++editorKeySeq.current}`;
+        const draft = { graph: clone(graph), selectedNodeId: '', isCopy: Boolean(options.isCopy) };
+        setEditorTabs((tabs) => [...tabs, { key, draft, baseline: JSON.stringify(draft.graph) }]);
+        setActiveEditorKey(key);
+        setGraphErrors([]);
+        setTab('experiments');
+      };
+
+      const removeTabsForGraph = (graphId) => {
+        const tabs = editorTabsRef.current;
+        const active = tabs.find((entry) => entry.key === activeEditorKey);
+        const next = tabs.filter((entry) => entry.draft.graph.id !== graphId);
+        setEditorTabs(next);
+        if (active && active.draft.graph.id === graphId) {
+          setActiveEditorKey(next.length ? next[next.length - 1].key : '');
+        }
+      };
+
+      const closeEditorTab = (key) => {
+        const tab = editorTabsRef.current.find((entry) => entry.key === key);
+        if (!tab) return;
+        const doClose = () => {
+          const tabs = editorTabsRef.current;
+          const index = tabs.findIndex((entry) => entry.key === key);
+          const next = tabs.filter((entry) => entry.key !== key);
+          setEditorTabs(next);
+          setGraphErrors([]);
+          if (activeEditorKey === key) {
+            const replacement = next[index] || next[index - 1] || next[next.length - 1];
+            setActiveEditorKey(replacement ? replacement.key : '');
+          }
+        };
+        const dirty = JSON.stringify(tab.draft.graph) !== tab.baseline;
+        if (!dirty) {
+          doClose();
+          return;
+        }
+        setConfirm({
+          title: t('confirm.closeTab.title'),
+          body: tr(t, 'confirm.closeTab.body', { name: tab.draft.graph.name || t('graphEditor.new') }),
+          confirmLabel: t('action.close'),
+          onConfirm: () => doClose(),
         });
       };
 
@@ -4782,9 +4917,7 @@ window.__ModuleLoader__.load({
             t('graphs.copySuffix'),
           );
           graph.layout = graph.layout === 'horizontal' ? 'horizontal' : 'vertical';
-          setGraphDraft({ graph, selectedNodeId: '', isCopy: true });
-          setGraphErrors([]);
-          setTab('experiments');
+          openEditorTab(graph, { isCopy: true });
           pushToast(t('experiments.copyOpened'));
         } catch (error) {
           fail(error);
@@ -4842,26 +4975,33 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const openSubgraph = async (graphId) => {
+        if (!graphId) return;
+        try {
+          const payload = await request(`/graphs?id=${encodeURIComponent(graphId)}`);
+          openEditorTab(payload.graph);
+        } catch (error) {
+          fail(error);
+        }
+      };
+
       const startGraph = async (graphId) => {
         setGraphErrors([]);
         if (graphId) {
           try {
             const payload = await request(`/graphs?id=${encodeURIComponent(graphId)}`);
-            setGraphDraft({ graph: clone(payload.graph), selectedNodeId: '' });
+            openEditorTab(payload.graph);
           } catch (error) {
             fail(error);
           }
         } else {
-          setGraphDraft({
-            graph: { id: '', name: '', description: '', layout: 'vertical', nodes: [], edges: [] },
-            selectedNodeId: '',
-          });
+          openEditorTab({ id: '', name: '', description: '', layout: 'vertical', nodes: [], edges: [] });
         }
-        setTab('experiments');
       };
 
       const saveGraph = async () => {
         if (!graphDraft) return;
+        const key = activeEditorKey;
         setGraphSaving(true);
         setGraphErrors([]);
         try {
@@ -4870,9 +5010,21 @@ window.__ModuleLoader__.load({
             setGraphErrors(check.errors);
             return;
           }
-          await request('/graphs', { method: 'POST', body: { graph: graphDraft.graph } });
+          const payload = await request('/graphs', { method: 'POST', body: { graph: graphDraft.graph } });
+          const saved = payload.graph || graphDraft.graph;
+          setEditorTabs((tabs) =>
+            tabs.map((entry) =>
+              entry.key === key
+                ? {
+                    ...entry,
+                    draft: { ...entry.draft, graph: clone(saved), isCopy: false },
+                    baseline: JSON.stringify(saved),
+                  }
+                : entry,
+            ),
+          );
+          setGraphErrors([]);
           pushToast(t('toast.saved'));
-          setGraphDraft(null);
           await loadState(true);
         } catch (error) {
           const message = error && error.message ? error.message : String(error);
@@ -4892,9 +5044,7 @@ window.__ModuleLoader__.load({
             try {
               await request(`/graphs?id=${encodeURIComponent(graph.id)}`, { method: 'DELETE' });
               pushToast(t('toast.deleted'));
-              if (graphDraft && graphDraft.graph.id === graph.id) {
-                setGraphDraft(null);
-              }
+              removeTabsForGraph(graph.id);
               await loadState(true);
             } catch (error) {
               fail(error);
@@ -5041,27 +5191,7 @@ window.__ModuleLoader__.load({
       };
 
       let content;
-      if (graphDraft) {
-        content = h(ExperimentEditor, {
-          t,
-          modules: data ? data.modules : [],
-          environments: data ? data.environments : [],
-          draft: graphDraft,
-          onDraftChange: setGraphDraft,
-          onSave: () => void saveGraph(),
-          onBack: () => {
-            setGraphDraft(null);
-            setGraphErrors([]);
-          },
-          onDelete: () => {
-            if (!graphDraft.graph.id) return;
-            const summary = (data.graphs || []).find((graph) => graph.id === graphDraft.graph.id) || graphDraft.graph;
-            deleteGraph(summary);
-          },
-          saving: graphSaving,
-          errors: graphErrors,
-        });
-      } else if (moduleDraft) {
+      if (moduleDraft) {
         content = h(ModuleEditor, {
           t,
           data: data || { modules: [], graphs: [], environments: [], executors: [] },
@@ -5074,6 +5204,31 @@ window.__ModuleLoader__.load({
           },
           saving: moduleSaving,
           errors: moduleErrors,
+        });
+      } else if (graphDraft && tab === 'experiments') {
+        content = h(ExperimentEditor, {
+          key: activeEditorKey,
+          t,
+          modules: data ? data.modules : [],
+          environments: data ? data.environments : [],
+          draft: graphDraft,
+          onDraftChange: updateActiveDraft,
+          onSave: () => void saveGraph(),
+          onBack: () => {
+            setActiveEditorKey('');
+            setGraphErrors([]);
+          },
+          onOpenSubgraph: (graphId) => void openSubgraph(graphId),
+          subgraph: Boolean(
+            (data && data.graphs ? data.graphs : []).find((graph) => graph.id === graphDraft.graph.id)?.isSubgraph,
+          ),
+          onDelete: () => {
+            if (!graphDraft.graph.id) return;
+            const summary = (data.graphs || []).find((graph) => graph.id === graphDraft.graph.id) || graphDraft.graph;
+            deleteGraph(summary);
+          },
+          saving: graphSaving,
+          errors: graphErrors,
         });
       } else {
         content = tabBody();
@@ -5118,7 +5273,7 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'ath-btn', onClick: () => void openWorkspace() }, t('action.openFolder')),
           ),
         ),
-        !graphDraft && !moduleDraft
+        !moduleDraft
           ? h(
               'div',
               { className: 'ath-tabs' },
@@ -5130,7 +5285,10 @@ window.__ModuleLoader__.load({
                     type: 'button',
                     className: 'ath-tab',
                     'data-active': tab === key ? 'true' : 'false',
-                    onClick: () => setTab(key),
+                    onClick: () => {
+                      setTab(key);
+                      if (key === 'experiments') setActiveEditorKey('');
+                    },
                   },
                   t(`tab.${key}`),
                   data
@@ -5148,6 +5306,57 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
+        tab === 'experiments' && !moduleDraft && editorTabs.length
+          ? h(
+              'div',
+              { className: 'ath-editor-tabs' },
+              editorTabs.map((entry, index) => {
+                const name = entry.draft.graph.name || `${t('graphEditor.new')} ${index + 1}`;
+                const dirty = JSON.stringify(entry.draft.graph) !== entry.baseline;
+                const summary = (data && data.graphs ? data.graphs : []).find(
+                  (graph) => graph.id === entry.draft.graph.id,
+                );
+                return h(
+                  'div',
+                  {
+                    key: entry.key,
+                    className: 'ath-editor-tab',
+                    'data-active': entry.key === activeEditorKey ? 'true' : 'false',
+                  },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-editor-tab-label',
+                      title: name,
+                      onClick: () => {
+                        setTab('experiments');
+                        setActiveEditorKey(entry.key);
+                        setGraphErrors([]);
+                      },
+                    },
+                    dirty ? `${name} *` : name,
+                    summary && summary.isSubgraph
+                      ? h('span', { className: 'ath-editor-tab-badge' }, t('graphs.subgraph'))
+                      : null,
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-editor-tab-close',
+                      title: t('action.close'),
+                      onClick: (event) => {
+                        event.stopPropagation();
+                        closeEditorTab(entry.key);
+                      },
+                    },
+                    '×',
+                  ),
+                );
+              }),
+            )
+          : null,
         h('div', { className: 'ath-body' }, content),
         newModuleOpen
           ? h(NewModuleDialog, {
@@ -5162,7 +5371,7 @@ window.__ModuleLoader__.load({
         submitOpen
           ? h(SubmitDialog, {
               t,
-              graphs: data ? data.graphs : [],
+              graphs: data ? data.graphs.filter((graph) => !graph.isSubgraph) : [],
               executors: data ? data.executors : [],
               busy: submitting,
               onClose: () => setSubmitOpen(false),
