@@ -21,7 +21,7 @@ import {
   validateGraph,
   validateModule,
 } from './dag.js';
-import { LocalExecutor, resolvePlacements } from './executor.js';
+import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
 
 const API_PREFIX = '/aether-api';
 const DATA_VERSION = 5;
@@ -1121,6 +1121,35 @@ async function handleApi(req, res) {
     if (!executor) throw httpError(501, `执行器「${run.executor || 'local'}」未注册`);
     const text = await executor.readLog(run, nodePath, stream);
     sendText(res, 200, text);
+    return;
+  }
+
+  if (method === 'GET' && route === '/experiments/download') {
+    const id = url.searchParams.get('run') || '';
+    const nodePath = url.searchParams.get('node') || '';
+    const port = String(url.searchParams.get('port') || '')
+      .replace(/[^A-Za-z0-9_.-]+/g, '_')
+      .slice(0, 60);
+    if (!id || !nodePath) throw httpError(400, '缺少 run 或 node 参数');
+    const run = activeRuns.get(id)?.run || (await readRunFromDisk(id));
+    if (!run) throw httpError(404, '实验不存在');
+    const node = (run.nodes || []).find((item) => item.path === nodePath);
+    if (!node) throw httpError(404, '节点不存在');
+    const outputFile = path.join(run.dir, 'outputs', `${safeSegment(nodePath)}.out`);
+    let content = '';
+    try {
+      content = await fsp.readFile(outputFile, 'utf8');
+    } catch {
+      content = node.stdoutTail || '';
+    }
+    const filename = `${safeSegment(nodePath)}${port ? `-${port}` : ''}.out`;
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'content-disposition': `attachment; filename="${filename}"`,
+      'content-length': Buffer.byteLength(content),
+      'cache-control': 'no-store',
+    });
+    res.end(content);
     return;
   }
 

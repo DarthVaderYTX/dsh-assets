@@ -64,6 +64,10 @@ window.__ModuleLoader__.load({
       'runStatus.failed': '失败',
       'runStatus.pending': '未开始',
       'runs.noNodes': '这次运行没有节点',
+      'runs.outputMenu': '输出端口',
+      'runs.viewOutput': '查看输出内容',
+      'runs.downloadOutput': '下载输出内容',
+      'runs.outputHint': '右键查看或下载输出',
       'environment.local': '本机',
       'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
       'executor.local': '本机执行器',
@@ -350,6 +354,10 @@ window.__ModuleLoader__.load({
       'runStatus.failed': 'Failed',
       'runStatus.pending': 'Not started',
       'runs.noNodes': 'This run has no nodes',
+      'runs.outputMenu': 'Output port',
+      'runs.viewOutput': 'View output',
+      'runs.downloadOutput': 'Download output',
+      'runs.outputHint': 'Right-click to view or download output',
       'environment.local': 'Local',
       'environment.localHint': 'Run on the machine hosting the dsh process.',
       'executor.local': 'Local executor',
@@ -1153,6 +1161,23 @@ window.__ModuleLoader__.load({
 }
 .ath-run-nodebar-meta { color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .ath-run-nodebar-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10px; overflow-wrap: anywhere; }
+.ath-output-menu {
+  position: fixed; z-index: 60; min-width: 180px; max-width: 260px;
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  border: 1px solid var(--ath-border-soft); border-radius: 9px;
+  background: var(--dsw-alias-bg-overlay); box-shadow: 0 10px 28px rgba(24, 34, 48, .18);
+}
+.ath-output-menu-head {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 5px 8px 6px; border-bottom: 1px solid var(--ath-border-soft); margin-bottom: 2px;
+  font-size: 10px; color: var(--dsw-alias-label-secondary);
+}
+.ath-output-menu-head code { font-size: 10px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.ath-output-menu button {
+  appearance: none; border: 0; background: transparent; text-align: left; cursor: pointer;
+  padding: 7px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary);
+}
+.ath-output-menu button:hover { background: color-mix(in srgb, var(--ath-accent) 10%, transparent); }
 .ath-run-nodebar .ath-btn { grid-column: 2; grid-row: 1; }
 @keyframes ath-run-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ath-yellow) 45%, transparent); }
@@ -2341,7 +2366,51 @@ window.__ModuleLoader__.load({
       const [view, setView] = useState({ x: 30, y: 24, zoom: 1 });
       const [selectedPath, setSelectedPath] = useState('');
       const [interaction, setInteraction] = useState(null);
+      const [outputMenu, setOutputMenu] = useState(null);
       const canvasRef = useRef(null);
+
+      useEffect(() => {
+        setOutputMenu(null);
+      }, [experiment.id]);
+
+      useEffect(() => {
+        if (!outputMenu) return undefined;
+        const close = () => setOutputMenu(null);
+        const onKey = (event) => {
+          if (event.key === 'Escape') close();
+        };
+        window.addEventListener('pointerdown', close);
+        window.addEventListener('keydown', onKey);
+        return () => {
+          window.removeEventListener('pointerdown', close);
+          window.removeEventListener('keydown', onKey);
+        };
+      }, [outputMenu]);
+
+      const openOutputMenu = (event, node, port) => {
+        if (node.status !== 'succeeded') return;
+        event.preventDefault();
+        event.stopPropagation();
+        setSelectedPath(node.path);
+        setOutputMenu({
+          path: node.path,
+          port,
+          x: Math.min(event.clientX, Math.max(12, window.innerWidth - 210)),
+          y: Math.min(event.clientY, Math.max(12, window.innerHeight - 120)),
+        });
+      };
+
+      const downloadOutput = (pathName, port) => {
+        const href = `${API}/experiments/download?run=${encodeURIComponent(experiment.id)}&node=${encodeURIComponent(
+          pathName,
+        )}&port=${encodeURIComponent(port)}`;
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.download = '';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      };
 
       const positions = useMemo(() => {
         const map = new Map();
@@ -2644,7 +2713,18 @@ window.__ModuleLoader__.load({
                           h(
                             'div',
                             { className: 'ath-node-vports-row ath-node-vports-bottom' },
-                            ports.outputs.map((port) => h('span', { key: `out-${port}`, className: 'ath-vport-name' }, port)),
+                            ports.outputs.map((port) =>
+                              h(
+                                'span',
+                                {
+                                  key: `out-${port}`,
+                                  className: 'ath-vport-name',
+                                  title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                  onContextMenu: (event) => openOutputMenu(event, node, port),
+                                },
+                                port,
+                              ),
+                            ),
                           ),
                         )
                       : rows
@@ -2656,7 +2736,17 @@ window.__ModuleLoader__.load({
                                 'div',
                                 { className: 'ath-port-row', key: row },
                                 h('span', { className: 'ath-port-name ath-port-in-name' }, ports.inputs[row] || ''),
-                                h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
+                                h(
+                                  'span',
+                                  {
+                                    className: 'ath-port-name ath-port-out-name',
+                                    title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                    onContextMenu: ports.outputs[row]
+                                      ? (event) => openOutputMenu(event, node, ports.outputs[row])
+                                      : undefined,
+                                  },
+                                  ports.outputs[row] || '',
+                                ),
                               ),
                             ),
                           )
@@ -2674,7 +2764,9 @@ window.__ModuleLoader__.load({
                     ports.outputs.map((port, index) =>
                       h('div', {
                         key: `out-${port}`,
-                        className: `ath-port-dot ath-run-port ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
+                        className: `ath-port-dot ath-run-port ath-run-port-output ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
+                        title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                        onContextMenu: (event) => openOutputMenu(event, node, port),
                         style:
                           direction === 'vertical'
                             ? { left: portX(index, ports.outputs.length, size.width) - 5, top: size.height - 5 }
@@ -2766,6 +2858,46 @@ window.__ModuleLoader__.load({
                 ),
               )
             : h('div', { className: 'ath-run-hint' }, t('canvas.runHint')),
+          outputMenu
+            ? h(
+                'div',
+                {
+                  className: 'ath-output-menu',
+                  style: { left: outputMenu.x, top: outputMenu.y },
+                  onPointerDown: (event) => event.stopPropagation(),
+                  onContextMenu: (event) => event.preventDefault(),
+                },
+                h(
+                  'div',
+                  { className: 'ath-output-menu-head' },
+                  h('span', null, t('runs.outputMenu')),
+                  h('code', null, `${outputMenu.path} · ${outputMenu.port}`),
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => {
+                      const node = nodeByPath.get(outputMenu.path);
+                      setOutputMenu(null);
+                      if (node) onOpenLog(experiment.id, node);
+                    },
+                  },
+                  t('runs.viewOutput'),
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => {
+                      downloadOutput(outputMenu.path, outputMenu.port);
+                      setOutputMenu(null);
+                    },
+                  },
+                  t('runs.downloadOutput'),
+                ),
+              )
+            : null,
         ),
       );
     }

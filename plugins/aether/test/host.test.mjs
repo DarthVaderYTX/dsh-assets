@@ -373,7 +373,7 @@ test('module assets can be uploaded and run without an explicit command', async 
         kind: 'command',
         command: '',
         inputs: [],
-        outputs: [],
+        outputs: ['result'],
         assetId: asset.assetId,
         assetKind: asset.assetKind,
         assetName: asset.assetName,
@@ -405,6 +405,13 @@ test('module assets can be uploaded and run without an explicit command', async 
   const run = await waitForRun(submitted.payload.experiment.id);
   assert.equal(run.status, 'succeeded');
   assert.match(run.nodes[0].stdoutTail, /asset ok/);
+
+  const download = await fetch(
+    `${base}${API}/experiments/download?run=${encodeURIComponent(run.id)}&node=asset&port=result`,
+  );
+  assert.equal(download.status, 200);
+  assert.match(download.headers.get('content-disposition') || '', /attachment/);
+  assert.match(await download.text(), /asset ok/);
 });
 
 test('a subgraph cannot be run on its own', async () => {
