@@ -232,6 +232,32 @@ test('expandGraph supports nested subgraphs', () => {
   assert.deepEqual(plan.nodes.map((item) => item.path), ['outer/inner/leaf']);
 });
 
+test('expandGraph preserves parallel port edges', () => {
+  const modules = [
+    normalizeModule({
+      id: 'a', name: 'A', kind: 'command', command: 'echo', inputs: [], outputs: ['x', 'y'],
+    }),
+    normalizeModule({
+      id: 'b', name: 'B', kind: 'command', command: 'echo', inputs: ['i', 'j'], outputs: [],
+    }),
+  ];
+  const graph = normalizeGraph({
+    id: 'g',
+    name: 'Parallel ports',
+    nodes: [node('a', 'a'), node('b', 'b')],
+    edges: [
+      { id: 'e1', from: 'a', to: 'b', fromPort: 'x', toPort: 'i' },
+      { id: 'e2', from: 'a', to: 'b', fromPort: 'y', toPort: 'j' },
+    ],
+  });
+  const plan = expandGraph(graph, modules, [graph]);
+  assert.equal(plan.error, null);
+  assert.deepEqual(
+    plan.edges.map((edge) => [edge.fromPort, edge.toPort]),
+    [['x', 'i'], ['y', 'j']],
+  );
+});
+
 test('subgraph reference cycles are rejected', () => {
   const modules = [
     command('a'),

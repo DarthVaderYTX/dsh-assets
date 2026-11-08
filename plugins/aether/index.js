@@ -508,32 +508,42 @@ async function startExperiment(input = {}) {
     };
   });
   const byPath = new Map(nodes.map((node) => [node.path, node]));
-  const outCounts = new Map();
-  const inCounts = new Map();
-  const seenEdges = new Set();
-  const runEdges = [];
-  for (const node of nodes) {
-    for (const depPath of node.deps || []) {
-      const source = byPath.get(depPath);
-      if (!source) continue;
-      const outputs = source.outputs || [];
-      const inputs = node.inputs || [];
-      const outIndex = outCounts.get(depPath) || 0;
-      const inIndex = inCounts.get(node.path) || 0;
-      const fromPort = outputs.length ? outputs[outIndex % outputs.length] : '';
-      const toPort = inputs.length ? inputs[inIndex % inputs.length] : '';
-      const key = `${depPath}>${node.path}>${fromPort}>${toPort}`;
-      if (seenEdges.has(key)) continue;
-      seenEdges.add(key);
-      outCounts.set(depPath, outIndex + 1);
-      inCounts.set(node.path, inIndex + 1);
-      runEdges.push({
-        id: `e-${runEdges.length + 1}`,
-        from: depPath,
-        to: node.path,
-        fromPort,
-        toPort,
-      });
+  const runEdges = Array.isArray(plan.edges)
+    ? plan.edges.map((edge, index) => ({
+        id: `e-${index + 1}`,
+        from: edge.from,
+        to: edge.to,
+        fromPort: edge.fromPort,
+        toPort: edge.toPort,
+      }))
+    : [];
+  if (!runEdges.length && plan.edges === undefined) {
+    const outCounts = new Map();
+    const inCounts = new Map();
+    const seenEdges = new Set();
+    for (const node of nodes) {
+      for (const depPath of node.deps || []) {
+        const source = byPath.get(depPath);
+        if (!source) continue;
+        const outputs = source.outputs || [];
+        const inputs = node.inputs || [];
+        const outIndex = outCounts.get(depPath) || 0;
+        const inIndex = inCounts.get(node.path) || 0;
+        const fromPort = outputs.length ? outputs[outIndex % outputs.length] : '';
+        const toPort = inputs.length ? inputs[inIndex % inputs.length] : '';
+        const key = `${depPath}>${node.path}>${fromPort}>${toPort}`;
+        if (seenEdges.has(key)) continue;
+        seenEdges.add(key);
+        outCounts.set(depPath, outIndex + 1);
+        inCounts.set(node.path, inIndex + 1);
+        runEdges.push({
+          id: `e-${runEdges.length + 1}`,
+          from: depPath,
+          to: node.path,
+          fromPort,
+          toPort,
+        });
+      }
     }
   }
   const run = {

@@ -463,6 +463,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
   if (stack.includes(graph.id)) {
     return {
       nodes: [],
+      edges: [],
       entries: [],
       exits: [],
       entryNodes: [],
@@ -475,6 +476,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
   if (!order) {
     return {
       nodes: [],
+      edges: [],
       entries: [],
       exits: [],
       entryNodes: [],
@@ -491,6 +493,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
 
   const plan = new Map();
   const nodes = [];
+  const edges = [];
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
     const module = modules.get(node.moduleId);
@@ -508,10 +511,13 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         },
         stack: [...stack, graph.id],
       });
-      if (child.error) return { nodes: [], entries: [], exits: [], entryNodes: [], exitNodes: [], error: child.error };
+      if (child.error) {
+        return { nodes: [], edges: [], entries: [], exits: [], entryNodes: [], exitNodes: [], error: child.error };
+      }
       for (const entry of child.entryNodes) entry.deps = unique([...parentDeps, ...entry.deps]);
       plan.set(nodeId, { entries: child.entryNodes, exits: child.exitNodes });
       nodes.push(...child.nodes);
+      edges.push(...child.edges);
     } else {
       const entry = {
         path: pathId,
@@ -545,8 +551,25 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
   const sinks = graph.nodes.filter((node) => !targets.has(node.id));
   const entryNodes = unique(sources.flatMap((node) => plan.get(node.id)?.entries || []));
   const exitNodes = unique(sinks.flatMap((node) => plan.get(node.id)?.exits || []));
+  for (const edge of graph.edges) {
+    const from = plan.get(edge.from);
+    const to = plan.get(edge.to);
+    if (!from || !to) continue;
+    for (const source of from.exits) {
+      for (const target of to.entries) {
+        edges.push({
+          id: `${edge.id}:${source.path}->${target.path}`,
+          from: source.path,
+          to: target.path,
+          fromPort: edge.fromPort,
+          toPort: edge.toPort,
+        });
+      }
+    }
+  }
   return {
     nodes,
+    edges,
     entries: entryNodes.map((item) => item.path),
     exits: exitNodes.map((item) => item.path),
     entryNodes,
