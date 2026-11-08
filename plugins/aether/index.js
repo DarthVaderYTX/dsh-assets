@@ -24,7 +24,7 @@ import {
 import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
 
 const API_PREFIX = '/aether-api';
-const DATA_VERSION = 5;
+const DATA_VERSION = 6;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 20 * 1024 * 1024;
 const MAX_ASSET_FILES = 500;
@@ -207,7 +207,7 @@ async function loadState() {
     stateCache = normalizeState(parsed);
     // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
     // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
-    // v4 → v5 给模块补版本号与版本历史。
+    // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -493,6 +493,7 @@ async function startExperiment(input = {}) {
       executor: target.executor,
       inputs: node.inputs || [],
       outputs: node.outputs || [],
+      requiredInputs: node.requiredInputs || [],
       datasetUri: node.datasetUri || '',
       datasetFormat: node.datasetFormat || '',
       assetPath: node.assetPath ? path.resolve(dataDir(), node.assetPath) : '',
@@ -801,6 +802,7 @@ function moduleContentFields(module) {
     timeoutSec: module.timeoutSec,
     params: module.params || {},
     inputs: module.inputs || [],
+    requiredInputs: module.requiredInputs || [],
     outputs: module.outputs || [],
     graphId: module.graphId,
     datasetUri: module.datasetUri,

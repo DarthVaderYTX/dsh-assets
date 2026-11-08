@@ -414,6 +414,53 @@ test('module assets can be uploaded and run without an explicit command', async 
   assert.match(await download.text(), /asset ok/);
 });
 
+test('graph save rejects an unconnected required input', async () => {
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'required-source', name: 'Required source', kind: 'command', command: 'echo',
+        inputs: [], outputs: ['result'],
+      },
+    },
+  });
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'required-target', name: 'Required target', kind: 'command', command: 'echo',
+        inputs: ['a', 'b'], outputs: [], requiredInputs: ['a'],
+      },
+    },
+  });
+  const baseGraph = {
+    id: 'required-graph',
+    name: 'Required graph',
+    layout: 'vertical',
+    nodes: [
+      { id: 's', moduleId: 'required-source', label: 'Source', x: 40, y: 40 },
+      { id: 't', moduleId: 'required-target', label: 'Target', x: 40, y: 200 },
+    ],
+    edges: [],
+  };
+  const rejected = await call('/graphs', { method: 'POST', body: { graph: baseGraph } });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.payload.error, /必填输入端口「a」/);
+
+  const accepted = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        ...baseGraph,
+        edges: [{ id: 'e1', from: 's', to: 't', fromPort: 'result', toPort: 'a' }],
+      },
+    },
+  });
+  assert.equal(accepted.status, 200);
+});
+
 test('a subgraph cannot be run on its own', async () => {
   const { status, payload } = await call('/experiments', {
     method: 'POST',

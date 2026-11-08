@@ -216,6 +216,10 @@ window.__ModuleLoader__.load({
       'modules.outputs': '输出端口',
       'modules.addPort': '添加端口',
       'modules.portPlaceholder': '端口名',
+      'modules.requiredInput': '必填',
+      'modules.requiredInputHint': '勾选表示该输入端口必须连线；未勾选为可选。',
+      'modules.requiredCount': '必填 {n}',
+      'modules.paramsDefaultHint': '这里填写的是参数默认值；实验中的节点可以单独覆盖，画布节点会显示合并后的参数。',
       'modules.portsHint': '端口是画布上的连线端点；模块可以没有输入或输出，用空列表表示。',
       'modules.command': '命令',
       'modules.commandHint': '可选。留空时尝试执行提交的文件/目录入口；填写时通过 shell 执行，可用 {{参数名}} 插入参数。',
@@ -506,6 +510,10 @@ window.__ModuleLoader__.load({
       'modules.outputs': 'Output ports',
       'modules.addPort': 'Add port',
       'modules.portPlaceholder': 'Port name',
+      'modules.requiredInput': 'Required',
+      'modules.requiredInputHint': 'Checked inputs must be connected; unchecked inputs are optional.',
+      'modules.requiredCount': '{n} required',
+      'modules.paramsDefaultHint': 'These are default parameter values; nodes in experiments can override them, and canvas nodes show the merged values.',
       'modules.portsHint': 'Ports are the connection endpoints on the canvas; a module may have no inputs or no outputs.',
       'modules.command': 'Command',
       'modules.commandHint': 'Optional. Leave blank to run the submitted file/directory entrypoint; otherwise it runs through the shell with {{name}} parameter substitution.',
@@ -915,6 +923,12 @@ window.__ModuleLoader__.load({
 .ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--ath-yellow); flex: 0 0 auto; }
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) auto 24px; }
+.ath-port-required {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  font-size: 10.5px; color: var(--dsw-alias-label-secondary); cursor: pointer;
+}
+.ath-port-required input { accent-color: var(--ath-accent); }
 .ath-canvas-viewport {
   position: relative;
   flex: 1 1 auto;
@@ -985,6 +999,13 @@ window.__ModuleLoader__.load({
 .ath-port-in { left: -7px; }
 .ath-port-out { right: -7px; border-color: var(--ath-accent); }
 .ath-port-dot:hover { transform: scale(1.3); border-color: var(--ath-accent); }
+.ath-port-dot.ath-port-required {
+  border-color: var(--ath-accent); border-width: 3px;
+  background: color-mix(in srgb, var(--ath-accent) 24%, var(--dsw-alias-bg-base));
+}
+.ath-vport-name[data-required="true"], .ath-port-in-name[data-required="true"] {
+  color: var(--ath-accent); font-weight: 650;
+}
 .ath-edges { pointer-events: none; overflow: visible; }
 .ath-edge { fill: none; stroke: var(--ath-edge); stroke-width: 1.6; }
 .ath-edge[data-selected="true"] { stroke: var(--ath-accent); stroke-width: 2.4; }
@@ -1518,8 +1539,9 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function PortsEditor({ t, label, ports, onChange }) {
+    function PortsEditor({ t, label, ports, onChange, requiredPorts, requiredMode = false }) {
       const rows = Array.isArray(ports) ? ports : [];
+      const required = new Set(Array.isArray(requiredPorts) ? requiredPorts : []);
       return h(
         'div',
         { className: 'ath-field' },
@@ -1527,7 +1549,10 @@ window.__ModuleLoader__.load({
         rows.map((port, index) =>
           h(
             'div',
-            { className: 'ath-port-edit-row', key: index },
+            {
+              className: `ath-port-edit-row${requiredMode ? ' ath-port-edit-row-required' : ''}`,
+              key: index,
+            },
             h('input', {
               className: 'ath-input ath-mono',
               type: 'text',
@@ -1536,10 +1561,34 @@ window.__ModuleLoader__.load({
               placeholder: t('modules.portPlaceholder'),
               onChange: (event) => {
                 const next = rows.slice();
+                const previous = next[index];
                 next[index] = event.target.value;
-                onChange(next);
+                const nextRequired = new Set(required);
+                if (previous !== event.target.value && required.has(previous)) {
+                  nextRequired.delete(previous);
+                  if (event.target.value) nextRequired.add(event.target.value);
+                }
+                onChange(next, [...nextRequired]);
               },
             }),
+            requiredMode
+              ? h(
+                  'label',
+                  { className: 'ath-port-required', title: t('modules.requiredInputHint') },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: required.has(port),
+                    disabled: !port,
+                    onChange: (event) => {
+                      const nextRequired = new Set(required);
+                      if (event.target.checked) nextRequired.add(port);
+                      else nextRequired.delete(port);
+                      onChange(rows, [...nextRequired]);
+                    },
+                  }),
+                  h('span', null, t('modules.requiredInput')),
+                )
+              : null,
             h(
               'button',
               {
@@ -1547,19 +1596,30 @@ window.__ModuleLoader__.load({
                 className: 'ath-icon-btn',
                 title: t('action.remove'),
                 'aria-label': t('action.remove'),
-                onClick: () => onChange(rows.filter((_, position) => position !== index)),
+                onClick: () => {
+                  const removed = rows[index];
+                  const nextRequired = new Set(required);
+                  nextRequired.delete(removed);
+                  onChange(
+                    rows.filter((_, position) => position !== index),
+                    [...nextRequired],
+                  );
+                },
               },
               '×',
             ),
           ),
         ),
         rows.length ? null : h('div', { className: 'ath-hint' }, t('canvas.none')),
+        requiredMode && rows.length
+          ? h('div', { className: 'ath-hint', style: { marginTop: 2 } }, t('modules.requiredInputHint'))
+          : null,
         h(
           'button',
           {
             type: 'button',
             className: 'ath-btn ath-btn-ghost',
-            onClick: () => onChange([...rows, '']),
+            onClick: () => onChange([...rows, ''], [...required]),
             style: { alignSelf: 'flex-start', marginTop: 6 },
           },
           t('modules.addPort'),
@@ -2337,6 +2397,7 @@ window.__ModuleLoader__.load({
                 kind: node.kind,
                 inputs: node.inputs || [],
                 outputs: node.outputs || [],
+                requiredInputs: node.requiredInputs || [],
               },
             ]),
           ),
@@ -2663,6 +2724,17 @@ window.__ModuleLoader__.load({
                   const size = sizes.get(node.path) || nodeSizeFor(module, direction);
                   const group = RUN_STATUS_GROUP[node.status] || 'pending';
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
+                  const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
+                  const runParams = node.params || {};
+                  const runParamPairs = Object.entries(runParams).map(([key, value]) => [
+                    key,
+                    String(value == null ? '' : value).replace(/\s+/g, ' '),
+                  ]);
+                  const runParamShort = runParamPairs
+                    .slice(0, 1)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(' · ');
+                  const runParamTitle = runParamPairs.map(([key, value]) => `${key}=${value}`).join('\n');
                   return h(
                     'div',
                     {
@@ -2671,6 +2743,7 @@ window.__ModuleLoader__.load({
                       'data-selected': node.path === selectedPath ? 'true' : 'false',
                       'data-direction': direction,
                       'data-group': group,
+                      title: runParamTitle || undefined,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => {
                         if (event.button !== 0) return;
@@ -2696,7 +2769,7 @@ window.__ModuleLoader__.load({
                         { className: 'ath-node-sub' },
                         `${runStatusLabel(t, node.status)} · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
                           version: node.moduleVersion || 1,
-                        })}`,
+                        })}${runParamShort ? ` · ${runParamShort}` : ''}`,
                       ),
                     ),
                     direction === 'vertical'
@@ -2707,7 +2780,18 @@ window.__ModuleLoader__.load({
                             'div',
                             { className: 'ath-node-vports-row ath-node-vports-top' },
                             ports.inputs.length
-                              ? ports.inputs.map((port) => h('span', { key: `in-${port}`, className: 'ath-vport-name' }, port))
+                              ? ports.inputs.map((port) =>
+                                  h(
+                                    'span',
+                                    {
+                                      key: `in-${port}`,
+                                      className: 'ath-vport-name',
+                                      'data-required': requiredInputs.has(port) ? 'true' : 'false',
+                                      title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                                    },
+                                    `${port}${requiredInputs.has(port) ? ' *' : ''}`,
+                                  ),
+                                )
                               : null,
                           ),
                           h(
@@ -2735,7 +2819,14 @@ window.__ModuleLoader__.load({
                               h(
                                 'div',
                                 { className: 'ath-port-row', key: row },
-                                h('span', { className: 'ath-port-name ath-port-in-name' }, ports.inputs[row] || ''),
+                                h(
+                                  'span',
+                                  {
+                                    className: 'ath-port-name ath-port-in-name',
+                                    'data-required': requiredInputs.has(ports.inputs[row]) ? 'true' : 'false',
+                                  },
+                                  `${ports.inputs[row] || ''}${requiredInputs.has(ports.inputs[row]) ? ' *' : ''}`,
+                                ),
                                 h(
                                   'span',
                                   {
@@ -2754,7 +2845,8 @@ window.__ModuleLoader__.load({
                     ports.inputs.map((port, index) =>
                       h('div', {
                         key: `in-${port}`,
-                        className: `ath-port-dot ath-run-port ath-port-in${direction === 'vertical' ? ' ath-port-top' : ''}`,
+                        className: `ath-port-dot ath-run-port ath-port-in${requiredInputs.has(port) ? ' ath-port-required' : ''}${direction === 'vertical' ? ' ath-port-top' : ''}`,
+                        title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
                         style:
                           direction === 'vertical'
                             ? { left: portX(index, ports.inputs.length, size.width) - 5, top: -5 }
@@ -3797,6 +3889,21 @@ window.__ModuleLoader__.load({
                   const size = sizes.get(node.id) || nodeSizeFor(module, direction);
                   const selected = selection.nodes.includes(node.id);
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
+                  const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
+                  const effectiveParams = module ? { ...(module.params || {}), ...(node.params || {}) } : {};
+                  const paramPairs = Object.entries(effectiveParams).map(([key, value]) => [
+                    key,
+                    String(value == null ? '' : value).replace(/\s+/g, ' '),
+                  ]);
+                  const paramShort = paramPairs
+                    .slice(0, 2)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(' · ');
+                  const paramFull = paramPairs.map(([key, value]) => `${key}=${value}`).join('\n');
+                  const moduleName = module ? module.name : node.moduleId;
+                  const nodeSub = `${moduleName}${paramShort ? ` · ${paramShort}` : ''}${
+                    paramPairs.length > 2 ? ` +${paramPairs.length - 2}` : ''
+                  }`;
                   return h(
                     'div',
                     {
@@ -3815,14 +3922,8 @@ window.__ModuleLoader__.load({
                       module && module.kind !== 'command' ? h('span', { className: 'ath-node-tag' }, t(`modules.kind.${module.kind}`)) : null,
                       h(
                         'span',
-                        { className: 'ath-node-sub' },
-                        (() => {
-                          const name = module ? module.name : node.moduleId;
-                          const count = module
-                            ? Object.keys({ ...(module.params || {}), ...(node.params || {}) }).length
-                            : 0;
-                          return count ? `${name} · ${count} ${t('common.params')}` : name;
-                        })(),
+                        { className: 'ath-node-sub', title: paramFull || undefined },
+                        nodeSub,
                       ),
                     ),
                     direction === 'vertical'
@@ -3833,7 +3934,18 @@ window.__ModuleLoader__.load({
                             'div',
                             { className: 'ath-node-vports-row ath-node-vports-top' },
                             ports.inputs.length
-                              ? ports.inputs.map((port) => h('span', { key: `in-${port}`, className: 'ath-vport-name' }, port))
+                              ? ports.inputs.map((port) =>
+                                  h(
+                                    'span',
+                                    {
+                                      key: `in-${port}`,
+                                      className: 'ath-vport-name',
+                                      'data-required': requiredInputs.has(port) ? 'true' : 'false',
+                                      title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                                    },
+                                    `${port}${requiredInputs.has(port) ? ' *' : ''}`,
+                                  ),
+                                )
                               : ports.outputs.length
                                 ? null
                                 : h('span', { className: 'ath-vport-empty' }, t('canvas.noPorts')),
@@ -3852,7 +3964,14 @@ window.__ModuleLoader__.load({
                               h(
                                 'div',
                                 { className: 'ath-port-row', key: row },
-                                h('span', { className: 'ath-port-name ath-port-in-name' }, ports.inputs[row] || ''),
+                                h(
+                                  'span',
+                                  {
+                                    className: 'ath-port-name ath-port-in-name',
+                                    'data-required': requiredInputs.has(ports.inputs[row]) ? 'true' : 'false',
+                                  },
+                                  `${ports.inputs[row] || ''}${requiredInputs.has(ports.inputs[row]) ? ' *' : ''}`,
+                                ),
                                 h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
                               ),
                             ),
@@ -3861,7 +3980,7 @@ window.__ModuleLoader__.load({
                     ports.inputs.map((port, index) =>
                       h('div', {
                         key: `in-${port}`,
-                        className: `ath-port-dot ath-port-in${direction === 'vertical' ? ' ath-port-top' : ''}`,
+                        className: `ath-port-dot ath-port-in${requiredInputs.has(port) ? ' ath-port-required' : ''}${direction === 'vertical' ? ' ath-port-top' : ''}`,
                         style:
                           direction === 'vertical'
                             ? { left: portX(index, ports.inputs.length, size.width) - 6, top: -6 }
@@ -3869,7 +3988,7 @@ window.__ModuleLoader__.load({
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
-                        title: `${t('canvas.input')}: ${port}`,
+                        title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
                       }),
                     ),
@@ -4047,6 +4166,9 @@ window.__ModuleLoader__.load({
                           'span',
                           { className: 'ath-palette-meta' },
                           tr(t, 'canvas.portSummary', { inputs: ports.inputs.length, outputs: ports.outputs.length }),
+                          (module.requiredInputs || []).length
+                            ? ` · ${tr(t, 'modules.requiredCount', { n: module.requiredInputs.length })}`
+                            : '',
                           ` · ${t('common.params')} ${Object.keys(module.params || {}).length}`,
                           ` · ${tr(t, 'modules.versionLabel', { version: module.version || 1 })}`,
                           module.environmentName ? ` · ${module.environmentName}` : '',
@@ -4429,7 +4551,13 @@ window.__ModuleLoader__.load({
                       h(
                         'span',
                         null,
-                        `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${(module.outputs || []).length}`,
+                        `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${
+                          (module.outputs || []).length
+                        }${
+                          (module.requiredInputs || []).length
+                            ? ` · ${tr(t, 'modules.requiredCount', { n: module.requiredInputs.length })}`
+                            : ''
+                        }`,
                       ),
                       module.versionCount
                         ? h('span', null, tr(t, 'modules.versionHistory', { n: module.versionCount }))
@@ -4635,6 +4763,7 @@ window.__ModuleLoader__.load({
                               ? {
                                   kind,
                                   inputs: [],
+                                  requiredInputs: [],
                                   outputs: module.outputs && module.outputs.length ? module.outputs : ['output'],
                                 }
                               : { kind },
@@ -4687,7 +4816,9 @@ window.__ModuleLoader__.load({
                       t,
                       label: t('modules.inputs'),
                       ports: module.inputs || [],
-                      onChange: (inputs) => patch({ inputs }),
+                      requiredPorts: module.requiredInputs || [],
+                      requiredMode: true,
+                      onChange: (inputs, requiredInputs) => patch({ inputs, requiredInputs }),
                     }),
                     h(PortsEditor, {
                       t,
@@ -4900,6 +5031,7 @@ window.__ModuleLoader__.load({
                 value: module.params,
                 onChange: (params) => patch({ params }),
               }),
+              h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
             ),
           ),
           h(
@@ -5451,6 +5583,7 @@ window.__ModuleLoader__.load({
               timeoutSec: 300,
               params: {},
               inputs: nextKind === 'dataset' ? [] : ['input'],
+              requiredInputs: [],
               outputs: ['output'],
               graphId: '',
               datasetUri: '',

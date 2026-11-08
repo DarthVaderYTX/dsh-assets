@@ -113,6 +113,12 @@ export function normalizeModule(raw) {
   const source = isPlainObject(raw) ? raw : {};
   const kind = source.kind === 'graph' ? 'graph' : source.kind === 'dataset' ? 'dataset' : 'command';
   const timeout = Number(source.timeoutSec);
+  const inputs = kind === 'dataset' ? [] : normalizePorts(source.inputs, DEFAULT_INPUT_PORTS);
+  const requiredInputs = Array.isArray(source.requiredInputs)
+    ? unique(source.requiredInputs.map((name) => String(name == null ? '' : name).trim())).filter((name) =>
+        inputs.includes(name),
+      )
+    : [];
   return {
     id: String(source.id == null ? '' : source.id).trim(),
     name: String(source.name == null ? '' : source.name).trim(),
@@ -125,8 +131,9 @@ export function normalizeModule(raw) {
         ? Math.min(MAX_TIMEOUT_SEC, Math.max(1, Math.round(timeout)))
         : DEFAULT_TIMEOUT_SEC,
     params: normalizeParams(source.params),
-    inputs: kind === 'dataset' ? [] : normalizePorts(source.inputs, DEFAULT_INPUT_PORTS),
+    inputs,
     outputs: normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS),
+    requiredInputs,
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
     datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
     datasetFormat: kind === 'dataset' ? String(source.datasetFormat == null ? '' : source.datasetFormat).trim() : '',
@@ -334,6 +341,9 @@ export function validateModule(module, modules = [], graphs = [], environments =
     if (!PARAM_KEY.test(key)) errors.push(`参数名「${key}」无效（字母或下划线开头，可含数字、点、横线）`);
     if (value !== null && typeof value === 'object') errors.push(`参数「${key}」的值必须是字符串、数字或布尔值`);
   }
+  for (const port of module.requiredInputs || []) {
+    if (!(module.inputs || []).includes(port)) errors.push(`必填输入端口「${port}」不在输入端口列表中`);
+  }
   if (module.kind === 'command') {
     if (!(module.timeoutSec >= 1 && module.timeoutSec <= MAX_TIMEOUT_SEC)) {
       errors.push(`超时需在 1–${MAX_TIMEOUT_SEC} 秒之间`);
@@ -403,6 +413,20 @@ export function validateGraph(graph, modules = [], graphs = []) {
     const pair = `${edge.from}>${edge.to}>${edge.fromPort || ''}>${edge.toPort || ''}`;
     if (pairs.has(pair)) errors.push('存在重复连线');
     pairs.add(pair);
+  }
+  if (!errors.length) {
+    for (const node of graph.nodes) {
+      const module = moduleById.get(node.moduleId);
+      if (!module || !Array.isArray(module.requiredInputs) || !module.requiredInputs.length) continue;
+      const connected = new Set(
+        graph.edges.filter((edge) => edge.to === node.id).map((edge) => edge.toPort).filter(Boolean),
+      );
+      for (const port of module.requiredInputs) {
+        if (!connected.has(port)) {
+          errors.push(`节点「${nodeName(node)}」的必填输入端口「${port}」尚未连线`);
+        }
+      }
+    }
   }
   if (!errors.length) {
     const cycle = findCycle(graph.nodes, graph.edges);
@@ -534,6 +558,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         environmentId: module?.environmentId || 'local',
         inputs: module?.inputs || [],
         outputs: module?.outputs || [],
+        requiredInputs: module?.requiredInputs || [],
         datasetUri: module?.datasetUri || '',
         datasetFormat: module?.datasetFormat || '',
         assetPath: module?.assetPath || '',

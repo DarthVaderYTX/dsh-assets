@@ -165,6 +165,40 @@ test('validateModule validates subgraph requirements and allows an empty command
   assert.deepEqual(validateModule(normalizeModule({ ...sub, graphId: 'g1' }), [], graphs), []);
 });
 
+test('validateGraph enforces required input ports', () => {
+  const source = normalizeModule({
+    id: 'source', name: 'Source', kind: 'command', command: 'echo', inputs: [], outputs: ['result'],
+  });
+  const target = normalizeModule({
+    id: 'target', name: 'Target', kind: 'command', command: 'echo', inputs: ['a', 'b'], outputs: [],
+    requiredInputs: ['a'],
+  });
+  const graph = normalizeGraph({
+    id: 'required-graph',
+    name: 'Required graph',
+    nodes: [node('s', 'source'), node('t', 'target')],
+    edges: [],
+  });
+  assert.match(
+    validateGraph(graph, [source, target], []).join('\n'),
+    /必填输入端口「a」尚未连线/,
+  );
+  graph.edges = [{ id: 'e1', from: 's', to: 't', fromPort: 'result', toPort: 'a' }];
+  assert.deepEqual(validateGraph(graph, [source, target], []), []);
+});
+
+test('normalizeModule only keeps required inputs that exist', () => {
+  const module = normalizeModule({
+    id: 'm',
+    name: 'M',
+    kind: 'command',
+    command: 'echo',
+    inputs: ['a', 'b'],
+    requiredInputs: ['a', 'missing'],
+  });
+  assert.deepEqual(module.requiredInputs, ['a']);
+});
+
 test('modules default to the local environment and reject unknown ones', () => {
   const module = normalizeModule({ id: 'm', name: 'M', kind: 'command', command: 'echo' });
   assert.equal(module.environmentId, 'local');
