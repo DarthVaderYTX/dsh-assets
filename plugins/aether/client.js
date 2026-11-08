@@ -146,7 +146,7 @@ window.__ModuleLoader__.load({
       'canvas.zoomIn': '放大',
       'canvas.zoomOut': '缩小',
       'canvas.zoomReset': '恢复 100%',
-      'canvas.hint': '拖拽空白处平移 · 滚轮缩放 · Shift+右键框选模块与连线 · 从端口拖出连线',
+      'canvas.hint': '拖拽空白处平移 · 滚轮缩放 · Shift+右键框选模块与连线 · 从端口拖出连线 · 从右侧拖入模块',
       'canvas.input': '输入',
       'canvas.output': '输出',
       'canvas.inputs': '输入',
@@ -164,7 +164,9 @@ window.__ModuleLoader__.load({
       'canvas.filter.graph': '子图',
       'canvas.filter.dataset': '数据集',
       'canvas.emptyPalette': '没有匹配的项',
-      'canvas.paletteHint': '单击加入画布',
+      'canvas.paletteHint': '拖拽到画布或单击添加',
+      'canvas.nodeParamsHint': '继承模块默认参数，可在这里覆盖。',
+      'canvas.dropHint': '放到画布上',
       'canvas.portSummary': '{inputs} 入 · {outputs} 出',
       'canvas.direction': '布局',
       'canvas.vertical': '上下',
@@ -185,6 +187,7 @@ window.__ModuleLoader__.load({
       'modules.datasetUriHint': '本地路径或 URL；数据集节点执行时会把该值写给下游。',
       'modules.datasetFormat': '格式',
       'modules.datasetFormatHint': '例如 jsonl / csv / parquet（可选）',
+      'modules.datasetPortsHint': '数据集只有输出端点，用于连接到下游模块的输入。',
       'modules.ports': '端口',
       'modules.inputs': '输入端口',
       'modules.outputs': '输出端口',
@@ -383,7 +386,7 @@ window.__ModuleLoader__.load({
       'canvas.zoomIn': 'Zoom in',
       'canvas.zoomOut': 'Zoom out',
       'canvas.zoomReset': 'Reset to 100%',
-      'canvas.hint': 'Drag the background to pan · wheel to zoom · Shift+right-drag to select modules and edges · drag from a port to connect',
+      'canvas.hint': 'Drag the background to pan · wheel to zoom · Shift+right-drag to select modules and edges · drag from a port to connect · drag modules in from the right',
       'canvas.input': 'Input',
       'canvas.output': 'Output',
       'canvas.inputs': 'Inputs',
@@ -401,7 +404,9 @@ window.__ModuleLoader__.load({
       'canvas.filter.graph': 'Subgraphs',
       'canvas.filter.dataset': 'Datasets',
       'canvas.emptyPalette': 'Nothing matches',
-      'canvas.paletteHint': 'Click to add to the canvas',
+      'canvas.paletteHint': 'Drag onto the canvas or click to add',
+      'canvas.nodeParamsHint': 'Inherited from the module defaults; override them here.',
+      'canvas.dropHint': 'Drop on the canvas',
       'canvas.portSummary': '{inputs} in · {outputs} out',
       'canvas.direction': 'Layout',
       'canvas.vertical': 'Vertical',
@@ -422,6 +427,7 @@ window.__ModuleLoader__.load({
       'modules.datasetUriHint': 'A local path or URL; a dataset node writes it to downstream nodes when run.',
       'modules.datasetFormat': 'Format',
       'modules.datasetFormatHint': 'e.g. jsonl / csv / parquet (optional)',
+      'modules.datasetPortsHint': 'Datasets have output ports only; connect them to downstream inputs.',
       'modules.ports': 'Ports',
       'modules.inputs': 'Input ports',
       'modules.outputs': 'Output ports',
@@ -858,8 +864,9 @@ window.__ModuleLoader__.load({
 .ath-palette-item {
   display: flex; flex-direction: column; gap: 2px; text-align: left;
   border: 1px solid transparent; border-radius: 8px;
-  background: transparent; color: inherit; padding: 6px 8px; cursor: pointer;
+  background: transparent; color: inherit; padding: 6px 8px; cursor: grab;
 }
+.ath-palette-item:active { cursor: grabbing; }
 .ath-palette-item:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l1); }
 .ath-palette-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ath-palette-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -869,6 +876,19 @@ window.__ModuleLoader__.load({
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ath-inspector { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.ath-module-detail {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;
+  padding: 8px 10px; border: 1px solid var(--ath-border-soft); border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.ath-module-detail-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.ath-module-detail-name { font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-param-summary { display: flex; flex-wrap: wrap; gap: 4px; }
+.ath-canvas-viewport[data-dragover="true"] {
+  outline: 2px dashed var(--ath-accent);
+  outline-offset: -4px;
+  background-color: color-mix(in srgb, var(--ath-accent) 5%, var(--dsw-alias-bg-base));
+}
 .ath-canvas-tools { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 20px); }
 .ath-page-runs .ath-split > .ath-run-detail {
   overflow: hidden; display: flex; flex-direction: column; gap: 10px;
@@ -2507,8 +2527,11 @@ window.__ModuleLoader__.load({
       const [connecting, setConnecting] = useState(null);
       const [paletteQuery, setPaletteQuery] = useState('');
       const [paletteFilter, setPaletteFilter] = useState('all');
+      const [dragOver, setDragOver] = useState(false);
 
       const canvasRef = useRef(null);
+      const inspectorRef = useRef(null);
+      const draggingRef = useRef(false);
       const viewRef = useRef(view);
       viewRef.current = view;
       const graphRef = useRef(graph);
@@ -2910,7 +2933,7 @@ window.__ModuleLoader__.load({
         };
       }, [interaction, onDraftChange]);
 
-      const addModule = (module) => {
+      const addModule = (module, anchor) => {
         if (!module) return;
         const current = draftRef.current;
         const id = uniqueNodeId(current.graph, module.id);
@@ -2918,9 +2941,9 @@ window.__ModuleLoader__.load({
         const element = canvasRef.current;
         const rect = element ? element.getBoundingClientRect() : null;
         const zoom = viewRef.current.zoom;
-        const centerX = rect ? (rect.width / 2 - viewRef.current.x) / zoom : 120;
-        const centerY = rect ? (rect.height / 2 - viewRef.current.y) / zoom : 80;
-        const offset = (current.graph.nodes.length % 4) * 18;
+        const centerX = anchor ? anchor.x : rect ? (rect.width / 2 - viewRef.current.x) / zoom : 120;
+        const centerY = anchor ? anchor.y : rect ? (rect.height / 2 - viewRef.current.y) / zoom : 80;
+        const offset = anchor ? 0 : (current.graph.nodes.length % 4) * 18;
         onDraftChange({
           ...current,
           graph: {
@@ -2939,6 +2962,23 @@ window.__ModuleLoader__.load({
           },
         });
         setSelection({ nodes: [id], edges: [] });
+      };
+
+      const onCanvasDrop = (event) => {
+        event.preventDefault();
+        setDragOver(false);
+        const moduleId =
+          event.dataTransfer.getData('text/aether-module') || event.dataTransfer.getData('text/plain');
+        const module = moduleByIdRef.current.get(moduleId);
+        if (!module) return;
+        const element = canvasRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        const zoom = viewRef.current.zoom;
+        addModule(module, {
+          x: (event.clientX - rect.left - viewRef.current.x) / zoom,
+          y: (event.clientY - rect.top - viewRef.current.y) / zoom,
+        });
       };
 
       const onViewportPointerDown = (event) => {
@@ -3048,6 +3088,10 @@ window.__ModuleLoader__.load({
       const singleNode = selectedNodes.length === 1 && selectedEdges.length === 0 ? selectedNodes[0] : null;
       const singleEdge = selectedEdges.length === 1 && selectedNodes.length === 0 ? selectedEdges[0] : null;
       const selectedCount = selectedNodes.length + selectedEdges.length;
+      const singleNodeId = singleNode ? singleNode.id : '';
+      useEffect(() => {
+        if (inspectorRef.current) inspectorRef.current.scrollTop = 0;
+      }, [singleNodeId]);
       const bounds = canvasBounds(graph, positions, moduleById, direction, sizes);
       const padding = 500;
       const svgLeft = bounds.minX - padding;
@@ -3136,8 +3180,21 @@ window.__ModuleLoader__.load({
                 ref: canvasRef,
                 onPointerDown: onViewportPointerDown,
                 onContextMenu: (event) => event.preventDefault(),
+                onDragEnter: (event) => {
+                  event.preventDefault();
+                  setDragOver(true);
+                },
+                onDragOver: (event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'copy';
+                },
+                onDragLeave: (event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false);
+                },
+                onDrop: onCanvasDrop,
                 'data-panning': interaction && interaction.type === 'pan' ? 'true' : 'false',
                 'data-connecting': connecting ? 'true' : 'false',
+                'data-dragover': dragOver ? 'true' : 'false',
               },
               graph.nodes.length === 0
                 ? h('div', { className: 'ath-canvas-empty' }, h('strong', null, t('graphs.canvasEmpty')))
@@ -3409,7 +3466,23 @@ window.__ModuleLoader__.load({
                           key: module.id,
                           type: 'button',
                           className: 'ath-palette-item',
-                          onClick: () => addModule(module),
+                          draggable: true,
+                          onClick: () => {
+                            if (draggingRef.current) return;
+                            addModule(module);
+                          },
+                          onDragStart: (event) => {
+                            draggingRef.current = true;
+                            event.dataTransfer.setData('text/aether-module', module.id);
+                            event.dataTransfer.setData('text/plain', module.id);
+                            event.dataTransfer.effectAllowed = 'copy';
+                          },
+                          onDragEnd: () => {
+                            setDragOver(false);
+                            window.setTimeout(() => {
+                              draggingRef.current = false;
+                            }, 0);
+                          },
                           title: t('canvas.paletteHint'),
                         },
                         h(
@@ -3422,6 +3495,7 @@ window.__ModuleLoader__.load({
                           'span',
                           { className: 'ath-palette-meta' },
                           tr(t, 'canvas.portSummary', { inputs: ports.inputs.length, outputs: ports.outputs.length }),
+                          ` · ${t('common.params')} ${Object.keys(module.params || {}).length}`,
                           module.environmentName ? ` · ${module.environmentName}` : '',
                         ),
                         h(
@@ -3440,15 +3514,60 @@ window.__ModuleLoader__.load({
             ),
             h(
               'div',
-              { className: 'ath-card ath-inspector' },
+              { className: 'ath-card ath-inspector', ref: inspectorRef },
               h('h4', { className: 'ath-section-title' }, t('graphs.inspector')),
               singleNode
                 ? h(
                     'div',
                     null,
+                    (() => {
+                      const module = moduleById.get(singleNode.moduleId);
+                      const ports = modulePorts(module);
+                      const entries = Object.entries(singleNode.params || {});
+                      return h(
+                        'div',
+                        { className: 'ath-module-detail' },
+                        h(
+                          'div',
+                          { className: 'ath-module-detail-head' },
+                          h('strong', { className: 'ath-module-detail-name' }, module ? module.name : singleNode.moduleId),
+                          module
+                            ? h(
+                                'span',
+                                { className: 'ath-badge', 'data-kind': module.kind },
+                                t(`modules.kind.${module.kind}`),
+                              )
+                            : null,
+                          module
+                            ? h(
+                                'span',
+                                { className: 'ath-node-env' },
+                                environmentName(t, environments, module.environmentId, module.environmentName),
+                              )
+                            : null,
+                        ),
+                        h(
+                          'div',
+                          { className: 'ath-hint' },
+                          `${t('canvas.inputs')}: ${ports.inputs.length ? ports.inputs.join(', ') : t('canvas.none')} · ${t(
+                            'canvas.outputs',
+                          )}: ${ports.outputs.length ? ports.outputs.join(', ') : t('canvas.none')}`,
+                        ),
+                        h(
+                          'div',
+                          { className: 'ath-param-summary' },
+                          entries.length
+                            ? entries.map(([key, value]) =>
+                                h('span', { className: 'ath-param-chip', key }, `${key}=${value}`),
+                              )
+                            : h('span', { className: 'ath-hint' }, t('common.noParams')),
+                        ),
+                        h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('canvas.nodeParamsHint')),
+                      );
+                    })(),
                     h(
                       'div',
-                      { className: 'ath-field' },
+                      { className: 'ath-field', style: { marginTop: 12 } },
                       h('label', { className: 'ath-label' }, t('graphs.nodeLabel')),
                       h('input', {
                         className: 'ath-input',
@@ -3475,24 +3594,13 @@ window.__ModuleLoader__.load({
                     ),
                     (() => {
                       const module = moduleById.get(singleNode.moduleId);
-                      const ports = modulePorts(module);
-                      return h(
-                        'div',
-                        { className: 'ath-hint', style: { marginTop: 8 } },
-                        `${t('canvas.inputs')}: ${ports.inputs.length ? ports.inputs.join(', ') : t('canvas.none')} · ${t(
-                          'canvas.outputs',
-                        )}: ${ports.outputs.length ? ports.outputs.join(', ') : t('canvas.none')}`,
-                      );
-                    })(),
-                    (() => {
-                      const module = moduleById.get(singleNode.moduleId);
                       return module && module.kind === 'graph'
                         ? h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'graphs.subgraphTip', { name: module.name }))
                         : null;
                     })(),
                     h(
                       'div',
-                      { className: 'ath-field', style: { marginTop: 14 } },
+                      { className: 'ath-field', style: { marginTop: 12 } },
                       h('label', { className: 'ath-label' }, t('common.params')),
                       h(ParamsEditor, {
                         key: `${singleNode.id}:${singleNode.moduleId}`,
@@ -3800,7 +3908,16 @@ window.__ModuleLoader__.load({
                         type: 'button',
                         className: 'ath-chip',
                         'data-active': module.kind === kind ? 'true' : 'false',
-                        onClick: () => patch({ kind }),
+                        onClick: () =>
+                          patch(
+                            kind === 'dataset'
+                              ? {
+                                  kind,
+                                  inputs: [],
+                                  outputs: module.outputs && module.outputs.length ? module.outputs : ['output'],
+                                }
+                              : { kind },
+                          ),
                       },
                       t(`modules.kind.${kind}`),
                     ),
@@ -3830,23 +3947,37 @@ window.__ModuleLoader__.load({
                   `${environmentHint(t, currentEnvironment)} ${t('modules.environmentHint')}`.trim(),
                 ),
               ),
-              h(
-                'div',
-                { className: 'ath-grid-2', style: { marginTop: 12 } },
-                h(PortsEditor, {
-                  t,
-                  label: t('modules.inputs'),
-                  ports: module.inputs || [],
-                  onChange: (inputs) => patch({ inputs }),
-                }),
-                h(PortsEditor, {
-                  t,
-                  label: t('modules.outputs'),
-                  ports: module.outputs || [],
-                  onChange: (outputs) => patch({ outputs }),
-                }),
-              ),
-              h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.portsHint')),
+              module.kind === 'dataset'
+                ? h(
+                    'div',
+                    { style: { marginTop: 12 } },
+                    h(PortsEditor, {
+                      t,
+                      label: t('modules.outputs'),
+                      ports: module.outputs || [],
+                      onChange: (outputs) => patch({ outputs }),
+                    }),
+                    h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.datasetPortsHint')),
+                  )
+                : h(
+                    'div',
+                    { className: 'ath-grid-2', style: { marginTop: 12 } },
+                    h(PortsEditor, {
+                      t,
+                      label: t('modules.inputs'),
+                      ports: module.inputs || [],
+                      onChange: (inputs) => patch({ inputs }),
+                    }),
+                    h(PortsEditor, {
+                      t,
+                      label: t('modules.outputs'),
+                      ports: module.outputs || [],
+                      onChange: (outputs) => patch({ outputs }),
+                    }),
+                  ),
+              module.kind === 'dataset'
+                ? null
+                : h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.portsHint')),
               module.kind === 'graph'
                 ? h(
                     'div',

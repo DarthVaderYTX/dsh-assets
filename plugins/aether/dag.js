@@ -125,7 +125,7 @@ export function normalizeModule(raw) {
         ? Math.min(MAX_TIMEOUT_SEC, Math.max(1, Math.round(timeout)))
         : DEFAULT_TIMEOUT_SEC,
     params: normalizeParams(source.params),
-    inputs: normalizePorts(source.inputs, DEFAULT_INPUT_PORTS),
+    inputs: kind === 'dataset' ? [] : normalizePorts(source.inputs, DEFAULT_INPUT_PORTS),
     outputs: normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS),
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
     datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
@@ -331,6 +331,8 @@ export function validateModule(module, modules = [], graphs = [], environments =
     if (!module.datasetUri) errors.push('数据集模块需要填写 URI / 路径');
     else if (module.datasetUri.length > 500) errors.push('数据集 URI 过长');
     if ((module.datasetFormat || '').length > 40) errors.push('数据集格式名过长');
+    if (module.inputs && module.inputs.length) errors.push('数据集模块不能有输入端口');
+    if (!module.outputs || !module.outputs.length) errors.push('数据集模块至少需要一个输出端口');
   }
   return errors;
 }

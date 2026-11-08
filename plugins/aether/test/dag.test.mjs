@@ -124,6 +124,18 @@ test('dataset modules require a URI and graphs default to vertical layout', () =
     validateModule(normalizeModule({ id: 'ds', name: 'Dataset', kind: 'dataset', datasetUri: 'data/x.jsonl' }), [], []),
     [],
   );
+
+  const noInputs = normalizeModule({
+    id: 'ds2',
+    name: 'Dataset 2',
+    kind: 'dataset',
+    datasetUri: 'data/x.jsonl',
+    inputs: ['unexpected'],
+    outputs: [],
+  });
+  assert.deepEqual(noInputs.inputs, []);
+  assert.match(validateModule(noInputs, [], []).join('\n'), /至少需要一个输出端口/);
+
   assert.equal(normalizeGraph({ name: 'G' }).layout, 'vertical');
   assert.equal(normalizeGraph({ name: 'G', layout: 'horizontal' }).layout, 'horizontal');
 });
