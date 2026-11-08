@@ -254,7 +254,7 @@
       }, [outputMenu]);
 
       const openOutputMenu = (event, node, port) => {
-        if (node.status !== 'succeeded') return;
+        if (node.kind !== 'dataset' && node.status !== 'succeeded') return;
         event.preventDefault();
         event.stopPropagation();
         setSelectedPath(node.path);
@@ -613,7 +613,12 @@
                                 {
                                   key: `out-${port}`,
                                   className: 'ath-vport-name',
-                                  title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                  title:
+                                    node.kind === 'dataset' || node.status === 'succeeded'
+                                      ? t('runs.outputHint')
+                                      : undefined,
+                                  onClick: (event) => openOutputMenu(event, node, port),
+                                  onPointerDown: (event) => event.stopPropagation(),
                                   onContextMenu: (event) => openOutputMenu(event, node, port),
                                 },
                                 port,
@@ -641,7 +646,16 @@
                                   'span',
                                   {
                                     className: 'ath-port-name ath-port-out-name',
-                                    title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                    title:
+                                      node.kind === 'dataset' || node.status === 'succeeded'
+                                        ? t('runs.outputHint')
+                                        : undefined,
+                                    onClick: ports.outputs[row]
+                                      ? (event) => openOutputMenu(event, node, ports.outputs[row])
+                                      : undefined,
+                                    onPointerDown: ports.outputs[row]
+                                      ? (event) => event.stopPropagation()
+                                      : undefined,
                                     onContextMenu: ports.outputs[row]
                                       ? (event) => openOutputMenu(event, node, ports.outputs[row])
                                       : undefined,
@@ -667,7 +681,12 @@
                       h('div', {
                         key: `out-${port}`,
                         className: `ath-port-dot ath-run-port ath-run-port-output ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
-                        title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                        title:
+                          node.kind === 'dataset' || node.status === 'succeeded'
+                            ? t('runs.outputHint')
+                            : undefined,
+                        onClick: (event) => openOutputMenu(event, node, port),
+                        onPointerDown: (event) => event.stopPropagation(),
                         onContextMenu: (event) => openOutputMenu(event, node, port),
                         style:
                           direction === 'vertical'

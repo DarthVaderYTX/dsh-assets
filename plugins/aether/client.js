@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
       'runs.downloadOutput': '下载输出内容',
       'runs.outputTitle': '输出结果',
       'runs.outputEmpty': '没有输出内容',
-      'runs.outputHint': '右键查看或下载输出',
+      'runs.outputHint': '点击或右键查看 / 下载输出',
       'environment.local': '本机',
       'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
       'executor.local': '本机执行器',
@@ -367,7 +367,7 @@ window.__ModuleLoader__.load({
       'runs.downloadOutput': 'Download output',
       'runs.outputTitle': 'Output',
       'runs.outputEmpty': 'No output',
-      'runs.outputHint': 'Right-click to view or download output',
+      'runs.outputHint': 'Click or right-click to view or download output',
       'environment.local': 'Local',
       'environment.localHint': 'Run on the machine hosting the dsh process.',
       'executor.local': 'Local executor',
@@ -2592,7 +2592,7 @@ window.__ModuleLoader__.load({
       }, [outputMenu]);
 
       const openOutputMenu = (event, node, port) => {
-        if (node.status !== 'succeeded') return;
+        if (node.kind !== 'dataset' && node.status !== 'succeeded') return;
         event.preventDefault();
         event.stopPropagation();
         setSelectedPath(node.path);
@@ -2951,7 +2951,12 @@ window.__ModuleLoader__.load({
                                 {
                                   key: `out-${port}`,
                                   className: 'ath-vport-name',
-                                  title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                  title:
+                                    node.kind === 'dataset' || node.status === 'succeeded'
+                                      ? t('runs.outputHint')
+                                      : undefined,
+                                  onClick: (event) => openOutputMenu(event, node, port),
+                                  onPointerDown: (event) => event.stopPropagation(),
                                   onContextMenu: (event) => openOutputMenu(event, node, port),
                                 },
                                 port,
@@ -2979,7 +2984,16 @@ window.__ModuleLoader__.load({
                                   'span',
                                   {
                                     className: 'ath-port-name ath-port-out-name',
-                                    title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                                    title:
+                                      node.kind === 'dataset' || node.status === 'succeeded'
+                                        ? t('runs.outputHint')
+                                        : undefined,
+                                    onClick: ports.outputs[row]
+                                      ? (event) => openOutputMenu(event, node, ports.outputs[row])
+                                      : undefined,
+                                    onPointerDown: ports.outputs[row]
+                                      ? (event) => event.stopPropagation()
+                                      : undefined,
                                     onContextMenu: ports.outputs[row]
                                       ? (event) => openOutputMenu(event, node, ports.outputs[row])
                                       : undefined,
@@ -3005,7 +3019,12 @@ window.__ModuleLoader__.load({
                       h('div', {
                         key: `out-${port}`,
                         className: `ath-port-dot ath-run-port ath-run-port-output ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
-                        title: node.status === 'succeeded' ? t('runs.outputHint') : undefined,
+                        title:
+                          node.kind === 'dataset' || node.status === 'succeeded'
+                            ? t('runs.outputHint')
+                            : undefined,
+                        onClick: (event) => openOutputMenu(event, node, port),
+                        onPointerDown: (event) => event.stopPropagation(),
                         onContextMenu: (event) => openOutputMenu(event, node, port),
                         style:
                           direction === 'vertical'
