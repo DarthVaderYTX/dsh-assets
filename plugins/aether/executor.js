@@ -20,7 +20,7 @@
 //   3. 取消：转发到远端 run id；日志通过 readLog 从远端拉取或跳到外部地址。
 //   4. 跨执行器的图需要在执行器之间传递上游 stdout；当前 local 实现用共享的
 //      run.dir/outputs 目录，远程实现需要对象存储或服务器中转。
-import { promises as fsp, createWriteStream } from 'node:fs';
+import { existsSync, promises as fsp, createWriteStream } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
@@ -77,13 +77,43 @@ function renderTemplate(text, params, builtins) {
   });
 }
 
-function resolveCwd(raw) {
+function resolveCwd(raw, node = {}) {
   const text = String(raw || '').trim();
-  if (!text) return process.cwd();
+  if (!text) return node.assetPath ? path.resolve(node.assetPath) : process.cwd();
   let expanded = text;
   if (expanded === '~') expanded = os.homedir();
   else if (expanded.startsWith('~/') || expanded.startsWith('~\\')) expanded = path.join(os.homedir(), expanded.slice(2));
   return path.resolve(expanded);
+}
+
+function quoteShellArg(value) {
+  return `"${String(value || '').replace(/"/g, '\\"')}"`;
+}
+
+function assetEntrypoint(node) {
+  if (!node.assetPath) return '';
+  if (node.assetKind === 'file') {
+    const file = path.join(node.assetPath, path.basename(node.assetName || ''));
+    return existsSync(file) ? file : '';
+  }
+  if (node.assetKind !== 'directory') return '';
+  for (const candidate of ['run.sh', 'run.ps1', 'main.py', 'index.js', 'main.js', 'run.js']) {
+    const file = path.join(node.assetPath, candidate);
+    if (existsSync(file)) return file;
+  }
+  return '';
+}
+
+function defaultAssetCommand(node) {
+  const file = assetEntrypoint(node);
+  if (!file) return '';
+  const ext = path.extname(file).toLowerCase();
+  const quoted = quoteShellArg(file);
+  if (ext === '.py') return `python ${quoted}`;
+  if (ext === '.js' || ext === '.mjs' || ext === '.cjs') return `node ${quoted}`;
+  if (ext === '.sh') return `bash ${quoted}`;
+  if (ext === '.ps1') return `powershell -NoProfile -File ${quoted}`;
+  return quoted;
 }
 
 function paramEnvKey(key) {
@@ -106,6 +136,11 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_ENVIRONMENT_NAME = node.environmentName || '';
   env.AETHER_EXECUTOR = node.executor || 'local';
   env.AETHER_PORTS = JSON.stringify({ inputs: node.inputs || [], outputs: node.outputs || [] });
+  env.AETHER_MODULE_ASSET = node.assetPath || '';
+  env.AETHER_MODULE_ASSET_KIND = node.assetKind || '';
+  env.AETHER_MODULE_ASSET_NAME = node.assetName || '';
+  env.AETHER_MODULE_FILE =
+    node.assetPath && node.assetKind === 'file' ? path.join(node.assetPath, path.basename(node.assetName || '')) : '';
   if (node.kind === 'dataset') {
     env.AETHER_DATASET_URI = node.datasetUri || '';
     env.AETHER_DATASET_FORMAT = node.datasetFormat || '';
@@ -415,7 +450,8 @@ export class LocalExecutor {
       graph_id: run.graphId,
       input_file: inputFile,
     };
-    const command = renderTemplate(node.command, node.params || {}, builtins);
+    const rawCommand = node.command && node.command.trim() ? node.command : defaultAssetCommand(node);
+    const command = renderTemplate(rawCommand, node.params || {}, builtins);
     const outLog = path.join(directory, 'stdout.log');
     const errLog = path.join(directory, 'stderr.log');
     const outStream = createWriteStream(outLog);
@@ -431,12 +467,16 @@ export class LocalExecutor {
     let spawnError = null;
 
     try {
-      child = spawn(command, {
-        shell: true,
-        cwd: resolveCwd(node.cwd),
-        env: buildEnv(run, node, directory, inputFile, inputs),
-        windowsHide: true,
-      });
+      if (!command.trim()) {
+        spawnError = new Error('模块没有设置执行命令，提交的文件/目录里也没有可识别的入口');
+      } else {
+        child = spawn(command, {
+          shell: true,
+          cwd: resolveCwd(node.cwd, node),
+          env: buildEnv(run, node, directory, inputFile, inputs),
+          windowsHide: true,
+        });
+      }
     } catch (error) {
       spawnError = error;
     }

@@ -328,6 +328,85 @@ test('module saves create a new version by default and can overwrite it', async 
   assert.equal(module.versions, undefined);
 });
 
+test('new command modules can be required to submit an asset', async () => {
+  const { status, payload } = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      requireAsset: true,
+      module: {
+        id: 'no-asset',
+        name: 'No asset',
+        kind: 'command',
+        command: 'echo',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(status, 400);
+  assert.match(payload.error, /文件或目录/);
+});
+
+test('module assets can be uploaded and run without an explicit command', async () => {
+  const source = Buffer.from('console.log("asset ok")', 'utf8').toString('base64');
+  const uploaded = await call('/modules/assets', {
+    method: 'POST',
+    body: {
+      kind: 'file',
+      name: 'run.js',
+      files: [{ path: 'run.js', data: source }],
+    },
+  });
+  assert.equal(uploaded.status, 200);
+  const asset = uploaded.payload.asset;
+  assert.equal(asset.assetKind, 'file');
+  assert.equal(asset.assetName, 'run.js');
+
+  const created = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'asset-module',
+        name: 'Asset module',
+        kind: 'command',
+        command: '',
+        inputs: [],
+        outputs: [],
+        assetId: asset.assetId,
+        assetKind: asset.assetKind,
+        assetName: asset.assetName,
+        assetPath: asset.assetPath,
+        assetFileCount: asset.assetFileCount,
+      },
+    },
+  });
+  assert.equal(created.status, 200);
+
+  const graph = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: 'asset-graph',
+        name: 'Asset graph',
+        layout: 'vertical',
+        nodes: [{ id: 'asset', moduleId: 'asset-module', label: 'Asset', x: 40, y: 40 }],
+        edges: [],
+      },
+    },
+  });
+  assert.equal(graph.status, 200);
+
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: 'asset-graph' },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded');
+  assert.match(run.nodes[0].stdoutTail, /asset ok/);
+});
+
 test('a subgraph cannot be run on its own', async () => {
   const { status, payload } = await call('/experiments', {
     method: 'POST',

@@ -155,10 +155,10 @@ test('nodes keep canvas coordinates through normalization', () => {
   assert.equal(graph.nodes[1].y, null);
 });
 
-test('validateModule enforces command and subgraph requirements', () => {
+test('validateModule validates subgraph requirements and allows an empty command', () => {
   const graphs = [{ id: 'g1', name: 'G1', nodes: [], edges: [] }];
   const empty = normalizeModule({ id: 'x', name: 'X', kind: 'command', command: '' });
-  assert.match(validateModule(empty, [], graphs).join('\n'), /填写命令/);
+  assert.deepEqual(validateModule(empty, [], graphs), []);
 
   const sub = normalizeModule({ id: 'sub', name: 'Sub', kind: 'graph', graphId: 'nope' });
   assert.match(validateModule(sub, [], graphs).join('\n'), /不存在/);

@@ -130,6 +130,14 @@ export function normalizeModule(raw) {
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
     datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
     datasetFormat: kind === 'dataset' ? String(source.datasetFormat == null ? '' : source.datasetFormat).trim() : '',
+    assetId: String(source.assetId == null ? '' : source.assetId).trim(),
+    assetKind: source.assetKind === 'directory' ? 'directory' : source.assetKind === 'file' ? 'file' : '',
+    assetName: String(source.assetName == null ? '' : source.assetName).trim(),
+    assetPath: String(source.assetPath == null ? '' : source.assetPath).trim(),
+    assetFileCount:
+      Number.isFinite(Number(source.assetFileCount)) && Number(source.assetFileCount) >= 0
+        ? Math.floor(Number(source.assetFileCount))
+        : 0,
     environmentId: String(source.environmentId == null ? '' : source.environmentId).trim() || 'local',
     version:
       Number.isFinite(Number(source.version)) && Number(source.version) > 0
@@ -327,7 +335,6 @@ export function validateModule(module, modules = [], graphs = [], environments =
     if (value !== null && typeof value === 'object') errors.push(`参数「${key}」的值必须是字符串、数字或布尔值`);
   }
   if (module.kind === 'command') {
-    if (!module.command.trim()) errors.push('命令模块需要填写命令');
     if (!(module.timeoutSec >= 1 && module.timeoutSec <= MAX_TIMEOUT_SEC)) {
       errors.push(`超时需在 1–${MAX_TIMEOUT_SEC} 秒之间`);
     }
@@ -523,6 +530,9 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         outputs: module?.outputs || [],
         datasetUri: module?.datasetUri || '',
         datasetFormat: module?.datasetFormat || '',
+        assetPath: module?.assetPath || '',
+        assetKind: module?.assetKind || '',
+        assetName: module?.assetName || '',
         moduleVersion: module?.version || 1,
       };
       plan.set(nodeId, { entries: [entry], exits: [entry] });

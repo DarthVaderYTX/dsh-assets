@@ -212,7 +212,7 @@ window.__ModuleLoader__.load({
       'modules.portPlaceholder': '端口名',
       'modules.portsHint': '端口是画布上的连线端点；模块可以没有输入或输出，用空列表表示。',
       'modules.command': '命令',
-      'modules.commandHint': '通过 shell 执行。可用 {{参数名}} 插入参数；环境变量见下方说明。',
+      'modules.commandHint': '可选。留空时尝试执行提交的文件/目录入口；填写时通过 shell 执行，可用 {{参数名}} 插入参数。',
       'modules.cwd': '工作目录',
       'modules.cwdHint': '留空使用 DSH 进程的当前目录；支持 ~。',
       'modules.timeout': '超时（秒）',
@@ -226,6 +226,20 @@ window.__ModuleLoader__.load({
       'modules.usedByCount': '{n} 张图',
       'modules.notUsed': '尚未被使用',
       'modules.envTitle': '执行时注入的环境',
+      'modules.assetTitle': '模块文件 / 目录',
+      'modules.assetKind.file': '文件',
+      'modules.assetKind.directory': '目录',
+      'modules.chooseFile': '选择文件',
+      'modules.chooseDir': '选择目录',
+      'modules.clearAsset': '移除',
+      'modules.assetRequired': '新建命令模块必须提交一个文件或目录',
+      'modules.assetOptional': '可提交一个文件或目录作为模块实现',
+      'modules.assetHint': '提交的文件会复制到 Aether 工作区；命令留空时尝试执行该文件或目录中的 run.sh / main.py / index.js 等入口。',
+      'modules.assetFiles': '共 {n} 个文件',
+      'modules.assetUploading': '提交中…',
+      'modules.assetTooLarge': '文件总大小超过 12MB，请精简后重试',
+      'modules.assetUploadFailed': '文件提交失败',
+      'modules.noAsset': '未提交文件',
       'modules.envHint': 'AETHER_INPUT_FILE（上游输入 JSON 文件）、AETHER_NODE_DIR（节点目录）、AETHER_PARAMS（参数 JSON）、AETHER_INPUTS（上游摘要 JSON）、AETHER_RUN_ID / AETHER_NODE_PATH。',
       'modules.noGraphs': '还没有实验可选，先创建一个实验。',
       'modules.deleteHint': '删除后模块会从模块库移除；被图引用的模块不能直接删除。',
@@ -482,7 +496,7 @@ window.__ModuleLoader__.load({
       'modules.portPlaceholder': 'Port name',
       'modules.portsHint': 'Ports are the connection endpoints on the canvas; a module may have no inputs or no outputs.',
       'modules.command': 'Command',
-      'modules.commandHint': 'Runs through the shell. Insert parameters with {{name}}; environment variables are listed below.',
+      'modules.commandHint': 'Optional. Leave blank to run the submitted file/directory entrypoint; otherwise it runs through the shell with {{name}} parameter substitution.',
       'modules.cwd': 'Working directory',
       'modules.cwdHint': 'Blank uses the DSH process working directory; ~ is supported.',
       'modules.timeout': 'Timeout (seconds)',
@@ -496,6 +510,20 @@ window.__ModuleLoader__.load({
       'modules.usedByCount': '{n} experiments',
       'modules.notUsed': 'Not used yet',
       'modules.envTitle': 'Injected environment',
+      'modules.assetTitle': 'Module file / directory',
+      'modules.assetKind.file': 'File',
+      'modules.assetKind.directory': 'Directory',
+      'modules.chooseFile': 'Choose file',
+      'modules.chooseDir': 'Choose directory',
+      'modules.clearAsset': 'Remove',
+      'modules.assetRequired': 'A new command module must include a file or directory',
+      'modules.assetOptional': 'Optionally include a file or directory as the module implementation',
+      'modules.assetHint': 'Files are copied into the Aether workspace. If the command is blank, Aether tries run.sh / main.py / index.js and similar entrypoints.',
+      'modules.assetFiles': '{n} files',
+      'modules.assetUploading': 'Submitting…',
+      'modules.assetTooLarge': 'Files exceed 12MB in total; trim them and retry',
+      'modules.assetUploadFailed': 'Failed to submit files',
+      'modules.noAsset': 'No file',
       'modules.envHint': 'AETHER_INPUT_FILE (upstream inputs JSON), AETHER_NODE_DIR (node folder), AETHER_PARAMS (params JSON), AETHER_INPUTS (upstream summary JSON), AETHER_RUN_ID / AETHER_NODE_PATH.',
       'modules.noGraphs': 'No experiments available; create one first.',
       'modules.deleteHint': 'Deleting removes the module from the library; modules used by graphs cannot be deleted.',
@@ -562,10 +590,11 @@ window.__ModuleLoader__.load({
 .ath-root {
   --ath-accent: color-mix(in srgb, var(--dsw-alias-brand-primary) 72%, #94a7ba);
   --ath-accent-soft: color-mix(in srgb, var(--ath-accent) 14%, transparent);
-  --ath-green: #4f9b78;
-  --ath-yellow: #c9a34a;
-  --ath-red: #bf7070;
-  --ath-gray: #99a3ad;
+  --ath-green: #24b56c;
+  --ath-yellow: #e6a315;
+  --ath-red: #e34d4d;
+  --ath-gray: #8d99a6;
+  --ath-lake: #2aa7c2;
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 6px 18px rgba(32, 43, 61, .07);
@@ -665,6 +694,11 @@ window.__ModuleLoader__.load({
 }
 .ath-editor-tab-close:hover { background: color-mix(in srgb, var(--ath-red) 12%, transparent); color: var(--ath-red); }
 .ath-subgraph-link { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.ath-asset-chip {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--ath-accent) 28%, var(--ath-border-soft));
+  border-radius: 8px; background: color-mix(in srgb, var(--ath-accent) 6%, transparent);
+}
 .ath-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .ath-page {
   flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
@@ -724,7 +758,7 @@ window.__ModuleLoader__.load({
 }
 .ath-badge[data-kind="command"] { color: var(--ath-accent); border-color: color-mix(in srgb, var(--ath-accent) 40%, transparent); }
 .ath-badge[data-kind="graph"] { color: var(--ath-yellow); border-color: color-mix(in srgb, var(--ath-yellow) 40%, transparent); }
-.ath-badge[data-kind="dataset"] { color: var(--ath-green); border-color: color-mix(in srgb, var(--ath-green) 40%, transparent); }
+.ath-badge[data-kind="dataset"] { color: var(--ath-lake); border-color: color-mix(in srgb, var(--ath-lake) 40%, transparent); }
 .ath-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap; }
 .ath-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .ath-status[data-status="running"] { color: var(--ath-yellow); }
@@ -857,6 +891,10 @@ window.__ModuleLoader__.load({
   box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
 }
 .ath-canvas-node:hover { border-color: var(--dsw-alias-border-l2); }
+.ath-canvas-node[data-kind="dataset"] {
+  border-color: color-mix(in srgb, var(--ath-lake) 48%, var(--dsw-alias-border-l1));
+  background: color-mix(in srgb, var(--ath-lake) 8%, var(--dsw-alias-bg-layer-1));
+}
 .ath-canvas-node[data-selected="true"] { border-color: var(--ath-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 22%, transparent); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
 .ath-canvas-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -895,6 +933,16 @@ window.__ModuleLoader__.load({
   cursor: grab;
 }
 .ath-node-card:active { cursor: grabbing; }
+.ath-node-card[data-kind="dataset"] {
+  border-color: color-mix(in srgb, var(--ath-lake) 50%, var(--ath-border-soft));
+  background: color-mix(in srgb, var(--ath-lake) 9%, var(--dsw-alias-bg-layer-1));
+}
+.ath-node-card[data-kind="dataset"]::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--ath-lake);
+}
+.ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-lake) 34%, var(--ath-border-soft)); }
+.ath-node-card[data-kind="dataset"] .ath-node-tag { color: var(--ath-lake); }
 .ath-node-card[data-selected="true"] {
   border-color: var(--ath-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-accent) 24%, transparent);
@@ -1048,15 +1096,16 @@ window.__ModuleLoader__.load({
 .ath-run-node[data-group="failed"] { --ath-status: var(--ath-red); }
 .ath-run-node[data-group="pending"] { --ath-status: var(--ath-gray); }
 .ath-run-node {
-  border-color: color-mix(in srgb, var(--ath-status) 42%, var(--ath-border-soft));
-  background: color-mix(in srgb, var(--ath-status) 10%, var(--dsw-alias-bg-layer-1));
+  border-color: color-mix(in srgb, var(--ath-status) 48%, var(--ath-border-soft));
+  background: color-mix(in srgb, var(--ath-status) 14%, var(--dsw-alias-bg-layer-1));
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--ath-status) 72%, transparent), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-selected="true"] {
   border-color: var(--ath-status);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-status) 26%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ath-status) 30%, transparent), inset 0 3px 0 var(--ath-status);
 }
 .ath-run-node .ath-node-sub { color: var(--ath-status); font-weight: 600; }
-.ath-run-node .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-status) 28%, var(--ath-border-soft)); }
+.ath-run-node .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-status) 38%, var(--ath-border-soft)); }
 .ath-run-pulse {
   width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; margin-left: auto;
   background: var(--ath-yellow);
@@ -1283,6 +1332,18 @@ window.__ModuleLoader__.load({
 
     function clone(value) {
       return JSON.parse(JSON.stringify(value));
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = String(reader.result || '');
+          resolve(text.slice(text.indexOf(',') + 1));
+        };
+        reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+      });
     }
 
     function uniqueExperimentName(base, graphs, suffix) {
@@ -3587,6 +3648,7 @@ window.__ModuleLoader__.load({
                       key: node.id,
                       className: 'ath-node-card',
                       'data-selected': selected ? 'true' : 'false',
+                      'data-kind': module ? module.kind : 'command',
                       'data-direction': direction,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => onNodePointerDown(event, node),
@@ -3596,7 +3658,17 @@ window.__ModuleLoader__.load({
                       { className: 'ath-node-head' },
                       h('span', { className: 'ath-node-title' }, node.label || (module ? module.name : node.moduleId)),
                       module && module.kind !== 'command' ? h('span', { className: 'ath-node-tag' }, t(`modules.kind.${module.kind}`)) : null,
-                      h('span', { className: 'ath-node-sub' }, module ? module.name : node.moduleId),
+                      h(
+                        'span',
+                        { className: 'ath-node-sub' },
+                        (() => {
+                          const name = module ? module.name : node.moduleId;
+                          const count = module
+                            ? Object.keys({ ...(module.params || {}), ...(node.params || {}) }).length
+                            : 0;
+                          return count ? `${name} · ${count} ${t('common.params')}` : name;
+                        })(),
+                      ),
                     ),
                     direction === 'vertical'
                       ? h(
@@ -4189,6 +4261,15 @@ window.__ModuleLoader__.load({
                       'div',
                       { className: 'ath-stat-row' },
                       module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
+                      module.kind === 'command'
+                        ? h(
+                            'span',
+                            null,
+                            module.assetName
+                              ? `${t(`modules.assetKind.${module.assetKind || 'file'}`)}: ${module.assetName}`
+                              : t('modules.noAsset'),
+                          )
+                        : null,
                       h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
                       h(
                         'span',
@@ -4217,13 +4298,64 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function ModuleEditor({ t, data, draft, setDraft, onSave, onBack, saving, errors }) {
+    function ModuleEditor({ t, data, draft, setDraft, onUploadAsset, onSave, onBack, saving, errors }) {
       const module = draft.module;
       const environments = data.environments || [];
       const currentEnvironment =
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
+      const fileInputRef = useRef(null);
+      const dirInputRef = useRef(null);
+      const [assetBusy, setAssetBusy] = useState(false);
+      const [assetError, setAssetError] = useState('');
+      const needsAsset = isNew && module.kind === 'command' && !module.assetId;
+
+      useEffect(() => {
+        const input = dirInputRef.current;
+        if (input) {
+          input.setAttribute('webkitdirectory', '');
+          input.setAttribute('directory', '');
+        }
+      }, [module.kind]);
+
+      const handleAssetFiles = async (fileList, kind) => {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        setAssetBusy(true);
+        setAssetError('');
+        try {
+          const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+          if (totalSize > 12 * 1024 * 1024) throw new Error(t('modules.assetTooLarge'));
+          const first = files[0];
+          const rootName =
+            kind === 'directory'
+              ? (first.webkitRelativePath || '').split('/')[0] || first.name
+              : first.name;
+          const payloadFiles = [];
+          for (const file of files) {
+            const parts = (file.webkitRelativePath || file.name).split('/');
+            const relative =
+              kind === 'directory' && parts.length > 1 ? parts.slice(1).join('/') : file.name;
+            payloadFiles.push({ path: relative, data: await readFileAsBase64(file) });
+          }
+          const asset = await onUploadAsset({ kind, name: rootName, files: payloadFiles });
+          if (!asset) throw new Error(t('modules.assetUploadFailed'));
+          patch({
+            assetId: asset.assetId,
+            assetKind: asset.assetKind,
+            assetName: asset.assetName,
+            assetPath: asset.assetPath,
+            assetFileCount: asset.assetFileCount,
+          });
+        } catch (error) {
+          setAssetError(error && error.message ? error.message : String(error));
+        } finally {
+          setAssetBusy(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          if (dirInputRef.current) dirInputRef.current.value = '';
+        }
+      };
       return h(
         'div',
         { className: 'ath-page' },
@@ -4238,7 +4370,13 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'ath-btn', onClick: onBack, disabled: saving }, t('action.back')),
             h(
               'button',
-              { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onSave, disabled: saving },
+              {
+                type: 'button',
+                className: 'ath-btn ath-btn-primary',
+                onClick: onSave,
+                disabled: saving || assetBusy || needsAsset,
+                title: needsAsset ? t('modules.assetRequired') : undefined,
+              },
               saving ? t('modules.saving') : t('modules.save'),
             ),
           ),
@@ -4463,6 +4601,89 @@ window.__ModuleLoader__.load({
                   : h(
                     'div',
                     null,
+                    h(
+                      'div',
+                      { className: 'ath-field', style: { marginTop: 12 } },
+                      h('label', { className: 'ath-label' }, t('modules.assetTitle')),
+                      module.assetId
+                        ? h(
+                            'div',
+                            { className: 'ath-asset-chip' },
+                            h('span', { className: 'ath-badge' }, t(`modules.assetKind.${module.assetKind}`)),
+                            h('span', { className: 'ath-mono' }, module.assetName || module.assetId),
+                            module.assetFileCount
+                              ? h('span', { className: 'ath-hint' }, tr(t, 'modules.assetFiles', { n: module.assetFileCount }))
+                              : null,
+                          )
+                        : h(
+                            'div',
+                            { className: 'ath-hint' },
+                            needsAsset ? t('modules.assetRequired') : t('modules.assetOptional'),
+                          ),
+                      h(
+                        'div',
+                        { className: 'ath-actions', style: { marginTop: 8 } },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'ath-btn ath-btn-ghost',
+                            disabled: assetBusy,
+                            onClick: () => {
+                              if (fileInputRef.current) fileInputRef.current.click();
+                            },
+                          },
+                          assetBusy ? t('modules.assetUploading') : t('modules.chooseFile'),
+                        ),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'ath-btn ath-btn-ghost',
+                            disabled: assetBusy,
+                            onClick: () => {
+                              if (dirInputRef.current) dirInputRef.current.click();
+                            },
+                          },
+                          t('modules.chooseDir'),
+                        ),
+                        module.assetId
+                          ? h(
+                              'button',
+                              {
+                                type: 'button',
+                                className: 'ath-btn ath-btn-ghost ath-btn-danger',
+                                disabled: assetBusy,
+                                onClick: () =>
+                                  patch({
+                                    assetId: '',
+                                    assetKind: '',
+                                    assetName: '',
+                                    assetPath: '',
+                                    assetFileCount: 0,
+                                  }),
+                              },
+                              t('modules.clearAsset'),
+                            )
+                          : null,
+                      ),
+                      h('input', {
+                        ref: fileInputRef,
+                        type: 'file',
+                        style: { display: 'none' },
+                        onChange: (event) => void handleAssetFiles(event.target.files, 'file'),
+                      }),
+                      h('input', {
+                        ref: dirInputRef,
+                        type: 'file',
+                        multiple: true,
+                        style: { display: 'none' },
+                        onChange: (event) => void handleAssetFiles(event.target.files, 'directory'),
+                      }),
+                      module.assetPath ? h('div', { className: 'ath-hint ath-mono' }, module.assetPath) : null,
+                      h('div', { className: 'ath-hint' }, t('modules.assetHint')),
+                      assetError ? h('div', { className: 'ath-error' }, assetError) : null,
+                    ),
                     h(
                       'div',
                       { className: 'ath-field', style: { marginTop: 12 } },
@@ -5053,6 +5274,11 @@ window.__ModuleLoader__.load({
         });
       };
 
+      const uploadModuleAsset = async (payload) => {
+        const result = await request('/modules/assets', { method: 'POST', body: payload });
+        return result.asset;
+      };
+
       const startModule = (module, kind = 'command') => {
         setModuleErrors([]);
         if (module) {
@@ -5095,6 +5321,9 @@ window.__ModuleLoader__.load({
               module: moduleDraft.module,
               create: Boolean(moduleDraft.isNew),
               overwriteVersion: Boolean(moduleDraft.overwriteVersion),
+              requireAsset: Boolean(
+                moduleDraft.isNew && moduleDraft.module.kind === 'command' && !moduleDraft.module.assetId,
+              ),
             },
           });
           pushToast(t('toast.saved'));
@@ -5197,6 +5426,7 @@ window.__ModuleLoader__.load({
           data: data || { modules: [], graphs: [], environments: [], executors: [] },
           draft: moduleDraft,
           setDraft: setModuleDraft,
+          onUploadAsset: uploadModuleAsset,
           onSave: () => void saveModule(),
           onBack: () => {
             setModuleDraft(null);

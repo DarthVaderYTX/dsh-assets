@@ -26,6 +26,8 @@ import { LocalExecutor, resolvePlacements } from './executor.js';
 const API_PREFIX = '/aether-api';
 const DATA_VERSION = 5;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_ASSET_BYTES = 20 * 1024 * 1024;
+const MAX_ASSET_FILES = 500;
 const MAX_CONCURRENCY = 8;
 const MAX_RUNS = 200;
 
@@ -493,6 +495,9 @@ async function startExperiment(input = {}) {
       outputs: node.outputs || [],
       datasetUri: node.datasetUri || '',
       datasetFormat: node.datasetFormat || '',
+      assetPath: node.assetPath ? path.resolve(dataDir(), node.assetPath) : '',
+      assetKind: node.assetKind || '',
+      assetName: node.assetName || '',
       status: 'pending',
       startedAt: null,
       endedAt: null,
@@ -749,12 +754,12 @@ function sendText(res, status, text, contentType = 'text/plain; charset=utf-8') 
   res.end(text);
 }
 
-async function readBody(req) {
+async function readBody(req, limit = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw httpError(413, '请求体过大');
+    if (size > limit) throw httpError(413, '请求体过大');
     chunks.push(chunk);
   }
   const text = Buffer.concat(chunks).toString('utf8');
@@ -790,6 +795,11 @@ function moduleContentFields(module) {
     graphId: module.graphId,
     datasetUri: module.datasetUri,
     datasetFormat: module.datasetFormat,
+    assetId: module.assetId,
+    assetKind: module.assetKind,
+    assetName: module.assetName,
+    assetPath: module.assetPath,
+    assetFileCount: module.assetFileCount,
     environmentId: module.environmentId,
   };
 }
@@ -800,6 +810,77 @@ function sameModuleContent(left, right) {
 
 function moduleSnapshot(module) {
   return { version: module.version || 1, savedAt: Date.now(), ...moduleContentFields(module) };
+}
+
+function assetBaseDir() {
+  return path.join(dataDir(), 'modules', 'assets');
+}
+
+function moduleAssetRoot(module) {
+  if (!module || !module.assetPath) return '';
+  const root = path.resolve(dataDir(), module.assetPath);
+  const base = path.resolve(assetBaseDir());
+  if (root !== base && !root.startsWith(base + path.sep)) return '';
+  return root;
+}
+
+function safeAssetRelative(raw) {
+  const text = String(raw || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  const parts = text.split('/');
+  if (
+    !parts.length ||
+    parts.some((part) => !part || part === '.' || part === '..' || part.includes(':')) ||
+    text.length > 240
+  ) {
+    throw httpError(400, `模块文件路径不合法：${raw}`);
+  }
+  return parts.join(path.sep);
+}
+
+async function storeModuleAsset(body) {
+  const kind = body.kind === 'directory' ? 'directory' : 'file';
+  const name = String(body.name || '').trim().slice(0, 120) || (kind === 'file' ? 'module-file' : 'module-dir');
+  const files = Array.isArray(body.files) ? body.files : [];
+  if (!files.length) throw httpError(400, '请至少提交一个模块文件');
+  if (files.length > MAX_ASSET_FILES) throw httpError(400, `模块文件数量不能超过 ${MAX_ASSET_FILES}`);
+  let total = 0;
+  const decoded = files.map((file) => {
+    const relative = safeAssetRelative(file && file.path);
+    const data = file && typeof file.data === 'string' ? file.data : '';
+    if (!data) throw httpError(400, `模块文件内容为空：${relative}`);
+    const buffer = Buffer.from(data, 'base64');
+    total += buffer.length;
+    if (total > MAX_ASSET_BYTES) {
+      throw httpError(413, `模块文件总大小超过 ${Math.round(MAX_ASSET_BYTES / 1024 / 1024)}MB`);
+    }
+    return { relative, buffer };
+  });
+  if (kind === 'file' && decoded.length !== 1) throw httpError(400, '提交单个文件时只能包含一个文件');
+
+  const assetId = `asset-${randomUUID()}`;
+  const root = path.join(assetBaseDir(), assetId);
+  try {
+    await fsp.mkdir(root, { recursive: true });
+    for (const item of decoded) {
+      const target = path.join(root, item.relative);
+      if (!target.startsWith(root + path.sep)) throw httpError(400, '模块文件路径越界');
+      await fsp.mkdir(path.dirname(target), { recursive: true });
+      await fsp.writeFile(target, item.buffer);
+    }
+  } catch (error) {
+    await fsp.rm(root, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  return {
+    assetId,
+    assetKind: kind,
+    assetName: name,
+    assetPath: path.join('modules', 'assets', assetId),
+    assetFileCount: decoded.length,
+    assetSize: total,
+  };
 }
 
 async function saveModule(input, options = {}) {
@@ -819,6 +900,25 @@ async function saveModule(input, options = {}) {
   const existing = state.modules.find((item) => item.id === module.id);
   if (!create && !existing) throw httpError(404, '模块不存在');
   const errors = validateModule(module, state.modules, state.graphs, state.environments);
+  if (module.assetId) {
+    const root = moduleAssetRoot(module);
+    if (!root) {
+      errors.push('模块文件路径不合法，请重新提交文件或目录');
+    } else {
+      const rootStat = await fsp.stat(root).catch(() => null);
+      if (!rootStat || !rootStat.isDirectory()) {
+        errors.push('模块文件或目录不存在，请重新提交');
+      } else if (module.assetKind === 'file') {
+        const fileName = path.basename(module.assetName || '');
+        const fileStat = fileName
+          ? await fsp.stat(path.join(root, fileName)).catch(() => null)
+          : null;
+        if (!fileStat || !fileStat.isFile()) errors.push('模块文件不存在，请重新提交');
+      }
+    }
+  } else if (create && module.kind === 'command' && options.requireAsset) {
+    errors.push('新建命令模块需要提交对应的文件或目录');
+  }
   if (errors.length) throw httpError(400, errors.join('；'));
 
   const overwriteVersion = Boolean(options.overwriteVersion);
@@ -861,6 +961,8 @@ async function deleteModule(id) {
     throw httpError(409, `模块仍被这些实验使用：${usedBy.map((graph) => graph.name).join('、')}，请先删除对应节点`);
   }
   await writeState({ ...state, modules: state.modules.filter((item) => item.id !== id), updatedAt: Date.now() });
+  const assetRoot = moduleAssetRoot(module);
+  if (assetRoot) await fsp.rm(assetRoot, { recursive: true, force: true }).catch(() => {});
   return { ok: true, id };
 }
 
@@ -962,11 +1064,18 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (method === 'POST' && route === '/modules/assets') {
+    const body = await readBody(req, MAX_ASSET_BYTES * 2);
+    sendJson(res, 200, { ok: true, asset: await storeModuleAsset(body) });
+    return;
+  }
+
   if (method === 'POST' && route === '/modules') {
     const body = await readBody(req);
     const module = await saveModule(body.module || body, {
       create: Boolean(body.create),
       overwriteVersion: Boolean(body.overwriteVersion),
+      requireAsset: Boolean(body.requireAsset),
     });
     sendJson(res, 200, { ok: true, module });
     return;
