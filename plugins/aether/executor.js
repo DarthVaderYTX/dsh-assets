@@ -104,6 +104,36 @@ function assetEntrypoint(node) {
   return '';
 }
 
+async function readNodeArtifacts(directory, ports) {
+  const manifestPath = path.join(directory, 'aether-outputs.json');
+  let manifest;
+  try {
+    manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  } catch {
+    return [];
+  }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return [];
+  const artifacts = [];
+  const base = path.resolve(directory);
+  for (const [port, spec] of Object.entries(manifest)) {
+    if (!ports.includes(port)) continue;
+    const raw = typeof spec === 'string' ? spec : spec && spec.path;
+    const relative = String(raw || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!relative) continue;
+    const absolute = path.resolve(directory, relative);
+    if (absolute !== base && !absolute.startsWith(base + path.sep)) continue;
+    const stat = await fsp.stat(absolute).catch(() => null);
+    if (!stat || (!stat.isFile() && !stat.isDirectory())) continue;
+    artifacts.push({
+      port,
+      path: relative,
+      kind: stat.isDirectory() ? 'directory' : 'file',
+      size: stat.isDirectory() ? null : stat.size,
+    });
+  }
+  return artifacts;
+}
+
 function defaultAssetCommand(node) {
   const file = assetEntrypoint(node);
   if (!file) return '';
@@ -544,6 +574,7 @@ export class LocalExecutor {
     await fsp
       .copyFile(outLog, path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`))
       .catch(() => {});
+    node.artifacts = await readNodeArtifacts(directory, node.outputs || []);
     await this.persist(run).catch(() => {});
   }
 }

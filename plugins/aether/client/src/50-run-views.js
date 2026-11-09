@@ -79,51 +79,68 @@
     }
 
     function OutputModal({ t, runId, node, port, onClose }) {
-      const [text, setText] = useState('');
+      const [view, setView] = useState(null);
+      const [currentPath, setCurrentPath] = useState('');
       const [loading, setLoading] = useState(true);
       const [failed, setFailed] = useState('');
 
-      const load = useCallback(async () => {
-        setLoading(true);
-        setFailed('');
-        try {
-          const response = await fetch(
-            `${API}/experiments/logs?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
-              node.path,
-            )}&stream=out`,
-            { cache: 'no-store', credentials: 'same-origin' },
-          );
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          setText(await response.text());
-        } catch (error) {
-          setFailed(String(error && error.message ? error.message : error));
-        } finally {
-          setLoading(false);
-        }
-      }, [runId, node.path]);
+      const load = useCallback(
+        async (filePath = '') => {
+          setLoading(true);
+          setFailed('');
+          try {
+            const query = new URLSearchParams({
+              run: runId,
+              node: node.path,
+              port,
+            });
+            if (filePath) query.set('file', filePath);
+            const response = await fetch(`${API}/experiments/artifact?${query.toString()}`, {
+              cache: 'no-store',
+              credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.ok === false) {
+              throw new Error(payload.error || `HTTP ${response.status}`);
+            }
+            setView(payload);
+            setCurrentPath(filePath);
+          } catch (error) {
+            setFailed(String(error && error.message ? error.message : error));
+          } finally {
+            setLoading(false);
+          }
+        },
+        [runId, node.path, port],
+      );
 
       useEffect(() => {
-        void load();
+        void load('');
       }, [load]);
 
       const copy = async () => {
+        if (!view || typeof view.content !== 'string') return;
         try {
-          await navigator.clipboard.writeText(text);
+          await navigator.clipboard.writeText(view.content);
         } catch {
           // 剪贴板不可用时静默失败。
         }
       };
 
       const download = () => {
+        const query = new URLSearchParams({ run: runId, node: node.path, port });
+        if (currentPath) query.set('file', currentPath);
         const anchor = document.createElement('a');
-        anchor.href = `${API}/experiments/download?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
-          node.path,
-        )}&port=${encodeURIComponent(port)}`;
+        anchor.href = `${API}/experiments/artifact/download?${query.toString()}`;
         anchor.download = '';
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
       };
+
+      const parentPath = currentPath.includes('/')
+        ? currentPath.slice(0, currentPath.lastIndexOf('/'))
+        : '';
 
       return h(
         Modal,
@@ -133,7 +150,9 @@
           title: `${t('runs.outputTitle')} · ${node.label || node.path} · ${port}`,
           onClose,
           footer: [
-            h('button', { key: 'copy', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => void copy() }, t('log.copy')),
+            view && typeof view.content === 'string'
+              ? h('button', { key: 'copy', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => void copy() }, t('log.copy'))
+              : null,
             h('button', { key: 'download', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: download }, t('runs.downloadOutput')),
             h('button', { key: 'close', type: 'button', className: 'ath-btn ath-btn-primary', onClick: onClose }, t('log.close')),
           ],
@@ -146,12 +165,54 @@
             { className: 'ath-chips' },
             h('span', { className: 'ath-badge', 'data-kind': 'dataset' }, port),
             h('span', { className: 'ath-hint ath-mono' }, node.path),
+            view && view.path ? h('span', { className: 'ath-hint ath-mono' }, view.path) : null,
+            currentPath
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-ghost',
+                    onClick: () => void load(parentPath),
+                  },
+                  t('runs.outputUp'),
+                )
+              : null,
           ),
           loading
             ? h('div', { className: 'ath-loading' }, h('i', { className: 'ath-spinner' }), t('common.loading'))
             : failed
               ? h('div', { className: 'ath-error' }, failed)
-              : h('pre', { className: 'ath-log-pre' }, text || t('runs.outputEmpty')),
+              : view && view.kind === 'directory'
+                ? h(
+                    'div',
+                    { className: 'ath-artifact-list' },
+                    view.entries.length
+                      ? view.entries.map((entry) =>
+                          h(
+                            'button',
+                            {
+                              key: entry.path,
+                              type: 'button',
+                              className: 'ath-artifact-entry',
+                              onClick: () => void load(entry.path),
+                            },
+                            h('span', { className: 'ath-artifact-kind' }, entry.kind === 'directory' ? '📁' : '📄'),
+                            h('span', { className: 'ath-artifact-name' }, entry.name),
+                            entry.kind === 'file' ? h('span', { className: 'ath-hint' }, `${entry.size} B`) : null,
+                          ),
+                        )
+                      : h('div', { className: 'ath-hint' }, t('runs.outputEmpty')),
+                  )
+                : view && view.kind === 'file'
+                  ? h(
+                      'div',
+                      null,
+                      view.binary
+                        ? h('div', { className: 'ath-hint' }, t('runs.outputBinary'))
+                        : h('pre', { className: 'ath-log-pre' }, view.content || ''),
+                      view.truncated ? h('div', { className: 'ath-hint' }, t('runs.outputTruncated')) : null,
+                    )
+                  : h('pre', { className: 'ath-log-pre' }, (view && view.content) || t('runs.outputEmpty')),
         ),
       );
     }

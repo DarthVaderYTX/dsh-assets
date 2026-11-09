@@ -374,6 +374,12 @@ function summarizeRun(run, { detail = false } = {}) {
     executor: node.executor || 'local',
     inputs: node.inputs || [],
     outputs: node.outputs || [],
+    artifacts: (node.artifacts || []).map((artifact) => ({
+      port: artifact.port,
+      path: artifact.path,
+      kind: artifact.kind,
+      size: artifact.size,
+    })),
     datasetUri: node.datasetUri || '',
     datasetFormat: node.datasetFormat || '',
     status: node.status,
@@ -592,6 +598,7 @@ async function startExperiment(input = {}) {
       inputs: node.inputs || [],
       outputs: node.outputs || [],
       requiredInputs: node.requiredInputs || [],
+      artifacts: [],
       datasetUri: node.datasetUri || '',
       datasetFormat: node.datasetFormat || '',
       assetPath: node.assetPath ? path.resolve(dataDir(), node.assetPath) : '',
@@ -1076,6 +1083,101 @@ async function deleteGraph(id) {
   return { ok: true, id };
 }
 
+function artifactContext(run, nodePath, port) {
+  const node = (run.nodes || []).find((item) => item.path === nodePath);
+  if (!node) throw httpError(404, '节点不存在');
+  const artifact = (node.artifacts || []).find((item) => item.port === port);
+  const nodeDir = path.join(run.dir, 'nodes', safeSegment(node.path));
+  if (!artifact) return { node, nodeDir, artifact: null, root: '' };
+  const root = path.resolve(nodeDir, artifact.path);
+  if (root !== nodeDir && !root.startsWith(nodeDir + path.sep)) {
+    throw httpError(400, '输出路径无效');
+  }
+  return { node, nodeDir, artifact, root };
+}
+
+async function ensureInside(root, target) {
+  const realRoot = await fsp.realpath(root);
+  const realTarget = await fsp.realpath(target);
+  if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
+    throw httpError(400, '输出路径越界');
+  }
+  return realTarget;
+}
+
+function relativeArtifactPath(root, target) {
+  const relative = path.relative(root, target).split(path.sep).join('/');
+  return relative || '.';
+}
+
+async function artifactFileView(root, target) {
+  const stat = await fsp.stat(target);
+  if (stat.isDirectory()) return null;
+  const limit = 1024 * 1024;
+  const size = stat.size;
+  const handle = await fsp.open(target, 'r');
+  let buffer;
+  try {
+    buffer = Buffer.alloc(Math.min(size, limit));
+    if (buffer.length) await handle.read(buffer, 0, buffer.length, 0);
+  } finally {
+    await handle.close();
+  }
+  const binary = buffer.includes(0);
+  return {
+    kind: 'file',
+    path: relativeArtifactPath(root, target),
+    size,
+    truncated: size > limit,
+    binary,
+    content: binary ? '' : buffer.toString('utf8'),
+  };
+}
+
+async function artifactDirectoryView(root, target) {
+  const entries = [];
+  const items = await fsp.readdir(target, { withFileTypes: true }).catch(() => []);
+  for (const item of items) {
+    if (item.isSymbolicLink()) continue;
+    const full = path.join(target, item.name);
+    const stat = await fsp.stat(full).catch(() => null);
+    if (!stat) continue;
+    entries.push({
+      name: item.name,
+      path: relativeArtifactPath(root, full),
+      kind: stat.isDirectory() ? 'directory' : 'file',
+      size: stat.isDirectory() ? null : stat.size,
+    });
+  }
+  entries.sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1;
+    return left.name.localeCompare(right.name);
+  });
+  return { kind: 'directory', path: relativeArtifactPath(root, target), entries };
+}
+
+async function artifactDownloadTarget(root, fileParam) {
+  const target = fileParam ? path.resolve(root, fileParam) : root;
+  if (target !== root && !target.startsWith(root + path.sep)) throw httpError(400, '输出文件路径越界');
+  const safe = await ensureInside(root, target);
+  return safe;
+}
+
+async function stdoutOutputText(run, node) {
+  const file = path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`);
+  try {
+    return await fsp.readFile(file, 'utf8');
+  } catch {
+    return node.stdoutTail || '';
+  }
+}
+
+function downloadFileName(name, fallback) {
+  const text = path.basename(String(name || '')) || fallback;
+  return /^[\x20-\x7E]+$/.test(text) ? text.replace(/"/g, '') : safeSegment(text);
+}
+
+
 async function handleApi(req, res) {
   const url = new URL(req.url || '/', 'http://127.0.0.1');
   const route = url.pathname.slice(API_PREFIX.length) || '/';
@@ -1179,6 +1281,118 @@ async function handleApi(req, res) {
     if (!executor) throw httpError(501, `执行器「${run.executor || 'local'}」未注册`);
     const text = await executor.readLog(run, nodePath, stream);
     sendText(res, 200, text);
+    return;
+  }
+
+  if (method === 'GET' && route === '/experiments/artifact') {
+    const id = url.searchParams.get('run') || '';
+    const nodePath = url.searchParams.get('node') || '';
+    const port = String(url.searchParams.get('port') || '');
+    const fileParam = url.searchParams.get('file') || '';
+    if (!id || !nodePath || !port) throw httpError(400, '缺少 run、node 或 port 参数');
+    const run = activeRuns.get(id)?.run || (await readRunFromDisk(id));
+    if (!run) throw httpError(404, '实验不存在');
+    const context = artifactContext(run, nodePath, port);
+    if (!context.artifact) {
+      const content = await stdoutOutputText(run, context.node);
+      sendJson(res, 200, {
+        ok: true,
+        kind: 'stdout',
+        port,
+        path: 'stdout',
+        size: Buffer.byteLength(content),
+        truncated: false,
+        binary: false,
+        content,
+      });
+      return;
+    }
+    let target;
+    if (context.artifact.kind === 'file') {
+      target = await ensureInside(context.root, context.root);
+    } else {
+      target = fileParam
+        ? await artifactDownloadTarget(context.root, fileParam)
+        : await ensureInside(context.root, context.root);
+    }
+    const stat = await fsp.stat(target).catch(() => null);
+    if (!stat) throw httpError(404, '输出文件或目录不存在');
+    if (stat.isDirectory()) {
+      sendJson(res, 200, {
+        ok: true,
+        port,
+        ...(await artifactDirectoryView(context.root, target)),
+      });
+    } else {
+      const payload = await artifactFileView(context.root, target);
+      if (context.artifact.kind === 'file') payload.path = context.artifact.path;
+      sendJson(res, 200, { ok: true, port, ...payload });
+    }
+    return;
+  }
+
+  if (method === 'GET' && route === '/experiments/artifact/download') {
+    const id = url.searchParams.get('run') || '';
+    const nodePath = url.searchParams.get('node') || '';
+    const port = String(url.searchParams.get('port') || '');
+    const fileParam = url.searchParams.get('file') || '';
+    if (!id || !nodePath || !port) throw httpError(400, '缺少 run、node 或 port 参数');
+    const run = activeRuns.get(id)?.run || (await readRunFromDisk(id));
+    if (!run) throw httpError(404, '实验不存在');
+    const context = artifactContext(run, nodePath, port);
+    if (!context.artifact) {
+      const content = await stdoutOutputText(run, context.node);
+      const filename = `${safeSegment(nodePath)}-${safeSegment(port)}.out`;
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'content-disposition': `attachment; filename="${filename}"`,
+        'content-length': Buffer.byteLength(content),
+        'cache-control': 'no-store',
+      });
+      res.end(content);
+      return;
+    }
+    let target;
+    if (context.artifact.kind === 'file') {
+      target = await ensureInside(context.root, context.root);
+    } else {
+      target = fileParam
+        ? await artifactDownloadTarget(context.root, fileParam)
+        : await ensureInside(context.root, context.root);
+    }
+    const stat = await fsp.stat(target).catch(() => null);
+    if (!stat) throw httpError(404, '输出文件或目录不存在');
+    if (stat.isDirectory()) {
+      const listing = await artifactDirectoryView(context.root, target);
+      const body = JSON.stringify(
+        {
+          kind: 'directory',
+          workspacePath: context.artifact.path,
+          current: listing.path,
+          entries: listing.entries,
+        },
+        null,
+        2,
+      );
+      const filename = `${safeSegment(nodePath)}-${safeSegment(port)}-directory.json`;
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-disposition': `attachment; filename="${filename}"`,
+        'content-length': Buffer.byteLength(body),
+        'cache-control': 'no-store',
+      });
+      res.end(body);
+      return;
+    }
+    const buffer = await fsp.readFile(target);
+    const filename = downloadFileName(path.basename(target), `${safeSegment(nodePath)}-${safeSegment(port)}.out`);
+    res.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-disposition': `attachment; filename="${filename}"`,
+      'content-length': buffer.length,
+      'cache-control': 'no-store',
+    });
+    res.end(buffer);
     return;
   }
 

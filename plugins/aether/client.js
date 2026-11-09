@@ -91,6 +91,9 @@ window.__ModuleLoader__.load({
       'runs.downloadOutput': '下载输出内容',
       'runs.outputTitle': '输出结果',
       'runs.outputEmpty': '没有输出内容',
+      'runs.outputUp': '返回上级',
+      'runs.outputBinary': '该文件是二进制内容，无法预览；请下载查看。',
+      'runs.outputTruncated': '内容过大，仅显示前 1MB。',
       'runs.outputHint': '点击或右键查看 / 下载输出',
       'environment.local': '本机',
       'environment.localHint': '在 dsh 宿主进程所在的机器上执行。',
@@ -407,6 +410,9 @@ window.__ModuleLoader__.load({
       'runs.downloadOutput': 'Download output',
       'runs.outputTitle': 'Output',
       'runs.outputEmpty': 'No output',
+      'runs.outputUp': 'Up',
+      'runs.outputBinary': 'This is a binary file; download it to view.',
+      'runs.outputTruncated': 'Content is large; only the first 1MB is shown.',
       'runs.outputHint': 'Click or right-click to view or download output',
       'environment.local': 'Local',
       'environment.localHint': 'Run on the machine hosting the dsh process.',
@@ -1252,6 +1258,10 @@ window.__ModuleLoader__.load({
   border-color: var(--ath-status); background: var(--dsw-alias-bg-base);
   pointer-events: none;
 }
+.ath-run-port-output { pointer-events: auto; cursor: pointer; }
+.ath-run-port-output::after {
+  content: ''; position: absolute; inset: -6px; border-radius: 50%;
+}
 .ath-run-edge { fill: none; stroke: var(--ath-edge); stroke-width: 1.5; }
 .ath-run-legend {
   position: absolute; top: 10px; left: 12px; z-index: 6;
@@ -1302,6 +1312,19 @@ window.__ModuleLoader__.load({
   padding: 7px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary);
 }
 .ath-output-menu button:hover { background: color-mix(in srgb, var(--ath-accent) 10%, transparent); }
+.ath-artifact-list {
+  display: flex; flex-direction: column; gap: 5px;
+  max-height: 52vh; overflow: auto; padding-right: 4px;
+}
+.ath-artifact-entry {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 7px 9px; border: 1px solid var(--ath-border-soft); border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); cursor: pointer;
+}
+.ath-artifact-entry:hover { border-color: var(--ath-accent); background: var(--dsw-alias-bg-layer-2); }
+.ath-artifact-kind { flex: 0 0 auto; }
+.ath-artifact-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-artifact-entry .ath-hint { margin-left: auto; flex: 0 0 auto; }
 .ath-run-nodebar .ath-btn { grid-column: 2; grid-row: 1; }
 @keyframes ath-run-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ath-yellow) 45%, transparent); }
@@ -2031,51 +2054,68 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     }
 
     function OutputModal({ t, runId, node, port, onClose }) {
-      const [text, setText] = useState('');
+      const [view, setView] = useState(null);
+      const [currentPath, setCurrentPath] = useState('');
       const [loading, setLoading] = useState(true);
       const [failed, setFailed] = useState('');
 
-      const load = useCallback(async () => {
-        setLoading(true);
-        setFailed('');
-        try {
-          const response = await fetch(
-            `${API}/experiments/logs?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
-              node.path,
-            )}&stream=out`,
-            { cache: 'no-store', credentials: 'same-origin' },
-          );
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          setText(await response.text());
-        } catch (error) {
-          setFailed(String(error && error.message ? error.message : error));
-        } finally {
-          setLoading(false);
-        }
-      }, [runId, node.path]);
+      const load = useCallback(
+        async (filePath = '') => {
+          setLoading(true);
+          setFailed('');
+          try {
+            const query = new URLSearchParams({
+              run: runId,
+              node: node.path,
+              port,
+            });
+            if (filePath) query.set('file', filePath);
+            const response = await fetch(`${API}/experiments/artifact?${query.toString()}`, {
+              cache: 'no-store',
+              credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.ok === false) {
+              throw new Error(payload.error || `HTTP ${response.status}`);
+            }
+            setView(payload);
+            setCurrentPath(filePath);
+          } catch (error) {
+            setFailed(String(error && error.message ? error.message : error));
+          } finally {
+            setLoading(false);
+          }
+        },
+        [runId, node.path, port],
+      );
 
       useEffect(() => {
-        void load();
+        void load('');
       }, [load]);
 
       const copy = async () => {
+        if (!view || typeof view.content !== 'string') return;
         try {
-          await navigator.clipboard.writeText(text);
+          await navigator.clipboard.writeText(view.content);
         } catch {
           // 剪贴板不可用时静默失败。
         }
       };
 
       const download = () => {
+        const query = new URLSearchParams({ run: runId, node: node.path, port });
+        if (currentPath) query.set('file', currentPath);
         const anchor = document.createElement('a');
-        anchor.href = `${API}/experiments/download?run=${encodeURIComponent(runId)}&node=${encodeURIComponent(
-          node.path,
-        )}&port=${encodeURIComponent(port)}`;
+        anchor.href = `${API}/experiments/artifact/download?${query.toString()}`;
         anchor.download = '';
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
       };
+
+      const parentPath = currentPath.includes('/')
+        ? currentPath.slice(0, currentPath.lastIndexOf('/'))
+        : '';
 
       return h(
         Modal,
@@ -2085,7 +2125,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           title: `${t('runs.outputTitle')} · ${node.label || node.path} · ${port}`,
           onClose,
           footer: [
-            h('button', { key: 'copy', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => void copy() }, t('log.copy')),
+            view && typeof view.content === 'string'
+              ? h('button', { key: 'copy', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => void copy() }, t('log.copy'))
+              : null,
             h('button', { key: 'download', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: download }, t('runs.downloadOutput')),
             h('button', { key: 'close', type: 'button', className: 'ath-btn ath-btn-primary', onClick: onClose }, t('log.close')),
           ],
@@ -2098,12 +2140,54 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             { className: 'ath-chips' },
             h('span', { className: 'ath-badge', 'data-kind': 'dataset' }, port),
             h('span', { className: 'ath-hint ath-mono' }, node.path),
+            view && view.path ? h('span', { className: 'ath-hint ath-mono' }, view.path) : null,
+            currentPath
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-ghost',
+                    onClick: () => void load(parentPath),
+                  },
+                  t('runs.outputUp'),
+                )
+              : null,
           ),
           loading
             ? h('div', { className: 'ath-loading' }, h('i', { className: 'ath-spinner' }), t('common.loading'))
             : failed
               ? h('div', { className: 'ath-error' }, failed)
-              : h('pre', { className: 'ath-log-pre' }, text || t('runs.outputEmpty')),
+              : view && view.kind === 'directory'
+                ? h(
+                    'div',
+                    { className: 'ath-artifact-list' },
+                    view.entries.length
+                      ? view.entries.map((entry) =>
+                          h(
+                            'button',
+                            {
+                              key: entry.path,
+                              type: 'button',
+                              className: 'ath-artifact-entry',
+                              onClick: () => void load(entry.path),
+                            },
+                            h('span', { className: 'ath-artifact-kind' }, entry.kind === 'directory' ? '📁' : '📄'),
+                            h('span', { className: 'ath-artifact-name' }, entry.name),
+                            entry.kind === 'file' ? h('span', { className: 'ath-hint' }, `${entry.size} B`) : null,
+                          ),
+                        )
+                      : h('div', { className: 'ath-hint' }, t('runs.outputEmpty')),
+                  )
+                : view && view.kind === 'file'
+                  ? h(
+                      'div',
+                      null,
+                      view.binary
+                        ? h('div', { className: 'ath-hint' }, t('runs.outputBinary'))
+                        : h('pre', { className: 'ath-log-pre' }, view.content || ''),
+                      view.truncated ? h('div', { className: 'ath-hint' }, t('runs.outputTruncated')) : null,
+                    )
+                  : h('pre', { className: 'ath-log-pre' }, (view && view.content) || t('runs.outputEmpty')),
         ),
       );
     }
@@ -2776,7 +2860,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       };
 
       const downloadOutput = (pathName, port) => {
-        const href = `${API}/experiments/download?run=${encodeURIComponent(experiment.id)}&node=${encodeURIComponent(
+        const href = `${API}/experiments/artifact/download?run=${encodeURIComponent(experiment.id)}&node=${encodeURIComponent(
           pathName,
         )}&port=${encodeURIComponent(port)}`;
         const anchor = document.createElement('a');

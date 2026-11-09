@@ -599,6 +599,10 @@
   border-color: var(--ath-status); background: var(--dsw-alias-bg-base);
   pointer-events: none;
 }
+.ath-run-port-output { pointer-events: auto; cursor: pointer; }
+.ath-run-port-output::after {
+  content: ''; position: absolute; inset: -6px; border-radius: 50%;
+}
 .ath-run-edge { fill: none; stroke: var(--ath-edge); stroke-width: 1.5; }
 .ath-run-legend {
   position: absolute; top: 10px; left: 12px; z-index: 6;
@@ -649,6 +653,19 @@
   padding: 7px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary);
 }
 .ath-output-menu button:hover { background: color-mix(in srgb, var(--ath-accent) 10%, transparent); }
+.ath-artifact-list {
+  display: flex; flex-direction: column; gap: 5px;
+  max-height: 52vh; overflow: auto; padding-right: 4px;
+}
+.ath-artifact-entry {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 7px 9px; border: 1px solid var(--ath-border-soft); border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); cursor: pointer;
+}
+.ath-artifact-entry:hover { border-color: var(--ath-accent); background: var(--dsw-alias-bg-layer-2); }
+.ath-artifact-kind { flex: 0 0 auto; }
+.ath-artifact-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-artifact-entry .ath-hint { margin-left: auto; flex: 0 0 auto; }
 .ath-run-nodebar .ath-btn { grid-column: 2; grid-row: 1; }
 @keyframes ath-run-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ath-yellow) 45%, transparent); }

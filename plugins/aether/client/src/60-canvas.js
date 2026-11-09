@@ -267,7 +267,7 @@
       };
 
       const downloadOutput = (pathName, port) => {
-        const href = `${API}/experiments/download?run=${encodeURIComponent(experiment.id)}&node=${encodeURIComponent(
+        const href = `${API}/experiments/artifact/download?run=${encodeURIComponent(experiment.id)}&node=${encodeURIComponent(
           pathName,
         )}&port=${encodeURIComponent(port)}`;
         const anchor = document.createElement('a');

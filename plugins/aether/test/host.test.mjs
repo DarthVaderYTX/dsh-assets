@@ -562,6 +562,108 @@ test('cancelling a running experiment settles as cancelled', async () => {
   assert.equal(run.nodes[0].status, 'cancelled');
 });
 
+test('module output artifacts can be inspected and downloaded', async () => {
+  const script = `
+const fs = require('fs');
+const path = require('path');
+const dir = process.env.AETHER_NODE_DIR;
+fs.writeFileSync(path.join(dir, 'report.md'), '# artifact report\\n');
+const artifacts = path.join(dir, 'artifacts');
+fs.mkdirSync(path.join(artifacts, 'nested'), { recursive: true });
+fs.writeFileSync(path.join(artifacts, 'summary.json'), JSON.stringify({ rows: 3 }));
+fs.writeFileSync(path.join(artifacts, 'nested', 'detail.txt'), 'nested detail\\n');
+fs.writeFileSync(
+  path.join(dir, 'aether-outputs.json'),
+  JSON.stringify({
+    report_file: { path: 'report.md' },
+    report_dir: { path: 'artifacts' }
+  })
+);
+console.log('artifacts ready');
+`;
+  const uploaded = await call('/modules/assets', {
+    method: 'POST',
+    body: {
+      kind: 'file',
+      name: 'artifact.js',
+      files: [{ path: 'artifact.js', data: Buffer.from(script, 'utf8').toString('base64') }],
+    },
+  });
+  const asset = uploaded.payload.asset;
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'artifact-module',
+        name: 'Artifact module',
+        kind: 'command',
+        command: '',
+        inputs: [],
+        outputs: ['report_file', 'report_dir'],
+        assetId: asset.assetId,
+        assetKind: asset.assetKind,
+        assetName: asset.assetName,
+        assetPath: asset.assetPath,
+        assetFileCount: asset.assetFileCount,
+      },
+    },
+  });
+  await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: 'artifact-graph',
+        name: 'Artifact graph',
+        layout: 'vertical',
+        nodes: [{ id: 'artifact', moduleId: 'artifact-module', label: 'Artifact', x: 40, y: 40 }],
+        edges: [],
+      },
+    },
+  });
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: 'artifact-graph' },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded');
+  assert.deepEqual(
+    run.nodes[0].artifacts.map((artifact) => [artifact.port, artifact.kind]),
+    [['report_file', 'file'], ['report_dir', 'directory']],
+  );
+
+  const fileView = await call(
+    `/experiments/artifact?run=${encodeURIComponent(run.id)}&node=artifact&port=report_file`,
+  );
+  assert.equal(fileView.payload.kind, 'file');
+  assert.match(fileView.payload.content, /artifact report/);
+
+  const directoryView = await call(
+    `/experiments/artifact?run=${encodeURIComponent(run.id)}&node=artifact&port=report_dir`,
+  );
+  assert.equal(directoryView.payload.kind, 'directory');
+  assert.equal(
+    directoryView.payload.entries.some((entry) => entry.name === 'summary.json'),
+    true,
+  );
+  assert.equal(
+    directoryView.payload.entries.some((entry) => entry.name === 'nested'),
+    true,
+  );
+
+  const nestedView = await call(
+    `/experiments/artifact?run=${encodeURIComponent(run.id)}&node=artifact&port=report_dir&file=nested/detail.txt`,
+  );
+  assert.match(nestedView.payload.content, /nested detail/);
+
+  const fileDownload = await fetch(
+    `${base}${API}/experiments/artifact/download?run=${encodeURIComponent(run.id)}&node=artifact&port=report_file`,
+  );
+  assert.equal(fileDownload.status, 200);
+  assert.match(fileDownload.headers.get('content-disposition') || '', /report\.md/);
+  assert.match(await fileDownload.text(), /artifact report/);
+});
+
 test('workspace export/import can skip or include runs', async () => {
   const submitted = await call('/experiments', {
     method: 'POST',
