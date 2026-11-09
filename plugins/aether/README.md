@@ -77,7 +77,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 - 点击节点弹出底部信息条，显示状态、耗时、退出码与错误，并提供「日志」按钮打开该节点的 stdout / stderr。
 - **输出端点**：点击或右键已完成的模块 / 子图输出端点，可「查看输出结果」或「下载输出内容」；数据集节点无论显示状态如何都视为已成功执行，也可直接查看其输出。
   - 若端口映射了真实文件：弹窗直接显示文件内容（二进制/超大文件给出提示），可下载原文件；
-  - 若端口映射了目录：弹窗列出目录内容，可进入子目录或查看文件，下载按钮导出目录清单；
+  - 若端口映射了目录：弹窗列出目录内容，可进入子目录或查看文件，下载按钮把整个目录打包为 ZIP；
   - 未配置映射时回退为节点 stdout。查看/下载通过 `/experiments/artifact` 与 `/experiments/artifact/download`。
 - 运行详情提供「复制」：把这次运行对应的实验定义复制成一张新实验草稿并自动进入实验编辑器；如果原实验已删除，则按运行实例的节点与连线重建草稿。草稿没有实验 id，保存时会**创建一张新实验**，不会修改原实验。运行中的实验也可以复制；「取消」只在运行时出现。
 - 运行记录会快照提交时的布局方向（`layout`）与展开后的**端口级节点连线**（`edges`，同一对节点之间的多条不同端口连线也会保留），所以即使之后改了实验定义，这个实例的 DAG 仍然稳定。
@@ -207,7 +207,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 | DELETE | `/experiments?id=` | 删除运行（运行中拒绝） |
 | GET | `/experiments/logs?run=&node=&stream=out\|err` | 节点日志 |
 | GET | `/experiments/artifact?run=&node=&port=&file=` | 查看端口输出：文件内容或目录列表；未映射时回退 stdout |
-| GET | `/experiments/artifact/download?run=&node=&port=&file=` | 下载端口输出文件；目录导出清单 JSON |
+| GET | `/experiments/artifact/download?run=&node=&port=&file=` | 下载端口输出文件；目录打包为 ZIP |
 | GET | `/experiments/download?run=&node=&port=` | 兼容接口：下载节点 stdout |
 | POST | `/workspace` | 切换工作区（`{ path }`）；空目录会迁移当前数据，已有 `state.json` 则直接打开 |
 | GET | `/workspace/export?runs=0\|1` | 导出工作区 JSON 包（可选运行记录） |
@@ -238,7 +238,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 - `client.js`：构建产物，唯一被 DSH 加载的客户端文件。源码在 `client/src/` 按职责拆成文案、样式、工具、小部件、运行视图、图列表、画布、实验编辑器、模块库、主面板与注册片段；修改源码后运行 `npm run build`。
 - `test/dag.test.mjs`：图核心单测（拓扑、环、子图展开、嵌套子图、参数继承、环境与端口校验、坐标与布局方向、旧连线迁移）。
 - `test/executor.test.mjs`：环境解析与执行器描述。
-- `test/host.test.mjs`：用假 `ctx` 起真实 HTTP 服务，覆盖种子数据、CRUD 保护、环拒绝、子图不可单独运行、端口与坐标往返、必填输入校验、数据集节点、模块版本、模块文件上传与无命令执行、文件/目录输出与下载、子图执行、工作区切换/迁移、失败传播、取消与 placement 快照。
+- `test/host.test.mjs`：用假 `ctx` 起真实 HTTP 服务，覆盖种子数据、CRUD 保护、环拒绝、子图不可单独运行、端口与坐标往返、必填输入校验、数据集节点、模块版本、模块文件上传与无命令执行、文件/目录输出与 ZIP 下载、子图执行、工作区切换/迁移、失败传播、取消与 placement 快照。
 - `test/client-build.test.mjs`：确保 `client.js` 与 `client/src/` 片段一致。
 
 ```bash

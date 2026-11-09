@@ -22,6 +22,7 @@ import {
   validateModule,
 } from './dag.js';
 import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
+import { zipDirectory } from './zip.js';
 import {
   API_PREFIX,
   DATA_VERSION,
@@ -1363,25 +1364,15 @@ async function handleApi(req, res) {
     const stat = await fsp.stat(target).catch(() => null);
     if (!stat) throw httpError(404, '输出文件或目录不存在');
     if (stat.isDirectory()) {
-      const listing = await artifactDirectoryView(context.root, target);
-      const body = JSON.stringify(
-        {
-          kind: 'directory',
-          workspacePath: context.artifact.path,
-          current: listing.path,
-          entries: listing.entries,
-        },
-        null,
-        2,
-      );
-      const filename = `${safeSegment(nodePath)}-${safeSegment(port)}-directory.json`;
+      const archive = await zipDirectory(target, path.basename(target) || port);
+      const filename = `${safeSegment(nodePath)}-${safeSegment(port)}.zip`;
       res.writeHead(200, {
-        'content-type': 'application/json; charset=utf-8',
+        'content-type': 'application/zip',
         'content-disposition': `attachment; filename="${filename}"`,
-        'content-length': Buffer.byteLength(body),
+        'content-length': archive.length,
         'cache-control': 'no-store',
       });
-      res.end(body);
+      res.end(archive);
       return;
     }
     const buffer = await fsp.readFile(target);

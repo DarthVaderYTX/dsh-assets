@@ -12,6 +12,7 @@ aether/
   http.js                  统一错误、JSON/文本响应、请求体读取
   dag.js                   纯 DAG 核心：归一化、校验、拓扑、子图展开、图引用环
   executor.js              执行器边界：LocalExecutor、placement、进程树取消
+  zip.js                   目录输出打包（store 模式 ZIP，无第三方依赖）
   client.js                构建产物（唯一被 DSH 加载的客户端文件）
   client/src/              客户端源码片段，共享同一工厂作用域
     00-header.js              React/require 引导与常量

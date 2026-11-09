@@ -662,6 +662,17 @@ console.log('artifacts ready');
   assert.equal(fileDownload.status, 200);
   assert.match(fileDownload.headers.get('content-disposition') || '', /report\.md/);
   assert.match(await fileDownload.text(), /artifact report/);
+
+  const directoryDownload = await fetch(
+    `${base}${API}/experiments/artifact/download?run=${encodeURIComponent(run.id)}&node=artifact&port=report_dir`,
+  );
+  assert.equal(directoryDownload.status, 200);
+  assert.match(directoryDownload.headers.get('content-type') || '', /application\/zip/);
+  assert.match(directoryDownload.headers.get('content-disposition') || '', /\.zip/);
+  const archive = Buffer.from(await directoryDownload.arrayBuffer());
+  assert.equal(archive.subarray(0, 4).toString('hex'), '504b0304');
+  assert.match(archive.toString('utf8'), /summary\.json/);
+  assert.match(archive.toString('utf8'), /nested\/detail\.txt/);
 });
 
 test('workspace export/import can skip or include runs', async () => {
