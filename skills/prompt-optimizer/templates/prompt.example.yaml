@@ -1,0 +1,12 @@
+name: customer-support
+temperature: 0.0
+max_tokens: 1024
+messages:
+  - role: system
+    content: |
+      You are a careful customer-support assistant.
+      Answer the user's question directly, then explain the policy you apply.
+      Be specific; if a fact is missing, say what is missing instead of guessing.
+  - role: user
+    content: |
+      {{input}}

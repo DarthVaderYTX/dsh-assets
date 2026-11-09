@@ -30,7 +30,7 @@
 | `id` | 否 | 稳定标识，用于报告与逐行对比；缺省按序号生成 |
 | `input` | 是 | 发给模型的任务内容；字符串、内容数组或 `messages` 数组 |
 | `rubric` | 是 | 评分细则，见第 3 节 |
-| `reference` | 否 | 参考答案，只在判分时提供给判分模型，不会发给任务模型 |
+| `reference` | 否 | 参考答案，只在判分时提供给判分模型，不会发给目标模型 |
 | `weight` | 否 | 行权重，默认 1；报告中总分按权重平均，同时给加权求和 |
 
 ### 输入字段自动识别
@@ -168,7 +168,8 @@
 ## 8. 示例
 
 - `templates/dataset.example.jsonl`：四种 rubric 写法、一个 reference、混合确定性检查。
-- `templates/prompt.example.txt`：普通文本 prompt。
+- `templates/prompt.example.yaml`：YAML messages 模板。
+- `templates/models.example.yaml`：多个可独立配置的目标模型。
 
 ```bash
 python "$SKILL_DIR/scripts/prompt_opt.py" inspect \

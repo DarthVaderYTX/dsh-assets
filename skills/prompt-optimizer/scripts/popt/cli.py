@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -14,7 +15,7 @@ from urllib.parse import urlparse
 from . import __version__
 from .dataset import LoadOptions, dataset_stats, load_dataset
 from .errors import BudgetExceeded, ConfigError, PromptOptError
-from .evaluate import EvalConfig, Evaluator
+from .evaluate import EvalConfig, Evaluator, Target
 from .llm import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
@@ -26,13 +27,46 @@ from .llm import (
     Usage,
     default_cache_dir,
 )
+from .models import (
+    ModelConfig,
+    api_key_hint,
+    load_models_config,
+    resolve_api_key,
+)
 from .optimize import OptimizeConfig, Optimizer, sample_items, split_items
-from .promptspec import PromptSpec, load_prompt
+from .promptspec import load_prompt
 from .report import write_report
 from .util import ensure_dir, local_stamp, utc_now, write_json, write_jsonl, write_text
 
-API_KEY_FALLBACKS = ("PROMPT_OPT_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+@dataclass
+class Runtime:
+    targets: list[Target]
+    judge_client: CountingClient
+    optimizer_client: CountingClient | None
+    models_meta: dict[str, Any]
+    budget: Budget
+    warnings: list[str]
+    judge_temperature: float
+    judge_max_tokens: int
+    optimizer_temperature: float = 0.7
+    optimizer_max_tokens: int = 2048
+
+
+def _reconfigure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
+def _print(message: str, *, error: bool = False, quiet: bool = False) -> None:
+    if quiet:
+        return
+    print(message, file=sys.stderr if error else sys.stdout, flush=True)
 
 
 def _redact_header(raw: str) -> str:
@@ -73,20 +107,6 @@ def _display_command(argv: list[str]) -> str:
     return text
 
 
-def _reconfigure_stdio() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
-
-
-def _print(message: str, *, error: bool = False, quiet: bool = False) -> None:
-    if quiet:
-        return
-    print(message, file=sys.stderr if error else sys.stdout, flush=True)
-
-
 def _add_dataset_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dataset", required=True, help="JSONL dataset path")
     parser.add_argument("--input-field", help="field holding the task input (auto-detected)")
@@ -101,16 +121,23 @@ def _add_dataset_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_models_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--models",
+        help="YAML model config listing one or more target models (and optional judge/optimizer)",
+    )
+
+
 def _add_model_args(parser: argparse.ArgumentParser, *, optimize: bool = False) -> None:
     parser.add_argument(
         "--base-url",
         default=os.environ.get("PROMPT_OPT_BASE_URL", DEFAULT_BASE_URL),
-        help=f"OpenAI-compatible base URL (default: {DEFAULT_BASE_URL})",
+        help=f"fallback OpenAI-compatible base URL (default: {DEFAULT_BASE_URL})",
     )
     parser.add_argument(
         "--model",
         default=os.environ.get("PROMPT_OPT_MODEL", DEFAULT_MODEL),
-        help=f"task model (default: {DEFAULT_MODEL})",
+        help=f"fallback target model when --models is not used (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
         "--judge-model",
@@ -133,7 +160,7 @@ def _add_model_args(parser: argparse.ArgumentParser, *, optimize: bool = False) 
             default=os.environ.get("PROMPT_OPT_OPTIMIZER_BASE_URL", ""),
             help="rewrite endpoint (default: same as --base-url)",
         )
-    parser.add_argument("--api-key", help="API key (prefer the PROMPT_OPT_API_KEY env var)")
+    parser.add_argument("--api-key", help="API key (prefer PROMPT_OPT_API_KEY or api_key_env)")
     parser.add_argument(
         "--allow-no-auth",
         action="store_true",
@@ -142,14 +169,25 @@ def _add_model_args(parser: argparse.ArgumentParser, *, optimize: bool = False) 
     parser.add_argument("--header", action="append", default=[], help="extra HTTP header, e.g. 'x-key: v'")
     parser.add_argument("--timeout", type=float, default=180.0, help="per-request timeout in seconds")
     parser.add_argument("--max-retries", type=int, default=3, help="transport retries (default 3)")
-    parser.add_argument("--concurrency", type=int, default=4, help="parallel rows (default 4)")
+    parser.add_argument("--concurrency", type=int, default=4, help="parallel model-row pairs (default 4)")
     parser.add_argument(
         "--max-calls",
         type=int,
         default=0,
         help="hard budget of logical model calls; 0 means unlimited (use --dry-run to estimate)",
     )
-    parser.add_argument("--max-tokens", type=int, default=1024, help="task completion limit (default 1024)")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="override task temperature for all models (otherwise model config / template)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="override task completion limit for all models (otherwise model config / template)",
+    )
     parser.add_argument("--judge-max-tokens", type=int, default=1024, help="grader completion limit")
     parser.add_argument("--judge-temperature", type=float, default=0.0, help="grader temperature (default 0)")
     parser.add_argument("--judge-max-chars", type=int, default=12000, help="truncate input/output for grading")
@@ -166,13 +204,13 @@ def _add_model_args(parser: argparse.ArgumentParser, *, optimize: bool = False) 
         "--on-error",
         choices=("abort", "skip"),
         default="abort",
-        help="abort on a failed row, or skip it and report the gap",
+        help="abort on a failed model-row pair, or skip it and report the gap",
     )
     parser.add_argument(
         "--on-judge-error",
         choices=("abort", "zero"),
         default="abort",
-        help="abort when grading fails, or score the row as zero",
+        help="abort when grading fails, or score the pair as zero",
     )
     parser.add_argument("--llm-cmd", help="shell command used for every completion (instead of HTTP)")
     parser.add_argument("--judge-llm-cmd", help="shell command for grading (default: --llm-cmd)")
@@ -188,19 +226,21 @@ def _add_limit(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prompt_opt.py",
-        description="Optimize a prompt on a rubric-graded JSONL dataset by measured score.",
+        description="Optimize a prompt on a rubric-graded JSONL dataset across one or more models.",
     )
     parser.add_argument("--version", action="version", version=f"prompt-optimizer {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    inspect_parser = subparsers.add_parser("inspect", help="validate the dataset and show the scoring plan")
+    inspect_parser = subparsers.add_parser("inspect", help="validate the dataset/models and show the plan")
     _add_dataset_args(inspect_parser)
+    _add_models_arg(inspect_parser)
     inspect_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     inspect_parser.add_argument("--sample-chars", type=int, default=400)
     inspect_parser.set_defaults(func=cmd_inspect)
 
-    score_parser = subparsers.add_parser("score", help="evaluate one prompt and print its score")
+    score_parser = subparsers.add_parser("score", help="evaluate one prompt across target models")
     _add_dataset_args(score_parser)
+    _add_models_arg(score_parser)
     prompt_group = score_parser.add_mutually_exclusive_group(required=True)
     prompt_group.add_argument("--prompt-file")
     prompt_group.add_argument("--prompt")
@@ -214,6 +254,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     optimize_parser = subparsers.add_parser("optimize", help="iteratively improve a prompt")
     _add_dataset_args(optimize_parser)
+    _add_models_arg(optimize_parser)
     prompt_group = optimize_parser.add_mutually_exclusive_group(required=True)
     prompt_group.add_argument("--prompt-file")
     prompt_group.add_argument("--prompt")
@@ -231,7 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="holdout fraction (0.2) or row count (20); never optimized against",
     )
-    optimize_parser.add_argument("--analysis-items", type=int, default=8, help="failing rows shown per round")
+    optimize_parser.add_argument("--analysis-items", type=int, default=8, help="failing pairs shown per round")
     optimize_parser.add_argument("--min-improvement", type=float, default=0.0, help="required gain to accept")
     optimize_parser.add_argument("--patience", type=int, default=2, help="stop after N non-improving rounds")
     optimize_parser.add_argument("--seed", type=int, default=0)
@@ -262,30 +303,6 @@ def _load(args: argparse.Namespace):
     return load_dataset(args.dataset, options)
 
 
-def _apply_defaults(spec: PromptSpec, args: argparse.Namespace) -> PromptSpec:
-    if spec.max_tokens is None:
-        spec.max_tokens = args.max_tokens
-    return spec
-
-
-def _resolve_api_key(args: argparse.Namespace) -> str | None:
-    if args.api_key:
-        return args.api_key
-    for name in API_KEY_FALLBACKS:
-        value = os.environ.get(name)
-        if value:
-            return value
-    return None
-
-
-def _is_local(url: str) -> bool:
-    try:
-        host = urlparse(url).hostname
-    except ValueError:
-        return False
-    return bool(host) and host.lower() in LOCAL_HOSTS
-
-
 def _parse_headers(raw_headers: list[str]) -> dict[str, str]:
     headers: dict[str, str] = {}
     for raw in raw_headers:
@@ -299,95 +316,209 @@ def _parse_headers(raw_headers: list[str]) -> dict[str, str]:
     return headers
 
 
-def _build_backend(args: argparse.Namespace, role: str, api_key: str | None):
-    command = None
-    if role == "judge":
-        command = getattr(args, "judge_llm_cmd", None) or args.llm_cmd
-    elif role == "optimizer":
-        command = getattr(args, "optimizer_llm_cmd", None) or args.llm_cmd
-    else:
-        command = args.llm_cmd
-    if command:
-        return CommandBackend(command, timeout=max(args.timeout, 300.0), label=role)
+def _is_local(url: str) -> bool:
+    try:
+        host = urlparse(url).hostname
+    except ValueError:
+        return False
+    return bool(host) and host.lower() in LOCAL_HOSTS
 
-    base_url = args.base_url
-    model = args.model
-    if role == "judge":
-        base_url = getattr(args, "judge_base_url", "") or args.base_url
-        model = getattr(args, "judge_model", "") or args.model
-    elif role == "optimizer":
-        base_url = getattr(args, "optimizer_base_url", "") or args.base_url
-        model = getattr(args, "optimizer_model", "") or args.model
 
+def _legacy_target(args: argparse.Namespace) -> ModelConfig:
+    return ModelConfig(
+        name="default",
+        model=args.model,
+        base_url=args.base_url,
+        api_key=args.api_key,
+        headers=_parse_headers(args.header),
+        llm_cmd=args.llm_cmd,
+    )
+
+
+def _legacy_judge(args: argparse.Namespace) -> ModelConfig:
+    return ModelConfig(
+        name="judge",
+        model=args.judge_model or args.model,
+        base_url=args.judge_base_url or args.base_url,
+        api_key=args.api_key,
+        headers=_parse_headers(args.header),
+        temperature=args.judge_temperature,
+        max_tokens=args.judge_max_tokens,
+        llm_cmd=args.judge_llm_cmd or args.llm_cmd,
+    )
+
+
+def _legacy_optimizer(args: argparse.Namespace) -> ModelConfig:
+    return ModelConfig(
+        name="optimizer",
+        model=args.optimizer_model or args.model,
+        base_url=args.optimizer_base_url or args.base_url,
+        api_key=args.api_key,
+        headers=_parse_headers(args.header),
+        temperature=args.optimizer_temperature,
+        max_tokens=args.optimizer_max_tokens,
+        llm_cmd=args.optimizer_llm_cmd or args.llm_cmd,
+    )
+
+
+def _merge_config(primary: ModelConfig | None, fallback: ModelConfig) -> ModelConfig:
+    if primary is None:
+        return fallback
+    return ModelConfig(
+        name=primary.name or fallback.name,
+        model=primary.model or fallback.model,
+        base_url=primary.base_url or fallback.base_url,
+        api_key=primary.api_key or fallback.api_key,
+        api_key_env=primary.api_key_env or fallback.api_key_env,
+        temperature=primary.temperature if primary.temperature is not None else fallback.temperature,
+        max_tokens=primary.max_tokens if primary.max_tokens is not None else fallback.max_tokens,
+        weight=primary.weight,
+        headers={**fallback.headers, **primary.headers},
+        timeout=primary.timeout if primary.timeout is not None else fallback.timeout,
+        max_retries=primary.max_retries if primary.max_retries is not None else fallback.max_retries,
+        llm_cmd=primary.llm_cmd or fallback.llm_cmd,
+    )
+
+
+def _build_backend(config: ModelConfig, role: str, args: argparse.Namespace):
+    headers = {**_parse_headers(args.header), **config.headers}
+    if config.uses_command:
+        return CommandBackend(
+            config.llm_cmd or "", timeout=config.timeout or max(args.timeout, 300.0), label=role
+        )
+    if not config.base_url or not config.model:
+        raise ConfigError(f"{role} ({config.name}): both 'base_url' and 'model' are required")
+    api_key = resolve_api_key(config) or args.api_key
     if (
         not api_key
-        and not _is_local(base_url)
+        and not _is_local(config.base_url)
         and not args.allow_no_auth
         and not getattr(args, "dry_run", False)
     ):
         raise ConfigError(
-            f"no API key for {role} endpoint {base_url}; set PROMPT_OPT_API_KEY "
-            "(or pass --allow-no-auth for a keyless gateway)"
+            f"{role} ({config.name}) has no API key for {config.base_url}; "
+            f"{api_key_hint(config)} (or pass --allow-no-auth for a keyless gateway)"
         )
-    if not api_key and _is_local(base_url):
-        api_key = None
     return HttpBackend(
-        base_url=base_url,
-        model=model,
+        base_url=config.base_url,
+        model=config.model,
         api_key=api_key,
-        timeout=args.timeout,
-        max_retries=args.max_retries,
-        extra_headers=_parse_headers(args.header),
+        timeout=config.timeout or args.timeout,
+        max_retries=config.max_retries if config.max_retries is not None else args.max_retries,
+        extra_headers=headers,
         label=role,
     )
 
 
-def _clients(args: argparse.Namespace, *, optimize: bool = False):
-    api_key = _resolve_api_key(args)
-    backend_roles = ["task", "judge"] + (["optimizer"] if optimize else [])
-    backends = {role: _build_backend(args, role, api_key) for role in backend_roles}
-    cache = ResponseCache(args.cache_dir, enabled=not args.no_cache)
-    budget = Budget(args.max_calls)
-    clients = {
-        role: CountingClient(backends[role], cache=cache, budget=budget, usage=Usage())
-        for role in backend_roles
-    }
-    models = {
-        "task": getattr(backends["task"], "model", backends["task"].name),
-        "judge": getattr(backends["judge"], "model", backends["judge"].name),
-        "endpoint": getattr(backends["task"], "endpoint", ""),
-    }
-    if optimize:
-        models["optimizer"] = getattr(backends["optimizer"], "model", backends["optimizer"].name)
-    warnings: list[str] = []
-    if backends["judge"].name == backends["task"].name:
-        warnings.append(
-            "task and judge use the same model/endpoint; grading may share the generator's blind spots"
+def _build_runtime(args: argparse.Namespace, *, optimize: bool) -> Runtime:
+    models_file = load_models_config(args.models) if getattr(args, "models", None) else None
+    target_configs = (
+        models_file.targets if models_file is not None else [_legacy_target(args)]
+    )
+    judge_config = _merge_config(
+        models_file.judge if models_file is not None else None, _legacy_judge(args)
+    )
+    optimizer_config = (
+        _merge_config(
+            models_file.optimizer if models_file is not None else None,
+            _legacy_optimizer(args),
         )
-    return clients, models, budget, warnings
+        if optimize
+        else None
+    )
+
+    cache = (
+        ResponseCache(None, enabled=False)
+        if getattr(args, "dry_run", False)
+        else ResponseCache(args.cache_dir, enabled=not args.no_cache)
+    )
+    budget = Budget(args.max_calls)
+    targets: list[Target] = []
+    for index, config in enumerate(target_configs, 1):
+        backend = _build_backend(config, f"target:{config.name}", args)
+        targets.append(
+            Target(
+                config=config,
+                client=CountingClient(backend, cache=cache, budget=budget, usage=Usage()),
+            )
+        )
+    judge_backend = _build_backend(judge_config, "judge", args)
+    judge_client = CountingClient(judge_backend, cache=cache, budget=budget, usage=Usage())
+    optimizer_client = None
+    if optimize and optimizer_config is not None:
+        optimizer_backend = _build_backend(optimizer_config, "optimizer", args)
+        optimizer_client = CountingClient(
+            optimizer_backend, cache=cache, budget=budget, usage=Usage()
+        )
+
+    models_meta = {
+        "targets": [target.config.describe() for target in targets],
+        "judge": judge_config.describe(),
+    }
+    if optimizer_config is not None:
+        models_meta["optimizer"] = optimizer_config.describe()
+
+    warnings: list[str] = []
+    same = [target.name for target in targets if target.client.backend.name == judge_backend.name]
+    if same:
+        warnings.append(
+            "these target models also grade the output, so grading may share their blind spots: "
+            + ", ".join(same)
+        )
+    if len(targets) > 1:
+        warnings.append(
+            "the headline score is a weighted mean across target models; per-model scores are in the report"
+        )
+
+    optimizer_temperature = getattr(args, "optimizer_temperature", 0.7)
+    optimizer_max_tokens = getattr(args, "optimizer_max_tokens", 2048)
+    if optimizer_config is not None:
+        if optimizer_config.temperature is not None:
+            optimizer_temperature = optimizer_config.temperature
+        if optimizer_config.max_tokens is not None:
+            optimizer_max_tokens = optimizer_config.max_tokens
+
+    return Runtime(
+        targets=targets,
+        judge_client=judge_client,
+        optimizer_client=optimizer_client,
+        models_meta=models_meta,
+        budget=budget,
+        warnings=warnings,
+        judge_temperature=judge_config.temperature
+        if judge_config.temperature is not None
+        else args.judge_temperature,
+        judge_max_tokens=judge_config.max_tokens
+        if judge_config.max_tokens is not None
+        else args.judge_max_tokens,
+        optimizer_temperature=optimizer_temperature,
+        optimizer_max_tokens=optimizer_max_tokens,
+    )
 
 
-def _evaluator(args: argparse.Namespace, clients) -> Evaluator:
+def _evaluator(args: argparse.Namespace, runtime: Runtime) -> Evaluator:
     config = EvalConfig(
         concurrency=max(1, args.concurrency),
         judge_max_chars=max(500, args.judge_max_chars),
         judge_retries=max(0, args.judge_retries),
         judge_json_mode=args.judge_json_mode,
-        judge_temperature=args.judge_temperature,
-        judge_max_tokens=max(64, args.judge_max_tokens),
+        judge_temperature=runtime.judge_temperature,
+        judge_max_tokens=max(64, runtime.judge_max_tokens),
+        default_temperature=args.temperature,
+        default_max_tokens=args.max_tokens,
         on_error=args.on_error,
         on_judge_error=args.on_judge_error,
         progress=not args.quiet,
     )
     return Evaluator(
-        clients["task"],
-        clients["judge"],
+        runtime.targets,
+        runtime.judge_client,
         config,
         progress=lambda message: _print(message, error=True, quiet=args.quiet),
     )
 
 
-def _calls_per_item(dataset) -> int:
+def _calls_per_unit(dataset) -> int:
     return 1 + (1 if any(item.rubric.judged_criteria for item in dataset.items) else 0)
 
 
@@ -402,7 +533,14 @@ def _prepare_out(path: str | None, prefix: str, overwrite: bool) -> Path:
 def cmd_inspect(args: argparse.Namespace) -> int:
     dataset = _load(args)
     stats = dataset_stats(dataset, sample_chars=max(50, args.sample_chars))
-    cpi = _calls_per_item(dataset)
+    models_file = load_models_config(args.models) if args.models else None
+    target_descriptions = (
+        [config.describe() for config in models_file.targets]
+        if models_file is not None
+        else [{"name": "default", "model": "(CLI defaults)", "weight": 1.0}]
+    )
+    cpi = _calls_per_unit(dataset)
+    total = stats.rows * cpi * len(target_descriptions)
     plan = {
         "rows": stats.rows,
         "fields": stats.fields,
@@ -418,7 +556,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         "input_chars": stats.input_chars,
         "skipped_rows": stats.skipped,
         "warnings": stats.warnings,
-        "estimated_calls_per_full_eval": stats.rows * cpi,
+        "target_models": target_descriptions,
+        "estimated_calls_per_full_eval": total,
         "sample": stats.sample,
     }
     if args.json:
@@ -435,7 +574,13 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         f"({stats.judged_criteria} judged, {stats.deterministic_criteria} deterministic)"
     )
     print(f"weight sum: {stats.weight_sum:g}   input chars: {stats.input_chars}")
-    print(f"estimated calls for one full evaluation: {stats.rows * cpi}")
+    print(f"target models: {len(target_descriptions)}")
+    for config in target_descriptions:
+        print(
+            f"  - {config['name']}: model={config.get('model')} weight={config.get('weight')} "
+            f"endpoint={config.get('endpoint', '')}"
+        )
+    print(f"estimated calls for one full evaluation: {total}")
     if stats.skipped:
         print(f"skipped rows: {stats.skipped}")
     if stats.warnings:
@@ -452,8 +597,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         if stats.sample["reference"]:
             print(f"  reference: {stats.sample['reference']}")
     print(
-        "\nnext: python scripts/prompt_opt.py optimize --dataset <file> --prompt-file <file> "
-        "--out runs/opt --dry-run"
+        "\nnext: python scripts/prompt_opt.py optimize --dataset <file> --models <models.yaml> "
+        "--prompt-file <file> --out runs/opt --dry-run"
     )
     return 0
 
@@ -464,36 +609,44 @@ def _print_plan(
     search_items,
     holdout_items,
     cfg: OptimizeConfig | None,
-    models: dict[str, str],
+    models: dict[str, Any],
     task_calls: int,
     judge_calls: int,
 ) -> None:
     print("DRY RUN — no model calls were made")
     print(f"dataset: {dataset.path} ({len(dataset.items)} rows)")
-    print(f"task model: {models.get('task')} @ {models.get('endpoint')}")
-    print(f"judge model: {models.get('judge')}")
+    print(f"target models: {len(models.get('targets') or [])}")
+    for target in models.get("targets") or []:
+        print(
+            f"  - {target.get('name')}: model={target.get('model')} weight={target.get('weight')} "
+            f"endpoint={target.get('endpoint', '')}"
+        )
+    judge = models.get("judge") or {}
+    print(f"judge model: {judge.get('model')} ({judge.get('endpoint', '')})")
     if cfg:
         print(
             f"search rows: {len(search_items)}   holdout rows: {len(holdout_items)}   "
             f"rounds: {cfg.rounds}   candidates/round: {cfg.candidates}"
         )
-    print(f"estimated logical calls: ~{task_calls + judge_calls} (task {task_calls}, judge {judge_calls})")
+    total = task_calls + judge_calls
+    print(f"estimated logical calls: ~{total} (task {task_calls}, judge {judge_calls})")
     if args.max_calls:
         print(f"call budget: {args.max_calls}")
-        if task_calls + judge_calls > args.max_calls:
+        if total > args.max_calls:
             print("WARNING: the estimate exceeds --max-calls; the run will stop early", file=sys.stderr)
     print("estimate excludes transport retries and invalid-JSON repair calls; token counts are unknown")
 
 
 def cmd_score(args: argparse.Namespace) -> int:
     dataset = _load(args)
-    prompt = _apply_defaults(load_prompt(args.prompt_file, args.prompt), args)
-    clients, models, budget, warnings = _clients(args)
-    evaluator = _evaluator(args, clients)
+    prompt = load_prompt(args.prompt_file, args.prompt)
+    runtime = _build_runtime(args, optimize=False)
+    evaluator = _evaluator(args, runtime)
     items = dataset.items
     if args.limit:
         items = items[: args.limit]
-    cpi = _calls_per_item(dataset)
+    cpi = _calls_per_unit(dataset)
+    units = len(items) * len(runtime.targets)
     if args.dry_run:
         _print_plan(
             args,
@@ -501,9 +654,9 @@ def cmd_score(args: argparse.Namespace) -> int:
             items,
             [],
             None,
-            models,
-            task_calls=len(items),
-            judge_calls=len(items) if cpi > 1 else 0,
+            runtime.models_meta,
+            task_calls=units,
+            judge_calls=units if cpi > 1 else 0,
         )
         return 0
 
@@ -522,30 +675,37 @@ def cmd_score(args: argparse.Namespace) -> int:
                 "fields": dataset.fields,
                 "field_map": dataset.field_map,
             },
-            "models": models,
+            "models": runtime.models_meta,
         },
     )
     write_text(out / "prompts" / "baseline.txt", prompt.display_text())
-    _print(f"scoring {len(items)} rows…", error=True, quiet=args.quiet)
+    _print(f"scoring {units} model-row pairs…", error=True, quiet=args.quiet)
     run = evaluator.evaluate(prompt, items, label="score")
     write_jsonl(out / "results" / "score.jsonl", [result.to_dict() for result in run.results])
     summary = run.summary.to_dict()
-    summary["warnings"] = list(dict.fromkeys(warnings + evaluator.warnings))
+    summary["format"] = "prompt-optimizer-score"
+    summary["warnings"] = list(dict.fromkeys(runtime.warnings + evaluator.warnings))
     summary["dataset"] = str(dataset.path)
+    summary["models"] = runtime.models_meta
     summary["prompt_file"] = "prompts/baseline.txt"
     write_json(out / "summary.json", summary)
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     else:
         print(f"score: {summary['score_mean']:.2f} / 100 (weighted sum {summary['score_sum']:.2f})")
+        for name, score in summary.get("by_model", {}).items():
+            print(
+                f"  - {name}: {score['score_mean']:.2f} / 100 "
+                f"(weight {score['weight']}, {score['scored_items']} scored, {score['skipped_items']} skipped)"
+            )
         print(
-            f"rows: {summary['scored_items']} scored, {summary['skipped_items']} skipped, "
+            f"pairs: {summary['scored_items']} scored, {summary['skipped_items']} skipped, "
             f"{summary['item_count']} total"
         )
         print(f"summary: {out / 'summary.json'}")
     if summary["skipped_items"]:
         print(
-            f"WARNING: {summary['skipped_items']} rows were skipped and excluded from the score",
+            f"WARNING: {summary['skipped_items']} model-row pairs were skipped and excluded from the score",
             file=sys.stderr,
         )
     return 0
@@ -562,7 +722,10 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         raise ConfigError("--min-improvement must be >= 0")
 
     dataset = _load(args)
-    prompt = _apply_defaults(load_prompt(args.prompt_file, args.prompt), args)
+    prompt = load_prompt(args.prompt_file, args.prompt)
+    runtime = _build_runtime(args, optimize=True)
+    if runtime.optimizer_client is None:
+        raise ConfigError("no optimizer model configured")
     cfg = OptimizeConfig(
         rounds=args.rounds,
         candidates=args.candidates,
@@ -572,8 +735,8 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         patience=max(1, args.patience),
         seed=args.seed,
         holdout=args.holdout,
-        optimizer_temperature=args.optimizer_temperature,
-        optimizer_max_tokens=max(128, args.optimizer_max_tokens),
+        optimizer_temperature=runtime.optimizer_temperature,
+        optimizer_max_tokens=max(128, runtime.optimizer_max_tokens),
         max_prompt_chars=max(1000, args.max_prompt_chars),
     )
     search_items, holdout_items = split_items(dataset.items, cfg.holdout, cfg.seed)
@@ -581,28 +744,17 @@ def cmd_optimize(args: argparse.Namespace) -> int:
     if not search_items:
         raise ConfigError("no search rows after applying --search-size/--holdout")
 
-    clients, models, budget, warnings = _clients(args, optimize=True)
-    evaluator = _evaluator(args, clients)
-
-    cpi = _calls_per_item(dataset)
+    evaluator = _evaluator(args, runtime)
+    cpi = _calls_per_unit(dataset)
+    model_count = len(runtime.targets)
     covers_all = len(search_items) == len(dataset.items) and not holdout_items
-    baseline_calls = len(search_items) * cpi
-    candidate_calls = len(search_items) * cpi
-    final_calls = 0 if covers_all else len(dataset.items) * cpi * 2
+    units_search = len(search_items) * model_count
+    units_full = len(dataset.items) * model_count
+    baseline_calls = units_search * cpi
+    candidate_calls = units_search * cpi
+    final_calls = 0 if covers_all else units_full * cpi * 2
     estimated = (
-        baseline_calls
-        + cfg.rounds * (1 + cfg.candidates * candidate_calls)
-        + final_calls
-    )
-    estimated_task = (
-        len(search_items)
-        + cfg.rounds * (1 + cfg.candidates * len(search_items))
-        + (0 if covers_all else len(dataset.items) * 2)
-    )
-    estimated_judge = (
-        len(search_items) * (cpi - 1)
-        + cfg.rounds * cfg.candidates * len(search_items) * (cpi - 1)
-        + (0 if covers_all else len(dataset.items) * (cpi - 1) * 2)
+        baseline_calls + cfg.rounds * (1 + cfg.candidates * candidate_calls) + final_calls
     )
 
     if args.dry_run:
@@ -612,9 +764,15 @@ def cmd_optimize(args: argparse.Namespace) -> int:
             search_items,
             holdout_items,
             cfg,
-            models,
-            task_calls=estimated_task,
-            judge_calls=estimated_judge,
+            runtime.models_meta,
+            task_calls=units_search
+            + cfg.rounds * (1 + cfg.candidates * units_search)
+            + (0 if covers_all else units_full * 2),
+            judge_calls=(
+                units_search * (cpi - 1)
+                + cfg.rounds * cfg.candidates * units_search * (cpi - 1)
+                + (0 if covers_all else units_full * (cpi - 1) * 2)
+            ),
         )
         print(f"estimated total logical calls: ~{estimated}")
         return 0
@@ -623,12 +781,12 @@ def cmd_optimize(args: argparse.Namespace) -> int:
     optimizer = Optimizer(
         dataset=dataset,
         evaluator=evaluator,
-        optimizer_client=clients["optimizer"],
+        optimizer_client=runtime.optimizer_client,
         config=cfg,
         out_dir=out,
-        models=models,
+        models=runtime.models_meta,
         command=_display_command(sys.argv),
-        warnings=warnings,
+        warnings=runtime.warnings,
         progress=lambda message: _print(message, error=True, quiet=args.quiet),
     )
     try:
@@ -649,6 +807,8 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         f"{outcome.summary['best']['metrics']['all']['score_mean']:.2f} "
         f"({improvement['full_mean_delta']:+.2f})"
     )
+    for name, delta in (improvement.get("by_model") or {}).items():
+        print(f"  - {name}: {delta['baseline']:.2f} → {delta['best']:.2f} ({delta['delta']:+.2f})")
     if outcome.warnings:
         print("warnings:")
         for warning in outcome.warnings:
@@ -660,7 +820,10 @@ def cmd_report(args: argparse.Namespace) -> int:
     run_dir = Path(args.run)
     if not (run_dir / "summary.json").exists():
         raise ConfigError(f"{run_dir} has no summary.json; pass the --out directory of a finished run")
-    path = write_report(run_dir)
+    try:
+        path = write_report(run_dir)
+    except (OSError, ValueError) as error:
+        raise ConfigError(f"could not render report from {run_dir}: {error}") from error
     print(str(path))
     return 0
 

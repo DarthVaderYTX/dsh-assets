@@ -92,11 +92,21 @@ class StubHandler(BaseHTTPRequestHandler):
                 }
             )
         else:
-            content = (
-                "GOOD answer with evidence."
-                if "GOOD" in system
-                else "an answer without the required marker"
-            )
+            model_name = payload.get("model")
+            if model_name == "always-good":
+                content = "GOOD answer with evidence."
+            elif model_name == "needs-prompt":
+                content = (
+                    "GOOD answer with evidence."
+                    if "GOOD" in system
+                    else "an answer without the required marker"
+                )
+            else:
+                content = (
+                    "GOOD answer with evidence."
+                    if "GOOD" in system
+                    else "an answer without the required marker"
+                )
 
         body = json.dumps(
             {
@@ -144,6 +154,47 @@ class EndToEndTests(unittest.TestCase):
         )
         self.prompt = self.dir / "prompt.txt"
         self.prompt.write_text(BASELINE_PROMPT, encoding="utf-8")
+        self.prompt_yaml = self.dir / "prompt.yaml"
+        self.prompt_yaml.write_text(
+            """name: stub-prompt
+messages:
+  - role: system
+    content: |
+      Answer the question.
+  - role: user
+    content: |
+      {{input}}
+""",
+            encoding="utf-8",
+        )
+        self.models_yaml = self.dir / "models.yaml"
+        self.models_yaml.write_text(
+            f"""models:
+  - name: strong
+    model: always-good
+    base_url: {self.base_url}
+    temperature: 0.0
+    max_tokens: 256
+    weight: 1
+  - name: weak
+    model: needs-prompt
+    base_url: {self.base_url}
+    temperature: 0.0
+    max_tokens: 256
+    weight: 3
+judge:
+  model: judge-stub
+  base_url: {self.base_url}
+  temperature: 0
+  max_tokens: 256
+optimizer:
+  model: optimizer-stub
+  base_url: {self.base_url}
+  temperature: 0.7
+  max_tokens: 512
+""",
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -176,6 +227,65 @@ class EndToEndTests(unittest.TestCase):
             "x-test: 1",
             *(extra or []),
         ]
+
+    def _models_args(self, out: Path, extra: list[str] | None = None) -> list[str]:
+        return [
+            "optimize",
+            "--dataset",
+            str(self.dataset),
+            "--prompt-file",
+            str(self.prompt_yaml),
+            "--models",
+            str(self.models_yaml),
+            "--out",
+            str(out),
+            "--cache-dir",
+            str(self.dir / "cache"),
+            "--rounds",
+            "1",
+            "--candidates",
+            "2",
+            "--concurrency",
+            "2",
+            "--max-calls",
+            "300",
+            "--quiet",
+            *(extra or []),
+        ]
+
+    def test_multi_model_weighted_objective(self):
+        out = self.dir / "run-multi"
+        code = cli.main(self._models_args(out))
+        self.assertEqual(code, 0)
+
+        summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+        baseline = summary["baseline"]["metrics"]["all"]
+        best = summary["best"]["metrics"]["all"]
+        self.assertEqual(baseline["by_model"]["strong"]["score_mean"], 100.0)
+        self.assertEqual(baseline["by_model"]["weak"]["score_mean"], 0.0)
+        self.assertEqual(baseline["score_mean"], 25.0)
+        self.assertEqual(best["score_mean"], 100.0)
+        self.assertEqual(summary["improvement"]["full_mean_delta"], 75.0)
+        self.assertEqual(summary["improvement"]["by_model"]["weak"]["delta"], 100.0)
+        self.assertEqual(summary["improvement"]["by_model"]["strong"]["delta"], 0.0)
+
+        targets = summary["models"]["targets"]
+        self.assertEqual([target["name"] for target in targets], ["strong", "weak"])
+        self.assertEqual([target["weight"] for target in targets], [1.0, 3.0])
+
+        rows = [
+            json.loads(line)
+            for line in (out / "results" / "best_full.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(rows), 4)
+        self.assertEqual({row["model"] for row in rows}, {"strong", "weak"})
+        self.assertTrue(all(row["item_score"] == 100.0 for row in rows))
+
+        report = (out / "report.md").read_text(encoding="utf-8")
+        self.assertIn("分模型得分", report)
+        self.assertIn("strong", report)
+        self.assertIn("weak", report)
 
     def test_optimize_end_to_end(self):
         out = self.dir / "run"

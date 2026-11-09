@@ -30,13 +30,14 @@ from .util import (
 OPTIMIZER_SYSTEM = """You are a senior prompt engineer. You improve a task prompt by studying measured failures on a rubric-graded dataset.
 
 Rules:
-- The prompt under optimisation is the system instruction sent to the model for every dataset row.
+- The prompt under optimisation is the system message. The rest of the conversation template (user message, few-shot turns) is fixed and must not be rewritten.
 - Return complete replacement system prompts, never patches or commentary.
 - Encode the rubric's requirements as general, checkable rules. Do not mention the rubric, the grader, the dataset, or the evaluation process in the prompt.
 - Never hardcode row-specific facts, answers, names or numbers taken from the failures. Do not invent facts, citations or policies.
 - Preserve the original language and the task's actual goal. Do not broaden or narrow the task beyond what the current prompt and rubric imply.
 - Prefer concrete output requirements (structure, required elements, evidence, constraints) over vague advice such as "be helpful" or "be accurate".
 - Remove or rewrite rules that the failures show are not working. Shorter is better when it does not lose a requirement.
+- You are optimising one prompt that must work across every listed target model; fix failure modes shared by several models first, then model-specific ones.
 - Candidates in one batch must attack different failure modes, not paraphrase each other."""
 
 OPTIMIZER_TEMPLATE = """Improve the system prompt below.
@@ -45,13 +46,22 @@ OPTIMIZER_TEMPLATE = """Improve the system prompt below.
 {current_prompt}
 </current_prompt>
 
+<conversation_template>
+{template}
+</conversation_template>
+
+<target_models>
+{models}
+</target_models>
+
 <rubric_summary>
 {criteria}
 </rubric_summary>
 
 <scoring>
 Each row is graded per criterion: 1 = fully satisfied, 0.5 = partial, 0 = not satisfied.
-Row score = 100 * weighted criteria score. The dataset score is the weighted mean row score (0-100).
+Row score = 100 * weighted criteria score. The dataset score is the weighted mean row score,
+averaged over the target models by their weights (0-100).
 </scoring>
 
 <worst_rows>
@@ -59,7 +69,8 @@ Row score = 100 * weighted criteria score. The dataset score is the weighted mea
 </worst_rows>
 
 <task>
-Write {count} candidate system prompts. Each candidate must be a complete, self-contained replacement.
+Write {count} candidate system prompts. Each candidate must be a complete, self-contained replacement
+for the system message only; keep the fixed conversation template out of the candidate text.
 Return only JSON in this exact shape:
 {{"candidates": [{{"prompt": "<full system prompt>", "hypothesis": "<why this should raise the score>", "changes": "<what was changed vs the current prompt>"}}]}}
 Do not wrap the JSON in a markdown fence. Keep each prompt under {max_chars} characters.
@@ -165,7 +176,7 @@ def _failure_digest(
         failed = [criterion for criterion in result.criteria if criterion.score < 1.0]
         if not failed:
             continue
-        lines = [f"### Row {result.id} — score {result.item_score:.1f}/100"]
+        lines = [f"### Model {result.model} — row {result.id} — score {result.item_score:.1f}/100"]
         if item is not None:
             lines.append("<input>\n" + truncate(item.input, 700) + "\n</input>")
         lines.append("<model_output>\n" + truncate(result.output, 700) + "\n</model_output>")
@@ -178,15 +189,41 @@ def _failure_digest(
     return "\n\n".join(blocks) if blocks else "(no failing rows)"
 
 
+def _template_digest(prompt: PromptSpec, limit: int) -> str:
+    fixed = [message for message in prompt.messages if message["role"] != "system"]
+    if not fixed:
+        return "(no fixed messages; the dataset input is appended as the user message)"
+    lines: list[str] = []
+    budget = max(200, limit // max(1, len(fixed)))
+    for message in fixed:
+        lines.append(f"- role: {message['role']}")
+        lines.append("  content: |")
+        for content_line in truncate(message["content"], budget).split("\n"):
+            lines.append("    " + content_line)
+    return "\n".join(lines)
+
+
+def _models_digest(models: dict[str, Any]) -> str:
+    targets = models.get("targets") or []
+    lines = [
+        f"- {target.get('name')}: model={target.get('model')} weight={target.get('weight')}"
+        for target in targets
+    ]
+    return "\n".join(lines) if lines else "- (no target models)"
+
+
 def build_optimizer_messages(
     current_prompt: PromptSpec,
     items: list[Item],
     failures: str,
     count: int,
     max_chars: int,
+    models: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     user = OPTIMIZER_TEMPLATE.format(
-        current_prompt=truncate(current_prompt.system, max_chars),
+        current_prompt=truncate(current_prompt.system_text, max_chars),
+        template=_template_digest(current_prompt, max_chars),
+        models=_models_digest(models or {}),
         criteria=_criteria_digest(items),
         failures=failures,
         count=count,
@@ -244,7 +281,7 @@ class Optimizer:
         optimizer_client: CountingClient,
         config: OptimizeConfig,
         out_dir: str | Path,
-        models: dict[str, str],
+        models: dict[str, Any],
         command: str = "",
         warnings: list[str] | None = None,
         progress: Callable[[str], None] | None = None,
@@ -258,7 +295,8 @@ class Optimizer:
         self.command = command
         self.warnings = list(warnings or [])
         self._progress = progress or (lambda message: None)
-        self.budget = evaluator.task_client.budget
+        self.targets = evaluator.targets
+        self.budget = evaluator.targets[0].client.budget
         self.history: list[CandidateRecord] = []
         self.started_at = utc_now()
         self._start_monotonic = time.time()
@@ -319,7 +357,7 @@ class Optimizer:
                 },
                 "baseline_prompt": {
                     "hash": baseline_prompt.identity(),
-                    "system_chars": len(baseline_prompt.system),
+                    "system_chars": len(baseline_prompt.system_text),
                     "temperature": baseline_prompt.temperature,
                 },
             },
@@ -331,18 +369,20 @@ class Optimizer:
         incumbent_label = "baseline_search"
 
         items_by_index = {item.index: item for item in self.dataset.items}
-        calls_per_item = 1 + (1 if any(item.rubric.judged_criteria for item in search_items) else 0)
-        # Keep enough calls for the final apples-to-apples pass over rows that the
-        # search evaluation has not touched yet (holdout rows and unsampled rows).
-        unmeasured_rows = len(self.dataset.items) - len(baseline_search.results)
-        final_reserve = 2 * max(0, unmeasured_rows) * calls_per_item
+        calls_per_unit = 1 + (1 if any(item.rubric.judged_criteria for item in search_items) else 0)
+        units_per_eval = len(search_items) * len(self.targets)
+        # Keep enough calls for the final apples-to-apples pass over model-row pairs
+        # that the search evaluation has not touched yet.
+        total_units = len(self.dataset.items) * len(self.targets)
+        unmeasured_units = total_units - len(baseline_search.results)
+        final_reserve = 2 * max(0, unmeasured_units) * calls_per_unit
 
         if incumbent.summary.score_mean >= 100.0 - 1e-9:
             self.warnings.append("baseline already scores 100; nothing to optimise")
         else:
             stale_rounds = 0
             for round_number in range(1, self.config.rounds + 1):
-                needed = len(search_items) * calls_per_item
+                needed = units_per_eval * calls_per_unit
                 if self.budget.remaining is not None and self.budget.remaining < needed + final_reserve:
                     self.warnings.append(
                         f"stopped before round {round_number}: call budget too small for another "
@@ -354,7 +394,9 @@ class Optimizer:
                 )
                 self._progress(f"round {round_number}: proposing {self.config.candidates} candidates")
                 try:
-                    candidates = self._propose(incumbent.prompt, search_items, failures)
+                    candidates = self._propose(
+                        incumbent.prompt, search_items, failures, self.models
+                    )
                 except (LLMError, ValueError, BudgetExceeded) as error:
                     self.warnings.append(f"round {round_number}: candidate generation failed: {error}")
                     break
@@ -401,7 +443,7 @@ class Optimizer:
                             accepted=accepted and slot == best_slot,
                             hypothesis=candidate.hypothesis,
                             changes=candidate.changes,
-                            prompt_chars=len(candidate.prompt.system),
+                            prompt_chars=len(candidate.prompt.system_text),
                             usage=run.summary.usage.to_dict(),
                         )
                     )
@@ -489,7 +531,11 @@ class Optimizer:
         )
 
     def _propose(
-        self, incumbent: PromptSpec, search_items: list[Item], failures: str
+        self,
+        incumbent: PromptSpec,
+        search_items: list[Item],
+        failures: str,
+        models: dict[str, Any],
     ) -> list[Candidate]:
         messages = build_optimizer_messages(
             incumbent,
@@ -497,6 +543,7 @@ class Optimizer:
             failures,
             self.config.candidates,
             self.config.max_prompt_chars,
+            models,
         )
         last_error: Exception | None = None
         for attempt in range(2):
@@ -528,7 +575,7 @@ class Optimizer:
     def _validate_candidates(
         self, raw_candidates: list[dict[str, str]], incumbent: PromptSpec, items: list[Item]
     ) -> list[Candidate]:
-        seen = {normalize_space(incumbent.system)}
+        seen = {normalize_space(incumbent.system_text)}
         leak_sources: list[tuple[str, str]] = []
         for item in items:
             if len(normalize_space(item.input)) >= 80:
@@ -571,14 +618,8 @@ class Optimizer:
             if fingerprint in seen:
                 continue
             seen.add(fingerprint)
-            spec = PromptSpec(
-                system=text,
-                user_template=incumbent.user_template,
-                few_shot=list(incumbent.few_shot),
-                temperature=incumbent.temperature,
-                max_tokens=incumbent.max_tokens,
-                source=f"candidate:{sha256_text(text)[:8]}",
-            )
+            spec = incumbent.with_system(text)
+            spec.source = f"candidate:{sha256_text(text)[:8]}"
             candidates.append(
                 Candidate(
                     prompt=spec,
@@ -607,15 +648,23 @@ class Optimizer:
 
         def split_metrics(run: EvalRun) -> dict[str, Any]:
             metrics: dict[str, Any] = {
-                "all": summarize("all", run.prompt, run.results).to_dict(),
+                "all": summarize("all", run.prompt, run.results, self.targets).to_dict(),
             }
-            metrics["all"]["complete"] = len(run.results) == len(self.dataset.items)
+            metrics["all"]["complete"] = len(run.results) == (
+                len(self.dataset.items) * len(self.targets)
+            )
             if holdout_ids:
                 metrics["search"] = summarize(
-                    "search", run.prompt, [row for row in run.results if row.index in search_ids]
+                    "search",
+                    run.prompt,
+                    [row for row in run.results if row.index in search_ids],
+                    self.targets,
                 ).to_dict()
                 metrics["holdout"] = summarize(
-                    "holdout", run.prompt, [row for row in run.results if row.index in holdout_ids]
+                    "holdout",
+                    run.prompt,
+                    [row for row in run.results if row.index in holdout_ids],
+                    self.targets,
                 ).to_dict()
             else:
                 metrics["search"] = metrics["all"]
@@ -647,12 +696,25 @@ class Optimizer:
                 return None
             return round(best["score_mean"] - base["score_mean"], 2)
 
+        by_model_delta: dict[str, dict[str, Any]] = {}
+        for name, base_score in baseline_metrics["all"].get("by_model", {}).items():
+            best_score = best_metrics["all"].get("by_model", {}).get(name)
+            if not best_score:
+                continue
+            by_model_delta[name] = {
+                "baseline": base_score.get("score_mean"),
+                "best": best_score.get("score_mean"),
+                "delta": round(best_score.get("score_mean", 0.0) - base_score.get("score_mean", 0.0), 2),
+                "weight": base_score.get("weight"),
+            }
+
         improvements = {
             "full_comparable": comparable,
             "full_mean_delta": round(delta, 2),
             "full_relative_pct": round(relative, 2) if relative is not None else None,
             "search_mean_delta": delta_for("search"),
             "holdout_mean_delta": delta_for("holdout"),
+            "by_model": by_model_delta,
         }
 
         return {
@@ -668,6 +730,7 @@ class Optimizer:
                 "holdout_rows": len(holdout_items),
                 "skipped_rows": len(self.dataset.skipped),
                 "fields": self.dataset.fields,
+                "target_models": len(self.targets),
             },
             "models": self.models,
             "config": {
@@ -683,12 +746,12 @@ class Optimizer:
             },
             "baseline": {
                 "prompt_hash": baseline_prompt.identity(),
-                "prompt_chars": len(baseline_prompt.system),
+                "prompt_chars": len(baseline_prompt.system_text),
                 "metrics": baseline_metrics,
             },
             "best": {
                 "prompt_hash": best_search.prompt.identity(),
-                "prompt_chars": len(best_search.prompt.system),
+                "prompt_chars": len(best_search.prompt.system_text),
                 "prompt_file": "prompts/best.txt",
                 "last_label": incumbent_label,
                 "metrics": best_metrics,
@@ -710,7 +773,9 @@ class Optimizer:
             ],
             "warnings": self.warnings,
             "usage": {
-                "task": self.evaluator.task_client.usage.to_dict(),
+                "targets": {
+                    target.name: target.client.usage.to_dict() for target in self.targets
+                },
                 "judge": self.evaluator.judge_client.usage.to_dict(),
                 "optimizer": self.optimizer_client.usage.to_dict(),
             },

@@ -1,4 +1,4 @@
-"""Evaluation: run a prompt on dataset rows and grade outputs against rubrics."""
+"""Evaluation: run a prompt on every (target model, dataset row) pair and grade it."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from typing import Any, Callable
 
 from .dataset import Item
 from .errors import BudgetExceeded, JudgeError, PromptOptError
-from .llm import Completion, CountingClient, Usage
+from .llm import CountingClient, Usage
+from .models import ModelConfig
 from .promptspec import PromptSpec
 from .rubric import Criterion, Rubric, evaluate_check, render_criteria
 from .util import extract_json, normalize_space, sha256_text, truncate
@@ -43,6 +44,16 @@ Return exactly this JSON shape, one entry per rubric id and no extra ids:
 {{"criteria": [{{"id": "<rubric id>", "score": 0, "rationale": "<short evidence-based reason>"}}], "summary": "<one sentence overall verdict>"}}"""
 
 
+@dataclass
+class Target:
+    config: ModelConfig
+    client: CountingClient
+
+    @property
+    def name(self) -> str:
+        return self.config.name
+
+
 def _tag_safe(text: str) -> str:
     return (text or "").replace("</", "<\\/")
 
@@ -71,6 +82,7 @@ class CriterionResult:
 class ItemResult:
     index: int
     id: str
+    model: str
     output: str
     item_score: float | None
     criteria: list[CriterionResult] = field(default_factory=list)
@@ -83,6 +95,7 @@ class ItemResult:
         return {
             "index": self.index,
             "id": self.id,
+            "model": self.model,
             "input_preview": self.input_preview,
             "output": self.output,
             "item_score": None if self.item_score is None else round(self.item_score, 2),
@@ -101,9 +114,39 @@ class EvalConfig:
     judge_json_mode: bool = True
     judge_temperature: float = 0.0
     judge_max_tokens: int = 1024
+    default_temperature: float | None = None
+    default_max_tokens: int | None = None
     on_error: str = "abort"  # abort | skip
     on_judge_error: str = "abort"  # abort | zero
     progress: bool = True
+
+
+@dataclass
+class ModelScore:
+    name: str
+    model: str
+    weight: float
+    row_weight_sum: float
+    scored_items: int
+    skipped_items: int
+    score_mean: float
+    score_sum: float
+    rubric_means: dict[str, dict[str, Any]] = field(default_factory=dict)
+    usage: Usage = field(default_factory=Usage)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "model": self.model,
+            "weight": self.weight,
+            "row_weight_sum": round(self.row_weight_sum, 3),
+            "scored_items": self.scored_items,
+            "skipped_items": self.skipped_items,
+            "score_mean": round(self.score_mean, 2),
+            "score_sum": round(self.score_sum, 2),
+            "rubric_means": self.rubric_means,
+            "usage": self.usage.to_dict(),
+        }
 
 
 @dataclass
@@ -116,8 +159,10 @@ class EvalSummary:
     score_mean: float
     score_sum: float
     weight_sum: float
+    by_model: dict[str, ModelScore]
     rubric_means: dict[str, dict[str, Any]]
     usage: Usage
+    judge_usage: Usage = field(default_factory=Usage)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -129,8 +174,10 @@ class EvalSummary:
             "score_mean": round(self.score_mean, 2),
             "score_sum": round(self.score_sum, 2),
             "weight_sum": round(self.weight_sum, 3),
+            "by_model": {name: score.to_dict() for name, score in self.by_model.items()},
             "rubric_means": self.rubric_means,
             "usage": self.usage.to_dict(),
+            "judge_usage": self.judge_usage.to_dict(),
         }
 
 
@@ -141,8 +188,8 @@ class EvalRun:
     results: list[ItemResult]
     duration_seconds: float
 
-    def results_by_id(self) -> dict[str, ItemResult]:
-        return {result.id: result for result in self.results}
+    def results_by_key(self) -> dict[str, ItemResult]:
+        return {f"{result.model}\u0000{result.index}": result for result in self.results}
 
 
 def build_judge_messages(
@@ -254,13 +301,15 @@ def parse_judge_response(text: str, criteria: list[Criterion]) -> dict[str, tupl
 class Evaluator:
     def __init__(
         self,
-        task_client: CountingClient,
+        targets: list[Target],
         judge_client: CountingClient,
         config: EvalConfig | None = None,
         *,
         progress: Callable[[str], None] | None = None,
     ) -> None:
-        self.task_client = task_client
+        if not targets:
+            raise PromptOptError("no target models configured")
+        self.targets = targets
         self.judge_client = judge_client
         self.config = config or EvalConfig()
         self._progress = progress
@@ -269,31 +318,56 @@ class Evaluator:
 
     def evaluate(self, prompt: PromptSpec, items: list[Item], label: str = "eval") -> EvalRun:
         started = time.time()
-        usage_before = _usage_snapshot(self.task_client, self.judge_client)
+        target_before = {
+            target.name: _snapshot(target.client.usage) for target in self.targets
+        }
+        judge_before = _snapshot(self.judge_client.usage)
+
+        units = [(target, item) for target in self.targets for item in items]
         results: list[ItemResult] = []
         done = 0
-        total = len(items)
+        total = len(units)
+        order = {target.name: index for index, target in enumerate(self.targets)}
 
-        def work(item: Item) -> ItemResult:
-            return self._evaluate_item(prompt, item)
+        def work(target: Target, item: Item) -> ItemResult:
+            return self._evaluate_unit(prompt, target, item)
+
+        def safe(target: Target, item: Item) -> ItemResult:
+            return self._safe_work(work, target, item)
 
         if self.config.concurrency <= 1 or total <= 1:
-            for item in items:
-                result = self._safe_work(work, item)
-                results.append(result)
+            for target, item in units:
+                results.append(safe(target, item))
                 done += 1
                 self._tick(label, done, total)
         else:
             with ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
-                futures = {executor.submit(self._safe_work, work, item): item for item in items}
+                futures = {
+                    executor.submit(safe, target, item): (target, item)
+                    for target, item in units
+                }
                 for future in as_completed(futures):
                     results.append(future.result())
                     done += 1
                     self._tick(label, done, total)
-            results.sort(key=lambda result: result.index)
+        results.sort(key=lambda result: (order.get(result.model, 0), result.index))
 
-        summary = summarize(label, prompt, results)
-        summary.usage = _usage_delta(usage_before, _usage_snapshot(self.task_client, self.judge_client))
+        summary = summarize(label, prompt, results, self.targets)
+        for target in self.targets:
+            summary.by_model[target.name].usage = _delta(
+                target_before[target.name], _snapshot(target.client.usage)
+            )
+        summary.judge_usage = _delta(judge_before, _snapshot(self.judge_client.usage))
+        combined = Usage()
+        for score in summary.by_model.values():
+            combined.add(score.usage)
+        combined.add(summary.judge_usage)
+        summary.usage = combined
+
+        for name, score in summary.by_model.items():
+            if score.scored_items == 0 and total > 0:
+                with self._lock:
+                    self.warnings.append(f"model {name!r} produced no scored rows")
         return EvalRun(
             prompt=prompt,
             summary=summary,
@@ -301,9 +375,11 @@ class Evaluator:
             duration_seconds=round(time.time() - started, 2),
         )
 
-    def _safe_work(self, work: Callable[[Item], ItemResult], item: Item) -> ItemResult:
+    def _safe_work(
+        self, work: Callable[[Target, Item], ItemResult], target: Target, item: Item
+    ) -> ItemResult:
         try:
-            return work(item)
+            return work(target, item)
         except BudgetExceeded:
             # Budget exhaustion must abort the run, never masquerade as skipped rows.
             raise
@@ -313,6 +389,7 @@ class Evaluator:
             return ItemResult(
                 index=item.index,
                 id=item.id,
+                model=target.name,
                 output="",
                 item_score=None,
                 error=f"{type(error).__name__}: {error}",
@@ -322,14 +399,33 @@ class Evaluator:
 
     def _tick(self, label: str, done: int, total: int) -> None:
         if self._progress and (done == total or done % max(1, total // 10) == 0):
-            self._progress(f"[{label}] {done}/{total} items evaluated")
+            self._progress(f"[{label}] {done}/{total} model-row pairs evaluated")
 
-    def _evaluate_item(self, prompt: PromptSpec, item: Item) -> ItemResult:
-        messages = prompt.messages(item.input)
-        completion = self.task_client.complete(
+    def _settings(self, prompt: PromptSpec, target: Target) -> tuple[float, int]:
+        # Precedence: model config > CLI override > prompt template > built-in default.
+        temperature = target.config.temperature
+        if temperature is None:
+            temperature = self.config.default_temperature
+        if temperature is None:
+            temperature = prompt.temperature
+        if temperature is None:
+            temperature = 0.0
+        max_tokens = target.config.max_tokens
+        if max_tokens is None:
+            max_tokens = self.config.default_max_tokens
+        if max_tokens is None:
+            max_tokens = prompt.max_tokens
+        if max_tokens is None:
+            max_tokens = 1024
+        return float(temperature), int(max_tokens)
+
+    def _evaluate_unit(self, prompt: PromptSpec, target: Target, item: Item) -> ItemResult:
+        messages = prompt.rendered_messages(item.input)
+        temperature, max_tokens = self._settings(prompt, target)
+        completion = target.client.complete(
             messages,
-            temperature=prompt.temperature,
-            max_tokens=prompt.max_tokens,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         output = completion.text
 
@@ -363,7 +459,8 @@ class Evaluator:
                     )
                 )
 
-        criterion_results.sort(key=lambda result: [c.id for c in item.rubric.criteria].index(result.id))
+        criterion_order = {criterion.id: index for index, criterion in enumerate(item.rubric.criteria)}
+        criterion_results.sort(key=lambda result: criterion_order.get(result.id, 0))
         total_weight = sum(result.weight for result in criterion_results)
         if total_weight <= 0:
             raise JudgeError(f"item {item.id!r}: rubric has no positive weight")
@@ -371,6 +468,7 @@ class Evaluator:
         return ItemResult(
             index=item.index,
             id=item.id,
+            model=target.name,
             output=output,
             item_score=item_score,
             criteria=criterion_results,
@@ -421,31 +519,19 @@ class Evaluator:
         raise JudgeError(f"item {item.id!r}: {last_error}")
 
 
-def summarize(label: str, prompt: PromptSpec, results: list[ItemResult]) -> EvalSummary:
-    scored = [result for result in results if result.item_score is not None]
-    weight_sum = sum(result.weight for result in scored)
-    weighted_points = sum(result.weight * (result.item_score or 0.0) for result in scored)
-    mean = weighted_points / weight_sum if weight_sum else 0.0
-
-    rubric_totals: dict[str, dict[str, Any]] = {}
-    for result in scored:
+def _rubric_means(results: list[ItemResult]) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, dict[str, Any]] = {}
+    for result in results:
         for criterion in result.criteria:
-            # Rubrics are frequently row-specific, so aggregate by criterion text,
-            # not by the per-row id ("c1" is not the same criterion across rows).
             key = sha256_text(normalize_space(criterion.text))[:12]
-            bucket = rubric_totals.setdefault(
+            bucket = buckets.setdefault(
                 key,
-                {
-                    "weighted": 0.0,
-                    "weight": 0.0,
-                    "count": 0.0,
-                    "text": criterion.text,
-                },
+                {"weighted": 0.0, "weight": 0.0, "count": 0.0, "text": criterion.text},
             )
             bucket["weighted"] += criterion.weight * criterion.score
             bucket["weight"] += criterion.weight
             bucket["count"] += 1
-    rubric_means: dict[str, dict[str, Any]] = {
+    return {
         key: {
             "text": bucket["text"],
             "mean": round(100.0 * bucket["weighted"] / bucket["weight"], 2)
@@ -453,36 +539,60 @@ def summarize(label: str, prompt: PromptSpec, results: list[ItemResult]) -> Eval
             else 0.0,
             "items": int(bucket["count"]),
         }
-        for key, bucket in rubric_totals.items()
+        for key, bucket in buckets.items()
     }
 
+
+def summarize(
+    label: str,
+    prompt: PromptSpec,
+    results: list[ItemResult],
+    targets: list[Target],
+) -> EvalSummary:
+    by_model: dict[str, ModelScore] = {}
+    for target in targets:
+        rows = [result for result in results if result.model == target.name]
+        scored = [result for result in rows if result.item_score is not None]
+        row_weight_sum = sum(result.weight for result in scored)
+        score_sum = sum(result.weight * (result.item_score or 0.0) for result in scored)
+        score_mean = score_sum / row_weight_sum if row_weight_sum else 0.0
+        by_model[target.name] = ModelScore(
+            name=target.name,
+            model=target.config.model or target.name,
+            weight=target.config.weight,
+            row_weight_sum=row_weight_sum,
+            scored_items=len(scored),
+            skipped_items=len(rows) - len(scored),
+            score_mean=score_mean,
+            score_sum=score_sum,
+            rubric_means=_rubric_means(scored),
+        )
+
+    active = [score for score in by_model.values() if score.scored_items > 0]
+    weight_sum = sum(score.weight * score.row_weight_sum for score in active)
+    score_sum = sum(score.weight * score.score_sum for score in active)
+    score_mean = score_sum / weight_sum if weight_sum else 0.0
+    all_scored = [result for result in results if result.item_score is not None]
     return EvalSummary(
         label=label,
         prompt_hash=prompt.identity(),
         item_count=len(results),
-        scored_items=len(scored),
-        skipped_items=len(results) - len(scored),
-        score_mean=round(mean, 4),
-        score_sum=round(weighted_points, 4),
+        scored_items=sum(score.scored_items for score in by_model.values()),
+        skipped_items=sum(score.skipped_items for score in by_model.values()),
+        score_mean=round(score_mean, 4),
+        score_sum=round(score_sum, 4),
         weight_sum=round(weight_sum, 2),
-        rubric_means=rubric_means,
+        by_model=by_model,
+        rubric_means=_rubric_means(all_scored),
         usage=Usage(),
     )
 
 
-def _usage_snapshot(task_client: CountingClient, judge_client: CountingClient) -> dict[str, int]:
-    combined = Usage()
-    for client in (task_client, judge_client):
-        usage = client.usage
-        combined.calls += usage.calls
-        combined.prompt_tokens += usage.prompt_tokens
-        combined.completion_tokens += usage.completion_tokens
-        combined.total_tokens += usage.total_tokens
-        combined.cache_hits += usage.cache_hits
-    return combined.to_dict()
+def _snapshot(usage: Usage) -> dict[str, int]:
+    return usage.to_dict()
 
 
-def _usage_delta(before: dict[str, int], after: dict[str, int]) -> Usage:
+def _delta(before: dict[str, int], after: dict[str, int]) -> Usage:
     return Usage(
         calls=after["calls"] - before["calls"],
         prompt_tokens=after["prompt_tokens"] - before["prompt_tokens"],
@@ -490,3 +600,18 @@ def _usage_delta(before: dict[str, int], after: dict[str, int]) -> Usage:
         total_tokens=after["total_tokens"] - before["total_tokens"],
         cache_hits=after["cache_hits"] - before["cache_hits"],
     )
+
+
+__all__ = [
+    "CriterionResult",
+    "EvalConfig",
+    "EvalRun",
+    "EvalSummary",
+    "Evaluator",
+    "ItemResult",
+    "ModelScore",
+    "Target",
+    "build_judge_messages",
+    "parse_judge_response",
+    "summarize",
+]

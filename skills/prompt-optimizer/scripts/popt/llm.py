@@ -113,7 +113,15 @@ class HttpBackend:
         self.max_retries = max(0, max_retries)
         self.extra_headers = extra_headers or {}
         self.label = label or model
-        self.name = f"http:{self.endpoint}:{model}"
+        # Include endpoint/model plus hashed auth and headers so two configs that
+        # share an endpoint but use different tenants do not share cached answers.
+        auth_fingerprint = sha256_text(api_key)[:8] if api_key else ""
+        header_fingerprint = (
+            sha256_text(stable_json(self.extra_headers))[:8] if self.extra_headers else ""
+        )
+        self.name = (
+            f"http:{self.endpoint}:{model}:{header_fingerprint}:{auth_fingerprint}"
+        )
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
