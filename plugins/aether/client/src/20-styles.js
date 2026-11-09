@@ -16,9 +16,9 @@
   --ath-yellow-ink: #a16207;
   --ath-red-ink: #b91c1c;
   --ath-gray-ink: #4b5563;
-  --ath-dataset-ink: #4338ca;
-  --ath-dataset: #6c63ff;
-  --ath-dataset-40: rgba(108, 99, 255, 0.4);
+  --ath-dataset-ink: #5b21b6;
+  --ath-dataset: #6d28d9;
+  --ath-dataset-40: rgba(109, 40, 217, 0.4);
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 6px 18px rgba(32, 43, 61, .07);
