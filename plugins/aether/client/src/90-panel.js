@@ -396,6 +396,17 @@
         }
       };
 
+      const resetWorkspaceView = () => {
+        setEditorTabs([]);
+        setActiveEditorKey('');
+        setModuleDraft(null);
+        setRunId('');
+        setRunDetail(null);
+        setLogView(null);
+        setOutputView(null);
+        setTab('runs');
+      };
+
       const changeWorkspace = async (pathValue) => {
         setWorkspaceBusy(true);
         try {
@@ -404,14 +415,7 @@
             body: { path: pathValue },
           });
           setWorkspaceOpen(false);
-          setEditorTabs([]);
-          setActiveEditorKey('');
-          setModuleDraft(null);
-          setRunId('');
-          setRunDetail(null);
-          setLogView(null);
-          setOutputView(null);
-          setTab('runs');
+          resetWorkspaceView();
           pushToast(payload.copied ? t('workspace.copied') : t('workspace.switched'));
           await loadState(true);
         } catch (error) {
@@ -419,6 +423,46 @@
         } finally {
           setWorkspaceBusy(false);
         }
+      };
+
+      const exportWorkspace = (includeRuns) => {
+        const anchor = document.createElement('a');
+        anchor.href = `${API}/workspace/export?runs=${includeRuns ? '1' : '0'}`;
+        anchor.download = '';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      };
+
+      const importWorkspace = (bundle, includeRuns) => {
+        setConfirm({
+          title: t('confirm.importWorkspace.title'),
+          body: t('confirm.importWorkspace.body'),
+          confirmLabel: t('workspace.import'),
+          onConfirm: async () => {
+            try {
+              const payload = await request('/workspace/import', {
+                method: 'POST',
+                body: { bundle, includeRuns },
+              });
+              setWorkspaceOpen(false);
+              resetWorkspaceView();
+              pushToast(
+                `${tr(t, 'workspace.imported', {
+                  modules: payload.modules,
+                  graphs: payload.graphs,
+                })} ${
+                  payload.runs == null
+                    ? t('workspace.runsKept')
+                    : tr(t, 'workspace.runsImported', { n: payload.runs })
+                }`,
+              );
+              await loadState(true);
+            } catch (error) {
+              fail(error);
+            }
+          },
+        });
       };
 
       const openRunFolder = async (run) => {
@@ -847,6 +891,8 @@
               busy: workspaceBusy,
               onClose: () => setWorkspaceOpen(false),
               onSubmit: (pathValue) => void changeWorkspace(pathValue),
+              onExport: (includeRuns) => exportWorkspace(includeRuns),
+              onImport: (bundle, includeRuns) => importWorkspace(bundle, includeRuns),
             })
           : null,
         newModuleOpen

@@ -34,6 +34,17 @@ window.__ModuleLoader__.load({
       'workspace.busy': '切换中…',
       'workspace.copied': '工作区已切换，并迁移了当前数据',
       'workspace.switched': '工作区已切换',
+      'workspace.ioTitle': '导入 / 导出',
+      'workspace.export': '导出工作区',
+      'workspace.import': '导入工作区',
+      'workspace.includeRunsExport': '包含运行记录',
+      'workspace.includeRunsImport': '包含运行记录（若包内存在）',
+      'workspace.ioHint': '默认导出模块、数据集、子图、实验与模块文件；运行记录可选。导入会替换当前模块/实验，并先自动备份到 aether-backups。',
+      'workspace.imported': '工作区已导入：{modules} 个模块、{graphs} 个实验',
+      'workspace.runsKept': '运行记录保持原样',
+      'workspace.runsImported': '已导入 {n} 条运行',
+      'confirm.importWorkspace.title': '导入工作区？',
+      'confirm.importWorkspace.body': '导入会替换当前工作区的模块、数据集、子图与实验；是否导入运行记录由复选框决定。当前数据会先备份。',
       'language.title': '插件语言',
       'language.auto': '自动',
       'language.zh': '中文',
@@ -339,6 +350,17 @@ window.__ModuleLoader__.load({
       'workspace.busy': 'Switching…',
       'workspace.copied': 'Workspace switched; current data was migrated',
       'workspace.switched': 'Workspace switched',
+      'workspace.ioTitle': 'Import / export',
+      'workspace.export': 'Export workspace',
+      'workspace.import': 'Import workspace',
+      'workspace.includeRunsExport': 'Include runs',
+      'workspace.includeRunsImport': 'Include runs (if present)',
+      'workspace.ioHint': 'Exports modules, datasets, subgraphs, experiments and module files; runs are optional. Import replaces modules/experiments and backs up current data under aether-backups first.',
+      'workspace.imported': 'Workspace imported: {modules} modules, {graphs} experiments',
+      'workspace.runsKept': 'Runs left unchanged',
+      'workspace.runsImported': '{n} runs imported',
+      'confirm.importWorkspace.title': 'Import workspace?',
+      'confirm.importWorkspace.body': 'Importing replaces the current modules, datasets, subgraphs and experiments; runs are controlled by the checkbox. Current data is backed up first.',
       'language.title': 'Plugin language',
       'language.auto': 'Auto',
       'language.zh': '中文',
@@ -1804,8 +1826,28 @@ window.__ModuleLoader__.load({
       );
     }
 
-function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
+function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, busy }) {
   const [pathValue, setPathValue] = useState(current || '');
+  const [includeRunsExport, setIncludeRunsExport] = useState(false);
+  const [includeRunsImport, setIncludeRunsImport] = useState(false);
+  const [ioError, setIoError] = useState('');
+  const importInputRef = useRef(null);
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    setIoError('');
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      await onImport(bundle, includeRunsImport);
+    } catch (error) {
+      setIoError(error && error.message ? error.message : String(error));
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   return h(
     Modal,
     {
@@ -1842,6 +1884,68 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
       h('div', { className: 'ath-hint' }, t('workspace.pathHint')),
     ),
     h('div', { className: 'ath-hint' }, `${t('workspace.current')}: ${current || ''}`),
+    h(
+      'div',
+      { className: 'ath-card', style: { marginTop: 14 } },
+      h('h4', { className: 'ath-section-title' }, t('workspace.ioTitle')),
+      h(
+        'label',
+        { className: 'ath-check' },
+        h('input', {
+          type: 'checkbox',
+          checked: includeRunsExport,
+          onChange: (event) => setIncludeRunsExport(event.target.checked),
+        }),
+        h('span', null, t('workspace.includeRunsExport')),
+      ),
+      h(
+        'div',
+        { className: 'ath-actions', style: { marginTop: 8 } },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'ath-btn ath-btn-ghost',
+            onClick: () => onExport(includeRunsExport),
+          },
+          t('workspace.export'),
+        ),
+      ),
+      h(
+        'label',
+        { className: 'ath-check', style: { marginTop: 10 } },
+        h('input', {
+          type: 'checkbox',
+          checked: includeRunsImport,
+          onChange: (event) => setIncludeRunsImport(event.target.checked),
+        }),
+        h('span', null, t('workspace.includeRunsImport')),
+      ),
+      h(
+        'div',
+        { className: 'ath-actions', style: { marginTop: 8 } },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'ath-btn ath-btn-ghost',
+            onClick: () => {
+              if (importInputRef.current) importInputRef.current.click();
+            },
+          },
+          t('workspace.import'),
+        ),
+        h('input', {
+          ref: importInputRef,
+          type: 'file',
+          accept: 'application/json,.json',
+          style: { display: 'none' },
+          onChange: (event) => void handleImportFile(event),
+        }),
+      ),
+      h('div', { className: 'ath-hint' }, t('workspace.ioHint')),
+      ioError ? h('div', { className: 'ath-error' }, ioError) : null,
+    ),
   );
 }
 
@@ -5725,6 +5829,17 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
         }
       };
 
+      const resetWorkspaceView = () => {
+        setEditorTabs([]);
+        setActiveEditorKey('');
+        setModuleDraft(null);
+        setRunId('');
+        setRunDetail(null);
+        setLogView(null);
+        setOutputView(null);
+        setTab('runs');
+      };
+
       const changeWorkspace = async (pathValue) => {
         setWorkspaceBusy(true);
         try {
@@ -5733,14 +5848,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
             body: { path: pathValue },
           });
           setWorkspaceOpen(false);
-          setEditorTabs([]);
-          setActiveEditorKey('');
-          setModuleDraft(null);
-          setRunId('');
-          setRunDetail(null);
-          setLogView(null);
-          setOutputView(null);
-          setTab('runs');
+          resetWorkspaceView();
           pushToast(payload.copied ? t('workspace.copied') : t('workspace.switched'));
           await loadState(true);
         } catch (error) {
@@ -5748,6 +5856,46 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
         } finally {
           setWorkspaceBusy(false);
         }
+      };
+
+      const exportWorkspace = (includeRuns) => {
+        const anchor = document.createElement('a');
+        anchor.href = `${API}/workspace/export?runs=${includeRuns ? '1' : '0'}`;
+        anchor.download = '';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      };
+
+      const importWorkspace = (bundle, includeRuns) => {
+        setConfirm({
+          title: t('confirm.importWorkspace.title'),
+          body: t('confirm.importWorkspace.body'),
+          confirmLabel: t('workspace.import'),
+          onConfirm: async () => {
+            try {
+              const payload = await request('/workspace/import', {
+                method: 'POST',
+                body: { bundle, includeRuns },
+              });
+              setWorkspaceOpen(false);
+              resetWorkspaceView();
+              pushToast(
+                `${tr(t, 'workspace.imported', {
+                  modules: payload.modules,
+                  graphs: payload.graphs,
+                })} ${
+                  payload.runs == null
+                    ? t('workspace.runsKept')
+                    : tr(t, 'workspace.runsImported', { n: payload.runs })
+                }`,
+              );
+              await loadState(true);
+            } catch (error) {
+              fail(error);
+            }
+          },
+        });
       };
 
       const openRunFolder = async (run) => {
@@ -6176,6 +6324,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, busy }) {
               busy: workspaceBusy,
               onClose: () => setWorkspaceOpen(false),
               onSubmit: (pathValue) => void changeWorkspace(pathValue),
+              onExport: (includeRuns) => exportWorkspace(includeRuns),
+              onImport: (bundle, includeRuns) => importWorkspace(bundle, includeRuns),
             })
           : null,
         newModuleOpen

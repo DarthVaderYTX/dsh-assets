@@ -29,6 +29,8 @@ import {
   MAX_ASSET_FILES,
   MAX_CONCURRENCY,
   MAX_RUNS,
+  MAX_WORKSPACE_BYTES,
+  MAX_WORKSPACE_FILES,
 } from './constants.js';
 import { httpError, readBody, sendJson, sendText } from './http.js';
 import { seedState } from './seed.js';
@@ -139,6 +141,117 @@ async function switchWorkspace(rawPath) {
   recoveredRuns = false;
   await readState();
   return { workspace: target, copied, existing: hasState, unchanged: false };
+}
+
+async function collectWorkspaceFiles(root, includeRuns) {
+  const files = [];
+  const roots = [path.join(root, 'modules', 'assets')];
+  if (includeRuns) roots.push(path.join(root, 'runs'));
+  async function walk(directory) {
+    const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        const relative = path.relative(root, full).split(path.sep).join('/');
+        files.push({ path: relative, data: (await fsp.readFile(full)).toString('base64') });
+      }
+    }
+  }
+  for (const directory of roots) await walk(directory);
+  return files;
+}
+
+async function exportWorkspaceBundle(includeRuns) {
+  const state = await readState();
+  return {
+    format: 'aether-workspace',
+    formatVersion: 1,
+    dataVersion: DATA_VERSION,
+    exportedAt: Date.now(),
+    includeRuns: Boolean(includeRuns),
+    state,
+    files: await collectWorkspaceFiles(dataDir(), includeRuns),
+  };
+}
+
+async function backupWorkspaceForImport(includeRuns) {
+  const root = path.join(homeDir(), 'storages', 'aether-backups', `import-${Date.now()}`);
+  await fsp.mkdir(root, { recursive: true });
+  const stateSource = statePath();
+  if (existsSync(stateSource)) await fsp.copyFile(stateSource, path.join(root, 'state.json'));
+  for (const name of ['modules', ...(includeRuns ? ['runs'] : [])]) {
+    const source = path.join(dataDir(), name);
+    if (existsSync(source)) await fsp.cp(source, path.join(root, name), { recursive: true, force: true });
+  }
+  return root;
+}
+
+async function importWorkspaceBundle(bundle, options = {}) {
+  if (activeRuns.size) throw httpError(409, '仍有实验在运行，请先取消再导入工作区');
+  if (!bundle || bundle.format !== 'aether-workspace' || bundle.formatVersion !== 1) {
+    throw httpError(400, '不是有效的 Aether 工作区导出文件');
+  }
+  const includeRuns = Boolean(options.includeRuns);
+  const bundleFiles = Array.isArray(bundle.files) ? bundle.files : [];
+  const replaceRuns =
+    includeRuns &&
+    bundleFiles.some((file) => String(file && file.path ? file.path : '').replace(/\\/g, '/').startsWith('runs/'));
+  const state = normalizeState(bundle.state);
+  const incoming = [];
+  let total = 0;
+  for (const file of bundleFiles) {
+    const cleaned = String(file && file.path ? file.path : '').replace(/\\/g, '/');
+    const allowed =
+      cleaned.startsWith('modules/assets/') || (includeRuns && cleaned.startsWith('runs/'));
+    if (!allowed) continue;
+    const relative = safeAssetRelative(cleaned);
+    if (!file || typeof file.data !== 'string') throw httpError(400, `工作区文件缺少内容：${cleaned}`);
+    const buffer = Buffer.from(file.data, 'base64');
+    total += buffer.length;
+    if (total > MAX_WORKSPACE_BYTES) throw httpError(413, '工作区导入内容过大');
+    if (incoming.length >= MAX_WORKSPACE_FILES) throw httpError(400, `工作区文件数量超过 ${MAX_WORKSPACE_FILES}`);
+    const target = path.join(dataDir(), relative);
+    if (!target.startsWith(dataDir() + path.sep)) throw httpError(400, `工作区文件路径越界：${cleaned}`);
+    incoming.push({ relative, buffer });
+  }
+
+  const backup = await backupWorkspaceForImport(replaceRuns);
+  const assetsRoot = path.join(dataDir(), 'modules', 'assets');
+  await fsp.rm(assetsRoot, { recursive: true, force: true });
+  await fsp.mkdir(assetsRoot, { recursive: true });
+  if (replaceRuns) {
+    await fsp.rm(path.join(dataDir(), 'runs'), { recursive: true, force: true });
+    await fsp.mkdir(path.join(dataDir(), 'runs'), { recursive: true });
+  }
+  for (const file of incoming) {
+    const target = path.join(dataDir(), file.relative);
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, file.buffer);
+  }
+  if (replaceRuns) await rewriteRunDirectories(dataDir());
+  state.updatedAt = Date.now();
+  await writeState(state);
+  stateCache = null;
+  stateLoading = null;
+  recoveredRuns = false;
+  const loaded = await readState();
+  const runCount = replaceRuns
+    ? (await fsp.readdir(path.join(dataDir(), 'runs'), { withFileTypes: true }).catch(() => [])).filter(
+        (entry) => entry.isDirectory(),
+      ).length
+    : null;
+  return {
+    workspace: dataDir(),
+    includeRuns: replaceRuns,
+    files: incoming.length,
+    modules: loaded.modules.length,
+    graphs: loaded.graphs.length,
+    runs: runCount,
+    backup,
+  };
 }
 
 function statePath() {
@@ -1127,6 +1240,29 @@ async function handleApi(req, res) {
 
   if (method === 'DELETE' && route === '/experiments') {
     sendJson(res, 200, await deleteExperiment(url.searchParams.get('id') || ''));
+    return;
+  }
+
+  if (method === 'GET' && route === '/workspace/export') {
+    const includeRuns = ['1', 'true'].includes(String(url.searchParams.get('runs') || ''));
+    const bundle = await exportWorkspaceBundle(includeRuns);
+    const body = JSON.stringify(bundle);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="aether-workspace-${stamp}.json"`,
+      'content-length': Buffer.byteLength(body),
+      'cache-control': 'no-store',
+    });
+    res.end(body);
+    return;
+  }
+
+  if (method === 'POST' && route === '/workspace/import') {
+    const body = await readBody(req, MAX_WORKSPACE_BYTES * 2);
+    const bundle = body.bundle || body;
+    const result = await importWorkspaceBundle(bundle, { includeRuns: Boolean(body.includeRuns) });
+    sendJson(res, 200, { ok: true, ...result });
     return;
   }
 

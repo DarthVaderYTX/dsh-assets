@@ -562,6 +562,66 @@ test('cancelling a running experiment settles as cancelled', async () => {
   assert.equal(run.nodes[0].status, 'cancelled');
 });
 
+test('workspace export/import can skip or include runs', async () => {
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: 'nightly-experiment', name: 'Workspace export run' },
+  });
+  await waitForRun(submitted.payload.experiment.id);
+  const before = await call('/state');
+  const exported = await call('/workspace/export?runs=0');
+  assert.equal(exported.status, 200);
+  assert.equal(exported.payload.format, 'aether-workspace');
+  assert.equal(exported.payload.includeRuns, false);
+  assert.equal(
+    exported.payload.files.some((file) => file.path.startsWith('runs/')),
+    false,
+  );
+
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'import-temp-module',
+        name: 'Import temp',
+        kind: 'command',
+        command: 'echo temp',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  const imported = await call('/workspace/import', {
+    method: 'POST',
+    body: { bundle: exported.payload, includeRuns: false },
+  });
+  assert.equal(imported.status, 200);
+  assert.equal(imported.payload.includeRuns, false);
+  assert.equal(existsSync(imported.payload.backup), true);
+
+  const restored = await call('/state');
+  assert.equal(
+    restored.payload.modules.some((module) => module.id === 'import-temp-module'),
+    false,
+  );
+  assert.equal(restored.payload.experiments.length, before.payload.experiments.length);
+
+  const withRuns = await call('/workspace/export?runs=1');
+  assert.equal(withRuns.payload.includeRuns, true);
+  assert.equal(
+    withRuns.payload.files.some((file) => file.path.startsWith('runs/')),
+    true,
+  );
+  const importedRuns = await call('/workspace/import', {
+    method: 'POST',
+    body: { bundle: withRuns.payload, includeRuns: true },
+  });
+  assert.equal(importedRuns.status, 200);
+  assert.equal(importedRuns.payload.includeRuns, true);
+  assert.equal(importedRuns.payload.runs, before.payload.experiments.length);
+});
+
 test('switching workspace migrates state and runs under the new root', async () => {
   const before = await call('/state');
   const moduleCount = before.payload.modules.length;

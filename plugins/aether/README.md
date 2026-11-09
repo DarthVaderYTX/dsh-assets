@@ -149,6 +149,15 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 工作区配置保存在固定位置 `$DSH_HOME/storages/aether-workspace.json`（只是路径指针，不属于业务数据）。
 
+### 导入 / 导出
+
+工作区对话框支持 JSON 工作区包（`aether-workspace-*.json`）：
+
+- **导出**默认包含模块、数据集、子图、实验定义与 `modules/assets` 文件；勾选「包含运行记录」才会把 `runs` 一起导出。
+- **导入**会替换当前模块/实验与模块文件；运行记录是否替换由导出包内容与「包含运行记录」复选框共同决定。未选择时保留当前运行记录。
+- 导入前会把当前工作区备份到 `$DSH_HOME/storages/aether-backups/import-<时间>/`，不会静默覆盖。
+- 导入包只接受 `modules/assets/**` 与 `runs/**` 路径，带路径越界/大小/文件数校验。
+
 ```
 <workspace>/
   state.json              # 模块（含端口、版本历史、文件引用）、实验（含节点坐标与连线端口）、执行环境目录
@@ -186,6 +195,8 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 | GET | `/experiments/logs?run=&node=&stream=out\|err` | 节点日志 |
 | GET | `/experiments/download?run=&node=&port=` | 下载节点输出（附件，文件名带端口） |
 | POST | `/workspace` | 切换工作区（`{ path }`）；空目录会迁移当前数据，已有 `state.json` 则直接打开 |
+| GET | `/workspace/export?runs=0\|1` | 导出工作区 JSON 包（可选运行记录） |
+| POST | `/workspace/import` | 导入工作区包（`{ bundle, includeRuns }`），导入前自动备份 |
 | POST | `/workspace/open` | 打开 Aether 工作区 |
 
 所有接口返回 `{ ok: true, ... }` 或 `{ ok: false, error }`。写接口带 2MB 请求体上限。
