@@ -321,6 +321,7 @@
       const [datasetText, setDatasetText] = useState('');
       const [datasetFile, setDatasetFile] = useState(null);
       const [datasetFormat, setDatasetFormat] = useState('jsonl');
+      const [datasetOutputName, setDatasetOutputName] = useState('output');
       const [datasetOutputType, setDatasetOutputType] = useState('json');
       const [inputRows, setInputRows] = useState([]);
       const [outputRows, setOutputRows] = useState([]);
@@ -459,6 +460,11 @@
         let datasetAsset = null;
         let datasetUriValue = '';
         let datasetFormatValue = '';
+        const datasetOutput = datasetOutputName.trim();
+        if (kind === 'dataset' && !datasetOutput) {
+          setFormError(t('newModule.validationOutputName'));
+          return;
+        }
         if (kind === 'dataset') {
           try {
             if (datasetMode === 'edit') {
@@ -502,8 +508,9 @@
           asset: kind === 'command' ? asset : datasetAsset,
           inputs,
           inputTypes,
-          outputs: kind === 'command' ? outputs : ['rows'],
-          outputTypes: kind === 'command' ? outputTypes : { rows: datasetOutputType || 'json' },
+          outputs: kind === 'command' ? outputs : [datasetOutput],
+          outputTypes:
+            kind === 'command' ? outputTypes : { [datasetOutput]: datasetOutputType || 'json' },
           params,
           paramTypes,
         });
@@ -854,8 +861,9 @@
                     h('input', {
                       className: 'ath-input ath-mono',
                       type: 'text',
-                      value: 'rows',
-                      readOnly: true,
+                      value: datasetOutputName,
+                      maxLength: 40,
+                      onChange: (event) => setDatasetOutputName(event.target.value),
                     }),
                     h(TypeSelect, {
                       t,

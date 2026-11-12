@@ -326,7 +326,8 @@ window.__ModuleLoader__.load({
       'newModule.chooseDatasetFile': '选择文件',
       'newModule.datasetFileHint': '仅支持 .jsonl / .csv 文件，选择后自动识别格式。',
       'newModule.datasetFormatHint': '目前支持 JSONL 和 CSV。',
-      'newModule.datasetOutputHint': '固定一个输出 rows，请选择类型',
+      'newModule.datasetOutputHint': '默认一个输出，名称默认 output，可修改并选择类型',
+      'newModule.validationOutputName': '请填写数据集输出名称',
       'newModule.validationDatasetContent': '请填写数据集内容',
       'newModule.validationDatasetFile': '请选择要导入的数据文件',
       'newModule.invalidJsonl': '第 {line} 行不是合法 JSON',
@@ -694,7 +695,8 @@ window.__ModuleLoader__.load({
       'newModule.chooseDatasetFile': 'Choose file',
       'newModule.datasetFileHint': 'Only .jsonl / .csv files; format is detected from the extension.',
       'newModule.datasetFormatHint': 'JSONL and CSV are supported for now.',
-      'newModule.datasetOutputHint': 'One fixed output named rows; choose its type',
+      'newModule.datasetOutputHint': 'One output by default, named output; rename it and choose its type',
+      'newModule.validationOutputName': 'Enter a dataset output name',
       'newModule.validationDatasetContent': 'Enter dataset content',
       'newModule.validationDatasetFile': 'Choose a dataset file to import',
       'newModule.invalidJsonl': 'Line {line} is not valid JSON',
@@ -2493,6 +2495,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [datasetText, setDatasetText] = useState('');
       const [datasetFile, setDatasetFile] = useState(null);
       const [datasetFormat, setDatasetFormat] = useState('jsonl');
+      const [datasetOutputName, setDatasetOutputName] = useState('output');
       const [datasetOutputType, setDatasetOutputType] = useState('json');
       const [inputRows, setInputRows] = useState([]);
       const [outputRows, setOutputRows] = useState([]);
@@ -2631,6 +2634,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         let datasetAsset = null;
         let datasetUriValue = '';
         let datasetFormatValue = '';
+        const datasetOutput = datasetOutputName.trim();
+        if (kind === 'dataset' && !datasetOutput) {
+          setFormError(t('newModule.validationOutputName'));
+          return;
+        }
         if (kind === 'dataset') {
           try {
             if (datasetMode === 'edit') {
@@ -2674,8 +2682,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           asset: kind === 'command' ? asset : datasetAsset,
           inputs,
           inputTypes,
-          outputs: kind === 'command' ? outputs : ['rows'],
-          outputTypes: kind === 'command' ? outputTypes : { rows: datasetOutputType || 'json' },
+          outputs: kind === 'command' ? outputs : [datasetOutput],
+          outputTypes:
+            kind === 'command' ? outputTypes : { [datasetOutput]: datasetOutputType || 'json' },
           params,
           paramTypes,
         });
@@ -3026,8 +3035,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     h('input', {
                       className: 'ath-input ath-mono',
                       type: 'text',
-                      value: 'rows',
-                      readOnly: true,
+                      value: datasetOutputName,
+                      maxLength: 40,
+                      onChange: (event) => setDatasetOutputName(event.target.value),
                     }),
                     h(TypeSelect, {
                       t,
@@ -6977,11 +6987,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 inputs: fields.kind === 'dataset' ? [] : fields.inputs || [],
                 inputTypes: fields.kind === 'dataset' ? {} : fields.inputTypes || {},
                 requiredInputs: [],
-                outputs: fields.kind === 'dataset' ? ['rows'] : fields.outputs || [],
-                outputTypes:
-                  fields.kind === 'dataset'
-                    ? fields.outputTypes || { rows: 'json' }
-                    : fields.outputTypes || {},
+                outputs: fields.outputs || [],
+                outputTypes: fields.outputTypes || {},
                 graphId: '',
                 datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
                 datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',

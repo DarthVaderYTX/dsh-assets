@@ -620,11 +620,8 @@
                 inputs: fields.kind === 'dataset' ? [] : fields.inputs || [],
                 inputTypes: fields.kind === 'dataset' ? {} : fields.inputTypes || {},
                 requiredInputs: [],
-                outputs: fields.kind === 'dataset' ? ['rows'] : fields.outputs || [],
-                outputTypes:
-                  fields.kind === 'dataset'
-                    ? fields.outputTypes || { rows: 'json' }
-                    : fields.outputTypes || {},
+                outputs: fields.outputs || [],
+                outputTypes: fields.outputTypes || {},
                 graphId: '',
                 datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
                 datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',
