@@ -1050,6 +1050,7 @@ async function saveModule(input, options = {}) {
   }
   const existing = state.modules.find((item) => item.id === module.id);
   if (!create && !existing) throw httpError(404, '模块不存在');
+  if (existing && existing.kind !== module.kind) throw httpError(400, '资源类型创建后不能修改');
   const errors = validateModule(module, state.modules, state.graphs, state.environments);
   if (module.assetId) {
     const root = moduleAssetRoot(module);

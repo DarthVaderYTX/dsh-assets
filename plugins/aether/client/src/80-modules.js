@@ -154,7 +154,6 @@
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
-      const kindOptions = module.kind === 'graph' ? ['command', 'graph', 'dataset'] : ['command', 'dataset'];
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -322,29 +321,11 @@
                 h('label', { className: 'ath-label' }, t('modules.kind')),
                 h(
                   'div',
-                  { className: 'ath-chips' },
-                  kindOptions.map((kind) =>
-                    h(
-                      'button',
-                      {
-                        key: kind,
-                        type: 'button',
-                        className: 'ath-chip',
-                        'data-active': module.kind === kind ? 'true' : 'false',
-                        onClick: () =>
-                          patch(
-                            kind === 'dataset'
-                              ? {
-                                  kind,
-                                  inputs: [],
-                                  requiredInputs: [],
-                                  outputs: module.outputs && module.outputs.length ? module.outputs : ['output'],
-                                }
-                              : { kind },
-                          ),
-                      },
-                      t(`modules.kind.${kind}`),
-                    ),
+                  { className: 'ath-readonly-value' },
+                  h(
+                    'span',
+                    { className: 'ath-badge', 'data-kind': module.kind },
+                    t(`modules.kind.${module.kind}`),
                   ),
                 ),
               ),

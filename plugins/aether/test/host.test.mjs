@@ -996,7 +996,7 @@ test('graphs move between experiment and subgraph folders by usage', async () =>
   assert.equal(existsSync(path.join(root, 'subgraphs', 'category-graph')), false);
 });
 
-test('module folders follow the module category', async () => {
+test('resource type is immutable after creation', async () => {
   const root = path.join(home, 'storages', 'aether');
   await call('/modules', {
     method: 'POST',
@@ -1027,9 +1027,10 @@ test('module folders follow the module category', async () => {
       },
     },
   });
-  assert.equal(updated.status, 200);
-  assert.equal(existsSync(path.join(root, 'resources', 'datasets', 'category-module', 'resource.json')), true);
-  assert.equal(existsSync(path.join(root, 'resources', 'modules', 'category-module')), false);
+  assert.equal(updated.status, 400);
+  assert.match(updated.payload.error, /资源类型创建后不能修改/);
+  assert.equal(existsSync(path.join(root, 'resources', 'modules', 'category-module', 'resource.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'datasets', 'category-module')), false);
 });
 
 test('workspace export/import excludes runs', async () => {

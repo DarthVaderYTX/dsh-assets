@@ -348,6 +348,7 @@
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) 78px auto 24px; }
+.ath-readonly-value { display: flex; align-items: center; min-height: 28px; }
 .ath-type-select { width: auto; min-width: 72px; padding: 5px 6px; font-size: 11px; }
 .ath-template-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
 .ath-template-ref {

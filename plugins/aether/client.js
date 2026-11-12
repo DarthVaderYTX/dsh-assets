@@ -226,8 +226,8 @@ window.__ModuleLoader__.load({
       'modules.delete': '删除资源',
       'modules.id': '模块 id',
       'modules.idHint': '小写字母、数字和连字符；留空时按名称生成。',
-      'modules.kind': '模块类型',
-      'modules.kind.command': '命令',
+      'modules.kind': '资源类型',
+      'modules.kind.command': '模块',
       'modules.kind.graph': '子图',
       'modules.kind.dataset': '数据集',
       'modules.datasetUri': '数据集 URI / 路径',
@@ -346,7 +346,7 @@ window.__ModuleLoader__.load({
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
       'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
-      'modules.save': '保存模块',
+      'modules.save': '保存',
       'modules.saving': '正在保存…',
       'modules.commandTitle': '命令模块',
       'modules.graphTitle': '子图模块',
@@ -595,8 +595,8 @@ window.__ModuleLoader__.load({
       'modules.delete': 'Delete resource',
       'modules.id': 'Module id',
       'modules.idHint': 'Lowercase letters, digits and hyphens; generated from the name when blank.',
-      'modules.kind': 'Module type',
-      'modules.kind.command': 'Command',
+      'modules.kind': 'Resource type',
+      'modules.kind.command': 'Module',
       'modules.kind.graph': 'Subgraph',
       'modules.kind.dataset': 'Dataset',
       'modules.datasetUri': 'Dataset URI / path',
@@ -715,7 +715,7 @@ window.__ModuleLoader__.load({
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
       'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
-      'modules.save': 'Save module',
+      'modules.save': 'Save',
       'modules.saving': 'Saving…',
       'modules.commandTitle': 'Command module',
       'modules.graphTitle': 'Subgraph module',
@@ -1107,6 +1107,7 @@ window.__ModuleLoader__.load({
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) 78px auto 24px; }
+.ath-readonly-value { display: flex; align-items: center; min-height: 28px; }
 .ath-type-select { width: auto; min-width: 72px; padding: 5px 6px; font-size: 11px; }
 .ath-template-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
 .ath-template-ref {
@@ -5850,7 +5851,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
-      const kindOptions = module.kind === 'graph' ? ['command', 'graph', 'dataset'] : ['command', 'dataset'];
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -6018,29 +6018,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 h('label', { className: 'ath-label' }, t('modules.kind')),
                 h(
                   'div',
-                  { className: 'ath-chips' },
-                  kindOptions.map((kind) =>
-                    h(
-                      'button',
-                      {
-                        key: kind,
-                        type: 'button',
-                        className: 'ath-chip',
-                        'data-active': module.kind === kind ? 'true' : 'false',
-                        onClick: () =>
-                          patch(
-                            kind === 'dataset'
-                              ? {
-                                  kind,
-                                  inputs: [],
-                                  requiredInputs: [],
-                                  outputs: module.outputs && module.outputs.length ? module.outputs : ['output'],
-                                }
-                              : { kind },
-                          ),
-                      },
-                      t(`modules.kind.${kind}`),
-                    ),
+                  { className: 'ath-readonly-value' },
+                  h(
+                    'span',
+                    { className: 'ath-badge', 'data-kind': module.kind },
+                    t(`modules.kind.${module.kind}`),
                   ),
                 ),
               ),
