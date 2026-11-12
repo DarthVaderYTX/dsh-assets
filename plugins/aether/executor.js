@@ -69,12 +69,51 @@ export function resolvePlacements(nodes, environments = [], availableExecutors =
   return { placements, executors: [...executors], errors };
 }
 
-function renderTemplate(text, params, builtins) {
-  return String(text || '').replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(params, key)) return String(params[key]);
-    if (Object.prototype.hasOwnProperty.call(builtins, key)) return String(builtins[key]);
-    return match;
+function renderTemplate(text, values) {
+  const replace = (match, rawKey) => {
+    const key = String(rawKey || '').trim();
+    return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match;
+  };
+  return String(text || '')
+    .replace(/@@([^@\r\n]+?)@@/g, replace)
+    .replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g, replace);
+}
+
+function buildTemplateValues(run, node, directory, inputs, inputFile) {
+  const values = { ...(node.params || {}) };
+  const runEdges = Array.isArray(run.edges) ? run.edges : [];
+  const sourceNodes = run.nodes || [];
+  for (const name of node.inputs || []) {
+    const edge = runEdges.find((item) => item.to === node.path && item.toPort === name);
+    const record = edge ? inputs[edge.from] : null;
+    const type = node.inputTypes && node.inputTypes[name] ? node.inputTypes[name] : 'string';
+    if (!record) {
+      values[name] = '';
+    } else if (type === 'file' || type === 'directory') {
+      const source = sourceNodes.find((item) => item.path === edge.from);
+      const artifact = (source && source.artifacts ? source.artifacts : []).find(
+        (item) => item.port === edge.fromPort,
+      );
+      values[name] = artifact
+        ? path.join(run.dir, 'nodes', safeSegment(source.path), artifact.path)
+        : record.stdoutFile || '';
+    } else {
+      values[name] = record.text == null ? '' : record.text;
+    }
+  }
+  for (const name of node.outputs || []) {
+    values[name] = path.join(directory, `${safeSegment(name)}.out`);
+  }
+  Object.assign(values, {
+    run_id: run.id,
+    run_dir: run.dir,
+    node_id: node.nodeId,
+    node_path: node.path,
+    node_dir: directory,
+    graph_id: run.graphId,
+    input_file: inputFile,
   });
+  return values;
 }
 
 function resolveCwd(raw, node = {}) {
@@ -471,17 +510,8 @@ export class LocalExecutor {
       return;
     }
 
-    const builtins = {
-      run_id: run.id,
-      run_dir: run.dir,
-      node_id: node.nodeId,
-      node_path: node.path,
-      node_dir: directory,
-      graph_id: run.graphId,
-      input_file: inputFile,
-    };
     const rawCommand = node.command && node.command.trim() ? node.command : defaultAssetCommand(node);
-    const command = renderTemplate(rawCommand, node.params || {}, builtins);
+    const command = renderTemplate(rawCommand, buildTemplateValues(run, node, directory, inputs, inputFile));
     const outLog = path.join(directory, 'stdout.log');
     const errLog = path.join(directory, 'stderr.log');
     const outStream = createWriteStream(outLog);

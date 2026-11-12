@@ -92,6 +92,138 @@ test('seeds a demo module library and graphs', async () => {
   assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
 });
 
+test('command templates must reference defined names and validate before save', async () => {
+  const missing = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Missing ref',
+        kind: 'command',
+        command: 'echo @@missing@@',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(missing.status, 400);
+  assert.match(missing.payload.error, /未定义的名称「missing」/);
+
+  const unclosed = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Unclosed ref',
+        kind: 'command',
+        command: 'echo @@name',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(unclosed.status, 400);
+  assert.match(unclosed.payload.error, /@@ 占位符未闭合/);
+
+  const duplicate = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Duplicate names',
+        kind: 'command',
+        command: 'echo @@same@@',
+        inputs: ['same'],
+        outputs: [],
+        params: { same: 'x' },
+        paramTypes: { same: 'string' },
+      },
+    },
+  });
+  assert.equal(duplicate.status, 400);
+  assert.match(duplicate.payload.error, /同时出现在输入和参数中/);
+
+  const created = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Typed template',
+        kind: 'command',
+        command: 'echo @@name@@ @@rows@@ @@report@@',
+        inputs: ['rows'],
+        inputTypes: { rows: 'file' },
+        outputs: ['report'],
+        outputTypes: { report: 'json' },
+        params: { name: 'world' },
+        paramTypes: { name: 'string' },
+      },
+    },
+  });
+  assert.equal(created.status, 200);
+  assert.deepEqual(created.payload.module.paramTypes, { name: 'string' });
+  assert.deepEqual(created.payload.module.inputTypes, { rows: 'file' });
+  assert.deepEqual(created.payload.module.outputTypes, { report: 'json' });
+
+  const legacy = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Legacy template',
+        kind: 'command',
+        command: 'echo {{value}}',
+        inputs: [],
+        outputs: [],
+        params: { value: 'ok' },
+      },
+    },
+  });
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.payload.module.command, 'echo @@value@@');
+});
+
+test('command template substitutes params and output paths at runtime', async () => {
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'template-run',
+        name: 'Template run',
+        kind: 'command',
+        command:
+          'node -e "console.log(process.argv[1] + \'|\' + process.argv[2])" "@@greeting@@" "@@result@@"',
+        inputs: [],
+        outputs: ['result'],
+        outputTypes: { result: 'file' },
+        params: { greeting: 'hello-template' },
+        paramTypes: { greeting: 'string' },
+      },
+    },
+  });
+  await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: 'template-run-graph',
+        name: 'Template run graph',
+        layout: 'vertical',
+        nodes: [{ id: 'template', moduleId: 'template-run', label: 'Template', x: 40, y: 40 }],
+        edges: [],
+      },
+    },
+  });
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: 'template-run-graph' },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded');
+  assert.match(run.nodes[0].stdoutTail, /hello-template/);
+  assert.match(run.nodes[0].stdoutTail, /result\.out/);
+});
+
 test('modules record their execution environment', async () => {
   const created = await call('/modules', {
     method: 'POST',

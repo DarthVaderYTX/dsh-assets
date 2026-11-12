@@ -26,11 +26,27 @@
       );
     }
 
-    function ParamsEditor({ t, value, onChange }) {
-      const [rows, setRows] = useState(() => paramsToRows(value));
+    function TypeSelect({ t, value, onChange, paramOnly = false }) {
+      const options = paramOnly ? ATH_PARAM_TYPES : ATH_VALUE_TYPES;
+      return h(
+        'select',
+        {
+          className: 'ath-select ath-type-select',
+          value: options.includes(value) ? value : 'string',
+          title: t('modules.typeLabel'),
+          onChange: (event) => onChange(event.target.value),
+        },
+        options.map((type) =>
+          h('option', { key: type, value: type }, t(`modules.type.${type}`)),
+        ),
+      );
+    }
+
+    function ParamsEditor({ t, value, types, onChange }) {
+      const [rows, setRows] = useState(() => paramsToRows(value, types));
       const update = (next) => {
         setRows(next);
-        onChange(rowsToParams(next));
+        onChange(rowsToParams(next), rowsToParamTypes(next));
       };
       return h(
         'div',
@@ -49,6 +65,16 @@
                   onChange: (event) => {
                     const next = rows.slice();
                     next[index] = { ...row, key: event.target.value };
+                    update(next);
+                  },
+                }),
+                h(TypeSelect, {
+                  t,
+                  value: row.type,
+                  paramOnly: true,
+                  onChange: (type) => {
+                    const next = rows.slice();
+                    next[index] = { ...row, type };
                     update(next);
                   },
                 }),
@@ -85,7 +111,7 @@
             {
               type: 'button',
               className: 'ath-btn ath-btn-ghost',
-              onClick: () => update([...rows, { key: '', value: '' }]),
+              onClick: () => update([...rows, { key: '', value: '', type: 'string' }]),
             },
             t('common.addParam'),
           ),
@@ -93,8 +119,9 @@
       );
     }
 
-    function PortsEditor({ t, label, ports, onChange, requiredPorts, requiredMode = false }) {
+    function PortsEditor({ t, label, ports, types, onChange, requiredPorts, requiredMode = false }) {
       const rows = Array.isArray(ports) ? ports : [];
+      const typeMap = types && typeof types === 'object' ? types : {};
       const required = new Set(Array.isArray(requiredPorts) ? requiredPorts : []);
       return h(
         'div',
@@ -122,7 +149,22 @@
                   nextRequired.delete(previous);
                   if (event.target.value) nextRequired.add(event.target.value);
                 }
-                onChange(next, [...nextRequired]);
+                const nextTypes = { ...typeMap };
+                if (previous !== event.target.value) {
+                  const previousType = nextTypes[previous] || 'string';
+                  delete nextTypes[previous];
+                  if (event.target.value) nextTypes[event.target.value] = previousType;
+                }
+                onChange(next, [...nextRequired], nextTypes);
+              },
+            }),
+            h(TypeSelect, {
+              t,
+              value: typeMap[port] || 'string',
+              onChange: (type) => {
+                const nextTypes = { ...typeMap };
+                if (port) nextTypes[port] = type;
+                onChange(rows, [...required], nextTypes);
               },
             }),
             requiredMode
@@ -137,7 +179,7 @@
                       const nextRequired = new Set(required);
                       if (event.target.checked) nextRequired.add(port);
                       else nextRequired.delete(port);
-                      onChange(rows, [...nextRequired]);
+                      onChange(rows, [...nextRequired], typeMap);
                     },
                   }),
                   h('span', null, t('modules.requiredInput')),
@@ -154,9 +196,12 @@
                   const removed = rows[index];
                   const nextRequired = new Set(required);
                   nextRequired.delete(removed);
+                  const nextTypes = { ...typeMap };
+                  delete nextTypes[removed];
                   onChange(
                     rows.filter((_, position) => position !== index),
                     [...nextRequired],
+                    nextTypes,
                   );
                 },
               },
@@ -173,7 +218,10 @@
           {
             type: 'button',
             className: 'ath-btn ath-btn-ghost',
-            onClick: () => onChange([...rows, ''], [...required]),
+            onClick: () => {
+              const next = [...rows, ''];
+              onChange(next, [...required], typeMap);
+            },
             style: { alignSelf: 'flex-start', marginTop: 6 },
           },
           t('modules.addPort'),

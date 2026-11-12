@@ -73,8 +73,8 @@ npm run build
 
 ## 工作区
 
-`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；资源按类别在 `resources/modules|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行与 `.aether-backups` 也都在该目录。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录暂不导出，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
+`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；资源按类别在 `resources/modules|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行与 `.aether-backups` 也都在该目录。模块输入/输出/参数各带类型，命令模板通过 `@@名称@@` 引用，保存前由 `validateModule` 校验占位符与定义。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录暂不导出，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
 
 ## 数据版本
 
-`const DATA_VERSION = 8`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。
+`const DATA_VERSION = 9`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。

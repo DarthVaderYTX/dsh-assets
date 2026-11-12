@@ -13,6 +13,8 @@ export const MAX_TIMEOUT_SEC = 86400;
 export const MODULE_KINDS = ['command', 'graph', 'dataset'];
 export const DEFAULT_INPUT_PORTS = ['input'];
 export const DEFAULT_OUTPUT_PORTS = ['output'];
+export const VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
+export const PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
 export const LAYOUT_DIRECTIONS = ['vertical', 'horizontal'];
 
 /**
@@ -90,6 +92,34 @@ function normalizePorts(raw, fallback) {
   return ports;
 }
 
+function normalizeTypeMap(raw, names, allowed, fallback = 'string') {
+  const source = isPlainObject(raw) ? raw : {};
+  const types = {};
+  for (const name of names) {
+    types[name] = allowed.includes(source[name]) ? source[name] : fallback;
+  }
+  return types;
+}
+
+function normalizeCommandTemplate(raw) {
+  return String(raw == null ? '' : raw).replace(
+    /\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g,
+    '@@$1@@',
+  );
+}
+
+function coerceParam(value, type) {
+  if (type === 'number') {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+  if (type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    return !['', '0', 'false', 'no', 'off'].includes(String(value).trim().toLowerCase());
+  }
+  return scalar(value);
+}
+
 /** 参数既支持 `{ key: value }`，也支持 `[{ key, value }]` 的编辑态。 */
 export function normalizeParams(raw) {  const params = {};
   if (Array.isArray(raw)) {
@@ -114,6 +144,14 @@ export function normalizeModule(raw) {
   const kind = source.kind === 'graph' ? 'graph' : source.kind === 'dataset' ? 'dataset' : 'command';
   const timeout = Number(source.timeoutSec);
   const inputs = kind === 'dataset' ? [] : normalizePorts(source.inputs, DEFAULT_INPUT_PORTS);
+  const outputs = normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS);
+  const params = normalizeParams(source.params);
+  const inputTypes = normalizeTypeMap(source.inputTypes, inputs, VALUE_TYPES);
+  const outputTypes = normalizeTypeMap(source.outputTypes, outputs, VALUE_TYPES);
+  const paramTypes = normalizeTypeMap(source.paramTypes, Object.keys(params), PARAM_TYPES);
+  for (const name of Object.keys(params)) {
+    params[name] = coerceParam(params[name], paramTypes[name]);
+  }
   const requiredInputs = Array.isArray(source.requiredInputs)
     ? unique(source.requiredInputs.map((name) => String(name == null ? '' : name).trim())).filter((name) =>
         inputs.includes(name),
@@ -124,15 +162,18 @@ export function normalizeModule(raw) {
     name: String(source.name == null ? '' : source.name).trim(),
     description: String(source.description == null ? '' : source.description).trim(),
     kind,
-    command: String(source.command == null ? '' : source.command),
+    command: normalizeCommandTemplate(source.command),
     cwd: String(source.cwd == null ? '' : source.cwd).trim(),
     timeoutSec:
       Number.isFinite(timeout) && timeout > 0
         ? Math.min(MAX_TIMEOUT_SEC, Math.max(1, Math.round(timeout)))
         : DEFAULT_TIMEOUT_SEC,
-    params: normalizeParams(source.params),
+    params,
+    paramTypes,
     inputs,
-    outputs: normalizePorts(source.outputs, DEFAULT_OUTPUT_PORTS),
+    inputTypes,
+    outputs,
+    outputTypes,
     requiredInputs,
     graphId: kind === 'graph' ? String(source.graphId == null ? '' : source.graphId).trim() : '',
     datasetUri: kind === 'dataset' ? String(source.datasetUri == null ? '' : source.datasetUri).trim() : '',
@@ -307,6 +348,45 @@ export function topoLayers(nodes, edges) {
   return layers;
 }
 
+const TEMPLATE_BUILTINS = new Set([
+  'run_id',
+  'run_dir',
+  'node_id',
+  'node_path',
+  'node_dir',
+  'graph_id',
+  'input_file',
+]);
+
+function validateCommandTemplate(command, definedNames) {
+  const errors = [];
+  const text = String(command || '');
+  if (!text.includes('@@')) return errors;
+  const parts = text.split('@@');
+  if (parts.length % 2 === 0) {
+    errors.push('命令模板中的 @@ 占位符未闭合');
+    return errors;
+  }
+  const seen = new Set();
+  for (let index = 1; index < parts.length; index += 2) {
+    const name = parts[index].trim();
+    if (!name) {
+      errors.push('命令模板存在空的 @@占位符@@');
+      continue;
+    }
+    if (/[\r\n]/.test(name)) {
+      errors.push(`命令模板占位符「${name.replace(/[\r\n]+/g, ' ')}」不能跨行`);
+      continue;
+    }
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (!definedNames.has(name) && !TEMPLATE_BUILTINS.has(name)) {
+      errors.push(`命令模板引用了未定义的名称「${name}」，请先在输入、输出或参数中定义`);
+    }
+  }
+  return errors;
+}
+
 export function validateModule(module, modules = [], graphs = [], environments = []) {
   const errors = [];
   if (!module.id) errors.push('模块 id 不能为空');
@@ -340,6 +420,34 @@ export function validateModule(module, modules = [], graphs = [], environments =
   for (const [key, value] of Object.entries(module.params || {})) {
     if (!PARAM_KEY.test(key)) errors.push(`参数名「${key}」无效（字母或下划线开头，可含数字、点、横线）`);
     if (value !== null && typeof value === 'object') errors.push(`参数「${key}」的值必须是字符串、数字或布尔值`);
+    if (!PARAM_TYPES.includes(module.paramTypes && module.paramTypes[key])) {
+      errors.push(`参数「${key}」的类型无效`);
+    }
+  }
+  const ownerByName = new Map();
+  for (const [category, names] of [
+    ['输入', module.inputs || []],
+    ['输出', module.outputs || []],
+    ['参数', Object.keys(module.params || {})],
+  ]) {
+    for (const name of names) {
+      if (ownerByName.has(name)) {
+        errors.push(`名称「${name}」同时出现在${ownerByName.get(name)}和${category}中，命令模板无法区分`);
+      } else {
+        ownerByName.set(name, category);
+      }
+    }
+  }
+  for (const [side, names, types] of [
+    ['输入', module.inputs || [], module.inputTypes || {}],
+    ['输出', module.outputs || [], module.outputTypes || {}],
+  ]) {
+    for (const name of names) {
+      if (!VALUE_TYPES.includes(types[name])) errors.push(`${side}端口「${name}」的类型无效`);
+    }
+  }
+  if (module.kind === 'command') {
+    errors.push(...validateCommandTemplate(module.command, new Set(ownerByName.keys())));
   }
   for (const port of module.requiredInputs || []) {
     if (!(module.inputs || []).includes(port)) errors.push(`必填输入端口「${port}」不在输入端口列表中`);
@@ -551,13 +659,16 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         kind: module ? module.kind : 'missing',
         label: node.label || (module ? module.name : node.id),
         params: { ...inheritedParams, ...(module?.params || {}), ...(node.params || {}) },
+        paramTypes: module?.paramTypes || {},
         deps: parentDeps,
         command: module?.command || '',
         cwd: module?.cwd || '',
         timeoutSec: module?.timeoutSec || DEFAULT_TIMEOUT_SEC,
         environmentId: module?.environmentId || 'local',
         inputs: module?.inputs || [],
+        inputTypes: module?.inputTypes || {},
         outputs: module?.outputs || [],
+        outputTypes: module?.outputTypes || {},
         requiredInputs: module?.requiredInputs || [],
         datasetUri: module?.datasetUri || '',
         datasetFormat: module?.datasetFormat || '',

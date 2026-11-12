@@ -362,7 +362,8 @@ async function loadState() {
     // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
     // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
     // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表；
-    // v6 → v7 将模块/实验/子图迁移到分类目录；v7 → v8 将 modules 重命名为 resources、module.json 重命名为 resource.json。
+    // v6 → v7 将模块/实验/子图迁移到分类目录；v7 → v8 将 modules 重命名为 resources、module.json 重命名为 resource.json；
+    // v8 → v9 给输入/输出/参数补类型，并把命令模板统一为 @@名称@@ 引用。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -435,11 +436,14 @@ function summarizeRun(run, { detail = false } = {}) {
     kind: node.kind,
     deps: node.deps,
     params: node.params,
+    paramTypes: node.paramTypes || {},
     environmentId: node.environmentId || 'local',
     environmentName: node.environmentName || '',
     executor: node.executor || 'local',
     inputs: node.inputs || [],
+    inputTypes: node.inputTypes || {},
     outputs: node.outputs || [],
+    outputTypes: node.outputTypes || {},
     artifacts: (node.artifacts || []).map((artifact) => ({
       port: artifact.port,
       path: artifact.path,
@@ -654,6 +658,7 @@ async function startExperiment(input = {}) {
       label: node.label,
       kind: node.kind,
       params: node.params,
+      paramTypes: node.paramTypes || {},
       deps: node.deps,
       command: node.command,
       cwd: node.cwd,
@@ -662,7 +667,9 @@ async function startExperiment(input = {}) {
       environmentName: target.environmentName,
       executor: target.executor,
       inputs: node.inputs || [],
+      inputTypes: node.inputTypes || {},
       outputs: node.outputs || [],
+      outputTypes: node.outputTypes || {},
       requiredInputs: node.requiredInputs || [],
       artifacts: [],
       datasetUri: node.datasetUri || '',
@@ -930,9 +937,12 @@ function moduleContentFields(module) {
     cwd: module.cwd,
     timeoutSec: module.timeoutSec,
     params: module.params || {},
+    paramTypes: module.paramTypes || {},
     inputs: module.inputs || [],
+    inputTypes: module.inputTypes || {},
     requiredInputs: module.requiredInputs || [],
     outputs: module.outputs || [],
+    outputTypes: module.outputTypes || {},
     graphId: module.graphId,
     datasetUri: module.datasetUri,
     datasetFormat: module.datasetFormat,

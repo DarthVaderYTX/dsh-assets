@@ -160,6 +160,13 @@
       const [assetBusy, setAssetBusy] = useState(false);
       const [assetError, setAssetError] = useState('');
       const needsAsset = isNew && module.kind === 'command' && !module.assetId;
+      const templateNames = [
+        ...new Set([
+          ...(module.inputs || []),
+          ...(module.outputs || []),
+          ...Object.keys(module.params || {}),
+        ]),
+      ];
 
       useEffect(() => {
         const input = dirInputRef.current;
@@ -372,7 +379,8 @@
                       t,
                       label: t('modules.outputs'),
                       ports: module.outputs || [],
-                      onChange: (outputs) => patch({ outputs }),
+                      types: module.outputTypes || {},
+                      onChange: (outputs, _required, outputTypes) => patch({ outputs, outputTypes }),
                     }),
                     h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.datasetPortsHint')),
                   )
@@ -383,15 +391,18 @@
                       t,
                       label: t('modules.inputs'),
                       ports: module.inputs || [],
+                      types: module.inputTypes || {},
                       requiredPorts: module.requiredInputs || [],
                       requiredMode: true,
-                      onChange: (inputs, requiredInputs) => patch({ inputs, requiredInputs }),
+                      onChange: (inputs, requiredInputs, inputTypes) =>
+                        patch({ inputs, requiredInputs, inputTypes }),
                     }),
                     h(PortsEditor, {
                       t,
                       label: t('modules.outputs'),
                       ports: module.outputs || [],
-                      onChange: (outputs) => patch({ outputs }),
+                      types: module.outputTypes || {},
+                      onChange: (outputs, _required, outputTypes) => patch({ outputs, outputTypes }),
                     }),
                   ),
               module.kind === 'dataset'
@@ -550,6 +561,16 @@
                         onChange: (event) => patch({ command: event.target.value }),
                       }),
                       h('div', { className: 'ath-hint' }, t('modules.commandHint')),
+                      h(
+                        'div',
+                        { className: 'ath-template-refs' },
+                        h('span', { className: 'ath-hint' }, t('modules.templateRefs')),
+                        templateNames.length
+                          ? templateNames.map((name) =>
+                              h('code', { key: name, className: 'ath-template-ref' }, `@@${name}@@`),
+                            )
+                          : h('span', { className: 'ath-hint' }, t('modules.templateNoRefs')),
+                      ),
                     ),
                     h(
                       'div',
@@ -596,7 +617,8 @@
                 key: module.id || 'new',
                 t,
                 value: module.params,
-                onChange: (params) => patch({ params }),
+                types: module.paramTypes || {},
+                onChange: (params, paramTypes) => patch({ params, paramTypes }),
               }),
               h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
             ),

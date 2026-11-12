@@ -243,9 +243,18 @@ window.__ModuleLoader__.load({
       'modules.requiredInputHint': '勾选表示该输入端口必须连线；未勾选为可选。',
       'modules.requiredCount': '必填 {n}',
       'modules.paramsDefaultHint': '这里填写的是参数默认值；实验中的节点可以单独覆盖，画布节点会显示合并后的参数。',
-      'modules.portsHint': '端口是画布上的连线端点；模块可以没有输入或输出，用空列表表示。',
-      'modules.command': '命令',
-      'modules.commandHint': '可选。留空时尝试执行提交的文件/目录入口；填写时通过 shell 执行，可用 {{参数名}} 插入参数。',
+      'modules.portsHint': '端口是画布上的连线端点；每个端口都有类型；模块可以没有输入或输出，用空列表表示。',
+      'modules.typeLabel': '类型',
+      'modules.type.string': '文本',
+      'modules.type.number': '数字',
+      'modules.type.boolean': '布尔',
+      'modules.type.json': 'JSON',
+      'modules.type.file': '文件',
+      'modules.type.directory': '目录',
+      'modules.command': '命令模板',
+      'modules.commandHint': '可选。留空时尝试执行提交文件/目录的入口；填写时通过 shell 执行。使用 @@输入/输出/参数名@@ 引用已定义名称，保存前会校验占位符。',
+      'modules.templateRefs': '可用引用',
+      'modules.templateNoRefs': '还没有可引用的输入、输出或参数',
       'modules.cwd': '工作目录',
       'modules.cwdHint': '留空使用 DSH 进程的当前目录；支持 ~。',
       'modules.timeout': '超时（秒）',
@@ -300,8 +309,9 @@ window.__ModuleLoader__.load({
       'newModule.assetHint': '必须选择提交内容；文件或文件夹会复制到资源自己的 files/ 目录。',
       'newModule.chooseFile': '选择文件',
       'newModule.chooseDirectory': '选择文件夹',
-      'newModule.command': '执行命令（可选）',
-      'newModule.commandPlaceholder': '留空时自动执行提交文件的入口',
+      'newModule.command': '执行命令模板（可选）',
+      'newModule.commandPlaceholder': '使用 @@参数名@@ 引用参数，例如 node run.js --lr @@lr@@',
+      'newModule.commandHint': '可先留空；如需引用输入/输出/参数，请先在创建后的编辑器中定义，再填写命令模板。',
       'newModule.datasetUri': '数据集 URI / 路径',
       'newModule.datasetUriPlaceholder': '例如 datasets/data.jsonl 或 https://…',
       'newModule.datasetFormat': '格式（可选）',
@@ -315,7 +325,7 @@ window.__ModuleLoader__.load({
       'newModule.validationDatasetUri': '请填写数据集 URI / 路径',
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
-      'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
+      'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
       'modules.save': '保存模块',
       'modules.saving': '正在保存…',
       'modules.commandTitle': '命令模块',
@@ -582,9 +592,18 @@ window.__ModuleLoader__.load({
       'modules.requiredInputHint': 'Checked inputs must be connected; unchecked inputs are optional.',
       'modules.requiredCount': '{n} required',
       'modules.paramsDefaultHint': 'These are default parameter values; nodes in experiments can override them, and canvas nodes show the merged values.',
-      'modules.portsHint': 'Ports are the connection endpoints on the canvas; a module may have no inputs or no outputs.',
-      'modules.command': 'Command',
-      'modules.commandHint': 'Optional. Leave blank to run the submitted file/directory entrypoint; otherwise it runs through the shell with {{name}} parameter substitution.',
+      'modules.portsHint': 'Ports are the connection endpoints on the canvas; every port has a type; a module may have no inputs or no outputs.',
+      'modules.typeLabel': 'Type',
+      'modules.type.string': 'Text',
+      'modules.type.number': 'Number',
+      'modules.type.boolean': 'Boolean',
+      'modules.type.json': 'JSON',
+      'modules.type.file': 'File',
+      'modules.type.directory': 'Directory',
+      'modules.command': 'Command template',
+      'modules.commandHint': 'Optional. Leave blank to run the submitted file/directory entrypoint; otherwise it runs through the shell. Reference defined names as @@input/output/param@@; placeholders are validated before save.',
+      'modules.templateRefs': 'Available references',
+      'modules.templateNoRefs': 'No inputs, outputs or parameters defined yet',
       'modules.cwd': 'Working directory',
       'modules.cwdHint': 'Blank uses the DSH process working directory; ~ is supported.',
       'modules.timeout': 'Timeout (seconds)',
@@ -639,8 +658,9 @@ window.__ModuleLoader__.load({
       'newModule.assetHint': 'Required. The selected file or folder is copied into this resource\'s own files/ directory.',
       'newModule.chooseFile': 'Choose file',
       'newModule.chooseDirectory': 'Choose folder',
-      'newModule.command': 'Command (optional)',
-      'newModule.commandPlaceholder': 'Leave empty to run the submitted entrypoint',
+      'newModule.command': 'Command template (optional)',
+      'newModule.commandPlaceholder': 'Reference params as @@name@@, e.g. node run.js --lr @@lr@@',
+      'newModule.commandHint': 'Can be left empty; to reference inputs/outputs/params, define them in the editor after creation, then fill the template.',
       'newModule.datasetUri': 'Dataset URI / path',
       'newModule.datasetUriPlaceholder': 'e.g. datasets/data.jsonl or https://…',
       'newModule.datasetFormat': 'Format (optional)',
@@ -654,7 +674,7 @@ window.__ModuleLoader__.load({
       'newModule.validationDatasetUri': 'Enter a dataset URI / path',
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
-      'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
+      'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
       'modules.save': 'Save module',
       'modules.saving': 'Saving…',
       'modules.commandTitle': 'Command module',
@@ -1044,8 +1064,15 @@ window.__ModuleLoader__.load({
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
 .ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--ath-yellow-ink); flex: 0 0 auto; }
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
-.ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
-.ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) auto 24px; }
+.ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) 78px auto 24px; }
+.ath-type-select { width: auto; min-width: 72px; padding: 5px 6px; font-size: 11px; }
+.ath-template-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+.ath-template-ref {
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--ath-border-soft);
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10.5px;
+}
 .ath-port-required {
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
   font-size: 10.5px; color: var(--dsw-alias-label-secondary); cursor: pointer;
@@ -1376,7 +1403,7 @@ window.__ModuleLoader__.load({
 }
 .ath-inspector { display: flex; flex-direction: column; gap: 12px; }
 .ath-section-title { margin: 0 0 2px; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); text-transform: none; }
-.ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 24px; gap: 6px; align-items: center; }
+.ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1.1fr) 24px; gap: 6px; align-items: center; }
 .ath-param-row + .ath-param-row { margin-top: 6px; }
 .ath-dep-list { display: flex; flex-direction: column; gap: 6px; }
 .ath-dep-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 7px; font-size: 11.5px; background: var(--dsw-alias-bg-base); }
@@ -1528,8 +1555,15 @@ window.__ModuleLoader__.load({
       return executorId === 'local' ? t('executor.local') : executorId || t('executor.local');
     }
 
-    function paramsToRows(params) {
-      return Object.entries(params || {}).map(([key, value]) => ({ key, value: String(value) }));
+    const ATH_VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
+    const ATH_PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
+
+    function paramsToRows(params, types) {
+      return Object.entries(params || {}).map(([key, value]) => ({
+        key,
+        value: String(value),
+        type: (types && types[key]) || 'string',
+      }));
     }
 
     function rowsToParams(rows) {
@@ -1540,6 +1574,16 @@ window.__ModuleLoader__.load({
         params[key] = row.value;
       }
       return params;
+    }
+
+    function rowsToParamTypes(rows) {
+      const types = {};
+      for (const row of rows) {
+        const key = String(row.key || '').trim();
+        if (!key) continue;
+        types[key] = row.type || 'string';
+      }
+      return types;
     }
 
     function uniqueNodeId(graph, base) {
@@ -1646,11 +1690,27 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function ParamsEditor({ t, value, onChange }) {
-      const [rows, setRows] = useState(() => paramsToRows(value));
+    function TypeSelect({ t, value, onChange, paramOnly = false }) {
+      const options = paramOnly ? ATH_PARAM_TYPES : ATH_VALUE_TYPES;
+      return h(
+        'select',
+        {
+          className: 'ath-select ath-type-select',
+          value: options.includes(value) ? value : 'string',
+          title: t('modules.typeLabel'),
+          onChange: (event) => onChange(event.target.value),
+        },
+        options.map((type) =>
+          h('option', { key: type, value: type }, t(`modules.type.${type}`)),
+        ),
+      );
+    }
+
+    function ParamsEditor({ t, value, types, onChange }) {
+      const [rows, setRows] = useState(() => paramsToRows(value, types));
       const update = (next) => {
         setRows(next);
-        onChange(rowsToParams(next));
+        onChange(rowsToParams(next), rowsToParamTypes(next));
       };
       return h(
         'div',
@@ -1669,6 +1729,16 @@ window.__ModuleLoader__.load({
                   onChange: (event) => {
                     const next = rows.slice();
                     next[index] = { ...row, key: event.target.value };
+                    update(next);
+                  },
+                }),
+                h(TypeSelect, {
+                  t,
+                  value: row.type,
+                  paramOnly: true,
+                  onChange: (type) => {
+                    const next = rows.slice();
+                    next[index] = { ...row, type };
                     update(next);
                   },
                 }),
@@ -1705,7 +1775,7 @@ window.__ModuleLoader__.load({
             {
               type: 'button',
               className: 'ath-btn ath-btn-ghost',
-              onClick: () => update([...rows, { key: '', value: '' }]),
+              onClick: () => update([...rows, { key: '', value: '', type: 'string' }]),
             },
             t('common.addParam'),
           ),
@@ -1713,8 +1783,9 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function PortsEditor({ t, label, ports, onChange, requiredPorts, requiredMode = false }) {
+    function PortsEditor({ t, label, ports, types, onChange, requiredPorts, requiredMode = false }) {
       const rows = Array.isArray(ports) ? ports : [];
+      const typeMap = types && typeof types === 'object' ? types : {};
       const required = new Set(Array.isArray(requiredPorts) ? requiredPorts : []);
       return h(
         'div',
@@ -1742,7 +1813,22 @@ window.__ModuleLoader__.load({
                   nextRequired.delete(previous);
                   if (event.target.value) nextRequired.add(event.target.value);
                 }
-                onChange(next, [...nextRequired]);
+                const nextTypes = { ...typeMap };
+                if (previous !== event.target.value) {
+                  const previousType = nextTypes[previous] || 'string';
+                  delete nextTypes[previous];
+                  if (event.target.value) nextTypes[event.target.value] = previousType;
+                }
+                onChange(next, [...nextRequired], nextTypes);
+              },
+            }),
+            h(TypeSelect, {
+              t,
+              value: typeMap[port] || 'string',
+              onChange: (type) => {
+                const nextTypes = { ...typeMap };
+                if (port) nextTypes[port] = type;
+                onChange(rows, [...required], nextTypes);
               },
             }),
             requiredMode
@@ -1757,7 +1843,7 @@ window.__ModuleLoader__.load({
                       const nextRequired = new Set(required);
                       if (event.target.checked) nextRequired.add(port);
                       else nextRequired.delete(port);
-                      onChange(rows, [...nextRequired]);
+                      onChange(rows, [...nextRequired], typeMap);
                     },
                   }),
                   h('span', null, t('modules.requiredInput')),
@@ -1774,9 +1860,12 @@ window.__ModuleLoader__.load({
                   const removed = rows[index];
                   const nextRequired = new Set(required);
                   nextRequired.delete(removed);
+                  const nextTypes = { ...typeMap };
+                  delete nextTypes[removed];
                   onChange(
                     rows.filter((_, position) => position !== index),
                     [...nextRequired],
+                    nextTypes,
                   );
                 },
               },
@@ -1793,7 +1882,10 @@ window.__ModuleLoader__.load({
           {
             type: 'button',
             className: 'ath-btn ath-btn-ghost',
-            onClick: () => onChange([...rows, ''], [...required]),
+            onClick: () => {
+              const next = [...rows, ''];
+              onChange(next, [...required], typeMap);
+            },
             style: { alignSelf: 'flex-start', marginTop: 6 },
           },
           t('modules.addPort'),
@@ -2542,6 +2634,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     placeholder: t('newModule.commandPlaceholder'),
                     onChange: (event) => setCommand(event.target.value),
                   }),
+                  h('div', { className: 'ath-hint' }, t('newModule.commandHint')),
                 ),
               ]
             : [
@@ -5287,6 +5380,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [assetBusy, setAssetBusy] = useState(false);
       const [assetError, setAssetError] = useState('');
       const needsAsset = isNew && module.kind === 'command' && !module.assetId;
+      const templateNames = [
+        ...new Set([
+          ...(module.inputs || []),
+          ...(module.outputs || []),
+          ...Object.keys(module.params || {}),
+        ]),
+      ];
 
       useEffect(() => {
         const input = dirInputRef.current;
@@ -5499,7 +5599,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       t,
                       label: t('modules.outputs'),
                       ports: module.outputs || [],
-                      onChange: (outputs) => patch({ outputs }),
+                      types: module.outputTypes || {},
+                      onChange: (outputs, _required, outputTypes) => patch({ outputs, outputTypes }),
                     }),
                     h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.datasetPortsHint')),
                   )
@@ -5510,15 +5611,18 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       t,
                       label: t('modules.inputs'),
                       ports: module.inputs || [],
+                      types: module.inputTypes || {},
                       requiredPorts: module.requiredInputs || [],
                       requiredMode: true,
-                      onChange: (inputs, requiredInputs) => patch({ inputs, requiredInputs }),
+                      onChange: (inputs, requiredInputs, inputTypes) =>
+                        patch({ inputs, requiredInputs, inputTypes }),
                     }),
                     h(PortsEditor, {
                       t,
                       label: t('modules.outputs'),
                       ports: module.outputs || [],
-                      onChange: (outputs) => patch({ outputs }),
+                      types: module.outputTypes || {},
+                      onChange: (outputs, _required, outputTypes) => patch({ outputs, outputTypes }),
                     }),
                   ),
               module.kind === 'dataset'
@@ -5677,6 +5781,16 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         onChange: (event) => patch({ command: event.target.value }),
                       }),
                       h('div', { className: 'ath-hint' }, t('modules.commandHint')),
+                      h(
+                        'div',
+                        { className: 'ath-template-refs' },
+                        h('span', { className: 'ath-hint' }, t('modules.templateRefs')),
+                        templateNames.length
+                          ? templateNames.map((name) =>
+                              h('code', { key: name, className: 'ath-template-ref' }, `@@${name}@@`),
+                            )
+                          : h('span', { className: 'ath-hint' }, t('modules.templateNoRefs')),
+                      ),
                     ),
                     h(
                       'div',
@@ -5723,7 +5837,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 key: module.id || 'new',
                 t,
                 value: module.params,
-                onChange: (params) => patch({ params }),
+                types: module.paramTypes || {},
+                onChange: (params, paramTypes) => patch({ params, paramTypes }),
               }),
               h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
             ),
@@ -6347,9 +6462,12 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               cwd: '',
               timeoutSec: 300,
               params: {},
+              paramTypes: {},
               inputs: nextKind === 'dataset' ? [] : ['input'],
+              inputTypes: nextKind === 'dataset' ? {} : { input: 'string' },
               requiredInputs: [],
               outputs: ['output'],
+              outputTypes: { output: 'string' },
               graphId: '',
               datasetUri: '',
               datasetFormat: '',
@@ -6389,9 +6507,12 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 cwd: '',
                 timeoutSec: 300,
                 params: {},
+                paramTypes: {},
                 inputs: fields.kind === 'dataset' ? [] : ['input'],
+                inputTypes: fields.kind === 'dataset' ? {} : { input: 'string' },
                 requiredInputs: [],
                 outputs: fields.kind === 'dataset' ? ['rows'] : ['output'],
+                outputTypes: fields.kind === 'dataset' ? { rows: 'string' } : { output: 'string' },
                 graphId: '',
                 datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
                 datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',

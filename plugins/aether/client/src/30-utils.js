@@ -61,8 +61,15 @@
       return executorId === 'local' ? t('executor.local') : executorId || t('executor.local');
     }
 
-    function paramsToRows(params) {
-      return Object.entries(params || {}).map(([key, value]) => ({ key, value: String(value) }));
+    const ATH_VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
+    const ATH_PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
+
+    function paramsToRows(params, types) {
+      return Object.entries(params || {}).map(([key, value]) => ({
+        key,
+        value: String(value),
+        type: (types && types[key]) || 'string',
+      }));
     }
 
     function rowsToParams(rows) {
@@ -73,6 +80,16 @@
         params[key] = row.value;
       }
       return params;
+    }
+
+    function rowsToParamTypes(rows) {
+      const types = {};
+      for (const row of rows) {
+        const key = String(row.key || '').trim();
+        if (!key) continue;
+        types[key] = row.type || 'string';
+      }
+      return types;
     }
 
     function uniqueNodeId(graph, base) {

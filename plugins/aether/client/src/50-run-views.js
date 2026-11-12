@@ -546,6 +546,7 @@
                     placeholder: t('newModule.commandPlaceholder'),
                     onChange: (event) => setCommand(event.target.value),
                   }),
+                  h('div', { className: 'ath-hint' }, t('newModule.commandHint')),
                 ),
               ]
             : [

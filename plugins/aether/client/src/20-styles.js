@@ -345,8 +345,15 @@
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
 .ath-node-tag { font-size: 9px; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; color: var(--ath-yellow-ink); flex: 0 0 auto; }
 .ath-node-env { margin-left: 6px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
-.ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
-.ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) auto 24px; }
+.ath-port-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ath-port-edit-row-required { grid-template-columns: minmax(0, 1fr) 78px auto 24px; }
+.ath-type-select { width: auto; min-width: 72px; padding: 5px 6px; font-size: 11px; }
+.ath-template-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+.ath-template-ref {
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--ath-border-soft);
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10.5px;
+}
 .ath-port-required {
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
   font-size: 10.5px; color: var(--dsw-alias-label-secondary); cursor: pointer;
@@ -677,7 +684,7 @@
 }
 .ath-inspector { display: flex; flex-direction: column; gap: 12px; }
 .ath-section-title { margin: 0 0 2px; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); text-transform: none; }
-.ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 24px; gap: 6px; align-items: center; }
+.ath-param-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1.1fr) 24px; gap: 6px; align-items: center; }
 .ath-param-row + .ath-param-row { margin-top: 6px; }
 .ath-dep-list { display: flex; flex-direction: column; gap: 6px; }
 .ath-dep-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 7px; font-size: 11.5px; background: var(--dsw-alias-bg-base); }
