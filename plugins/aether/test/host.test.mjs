@@ -485,6 +485,60 @@ test('module ports and canvas coordinates round-trip through the API', async () 
   assert.match(badPort.payload.error, /没有输入端口「missing」/);
 });
 
+test('dataset resources can store imported data files', async () => {
+  const uploaded = await call('/modules/assets', {
+    method: 'POST',
+    body: {
+      kind: 'file',
+      name: 'rows.jsonl',
+      files: [
+        {
+          path: 'rows.jsonl',
+          data: Buffer.from('{"id":1}\n{"id":2}\n', 'utf8').toString('base64'),
+        },
+      ],
+    },
+  });
+  const asset = uploaded.payload.asset;
+  const created = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'dataset-upload',
+        name: 'Dataset upload',
+        kind: 'dataset',
+        datasetUri: 'rows.jsonl',
+        datasetFormat: 'jsonl',
+        inputs: [],
+        outputs: ['rows'],
+        outputTypes: { rows: 'json' },
+        assetId: asset.assetId,
+        assetKind: asset.assetKind,
+        assetName: asset.assetName,
+        assetPath: asset.assetPath,
+        assetFileCount: asset.assetFileCount,
+      },
+    },
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.payload.module.datasetUri, 'resources/datasets/dataset-upload/files/rows.jsonl');
+  assert.deepEqual(created.payload.module.outputTypes, { rows: 'json' });
+  const root = path.join(home, 'storages', 'aether');
+  assert.equal(
+    existsSync(path.join(root, 'resources', 'datasets', 'dataset-upload', 'files', 'rows.jsonl')),
+    true,
+  );
+  const description = JSON.parse(
+    await fsp.readFile(
+      path.join(root, 'resources', 'datasets', 'dataset-upload', 'resource.json'),
+      'utf8',
+    ),
+  );
+  assert.equal(description.datasetUri, 'resources/datasets/dataset-upload/files/rows.jsonl');
+  assert.deepEqual(description.outputTypes, { rows: 'json' });
+});
+
 test('dataset nodes emit their URI without starting a command', async () => {
   const graph = await call('/graphs', {
     method: 'POST',

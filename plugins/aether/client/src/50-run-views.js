@@ -317,8 +317,11 @@
       const [name, setName] = useState('');
       const [description, setDescription] = useState('');
       const [command, setCommand] = useState('');
-      const [datasetUri, setDatasetUri] = useState('');
-      const [datasetFormat, setDatasetFormat] = useState('');
+      const [datasetMode, setDatasetMode] = useState('edit');
+      const [datasetText, setDatasetText] = useState('');
+      const [datasetFile, setDatasetFile] = useState(null);
+      const [datasetFormat, setDatasetFormat] = useState('jsonl');
+      const [datasetOutputType, setDatasetOutputType] = useState('json');
       const [inputRows, setInputRows] = useState([]);
       const [outputRows, setOutputRows] = useState([]);
       const [paramRows, setParamRows] = useState([]);
@@ -326,6 +329,7 @@
       const [formError, setFormError] = useState('');
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
+      const datasetFileInputRef = useRef(null);
 
       useEffect(() => {
         const input = dirInputRef.current;
@@ -360,13 +364,50 @@
         }
       };
 
+      const validateDatasetText = (format, text) => {
+        const value = String(text || '');
+        if (!value.trim()) throw new Error(t('newModule.validationDatasetContent'));
+        if (format === 'jsonl') {
+          const lines = value.split(/\r?\n/);
+          lines.forEach((line, index) => {
+            if (!line.trim()) return;
+            try {
+              JSON.parse(line);
+            } catch {
+              throw new Error(tr(t, 'newModule.invalidJsonl', { line: index + 1 }));
+            }
+          });
+        }
+      };
+
+      const handleDatasetFile = async (fileList) => {
+        const file = fileList && fileList[0];
+        if (!file) return;
+        setFormError('');
+        try {
+          const ext = (file.name.split('.').pop() || '').toLowerCase();
+          if (!['jsonl', 'csv'].includes(ext)) throw new Error(t('newModule.datasetFileType'));
+          if (file.size > 12 * 1024 * 1024) throw new Error(t('modules.assetTooLarge'));
+          validateDatasetText(ext, await file.text());
+          const data = await readFileAsBase64(file);
+          setDatasetFile({ name: file.name, format: ext, data, size: file.size });
+          setDatasetFormat(ext);
+          setDatasetMode('file');
+        } catch (fileError) {
+          setFormError(fileError && fileError.message ? fileError.message : String(fileError));
+          setDatasetFile(null);
+        } finally {
+          if (datasetFileInputRef.current) datasetFileInputRef.current.value = '';
+        }
+      };
+
       const addConfigRow = (setter) => setter((rows) => [...rows, { name: '', type: 'string' }]);
       const updateConfigRow = (setter, index, patchValue) =>
         setter((rows) => rows.map((row, position) => (position === index ? { ...row, ...patchValue } : row)));
       const removeConfigRow = (setter, index) =>
         setter((rows) => rows.filter((_, position) => position !== index));
 
-      const submit = () => {
+      const submit = async () => {
         setFormError('');
         if (!name.trim()) {
           setFormError(t('newModule.validationName'));
@@ -374,10 +415,6 @@
         }
         if (kind === 'command' && !asset) {
           setFormError(t('newModule.validationAsset'));
-          return;
-        }
-        if (kind === 'dataset' && !datasetUri.trim()) {
-          setFormError(t('newModule.validationDatasetUri'));
           return;
         }
 
@@ -419,18 +456,54 @@
           }
         }
 
+        let datasetAsset = null;
+        let datasetUriValue = '';
+        let datasetFormatValue = '';
+        if (kind === 'dataset') {
+          try {
+            if (datasetMode === 'edit') {
+              const format = datasetFormat === 'csv' ? 'csv' : 'jsonl';
+              validateDatasetText(format, datasetText);
+              const fileName = `dataset.${format}`;
+              const data = await readFileAsBase64(
+                new File([datasetText], fileName, { type: 'text/plain' }),
+              );
+              datasetUriValue = fileName;
+              datasetFormatValue = format;
+              datasetAsset = { kind: 'file', name: fileName, files: [{ path: fileName, data }] };
+            } else {
+              if (!datasetFile) {
+                setFormError(t('newModule.validationDatasetFile'));
+                return;
+              }
+              datasetUriValue = datasetFile.name;
+              datasetFormatValue = datasetFile.format;
+              datasetAsset = {
+                kind: 'file',
+                name: datasetFile.name,
+                files: [{ path: datasetFile.name, data: datasetFile.data }],
+              };
+            }
+          } catch (datasetError) {
+            setFormError(
+              datasetError && datasetError.message ? datasetError.message : String(datasetError),
+            );
+            return;
+          }
+        }
+
         onCreate({
           kind,
           name: name.trim(),
           description: description.trim(),
           command: command.trim(),
-          datasetUri: datasetUri.trim(),
-          datasetFormat: datasetFormat.trim(),
-          asset: kind === 'command' ? asset : null,
+          datasetUri: datasetUriValue,
+          datasetFormat: datasetFormatValue,
+          asset: kind === 'command' ? asset : datasetAsset,
           inputs,
           inputTypes,
           outputs: kind === 'command' ? outputs : ['rows'],
-          outputTypes: kind === 'command' ? outputTypes : { rows: 'string' },
+          outputTypes: kind === 'command' ? outputTypes : { rows: datasetOutputType || 'json' },
           params,
           paramTypes,
         });
@@ -671,28 +744,125 @@
             : [
                 h(
                   'div',
-                  { key: 'uri', className: 'ath-field' },
-                  h('label', { className: 'ath-label' }, t('newModule.datasetUri')),
-                  h('input', {
-                    className: 'ath-input ath-mono',
-                    type: 'text',
-                    value: datasetUri,
-                    placeholder: t('newModule.datasetUriPlaceholder'),
-                    onChange: (event) => setDatasetUri(event.target.value),
-                  }),
+                  { key: 'source', className: 'ath-field' },
+                  h('label', { className: 'ath-label' }, t('newModule.datasetSource')),
+                  h(
+                    'div',
+                    { className: 'ath-chips', role: 'radiogroup', 'aria-label': t('newModule.datasetSource') },
+                    [
+                      { value: 'edit', label: t('newModule.datasetEdit') },
+                      { value: 'file', label: t('newModule.datasetImport') },
+                    ].map((option) =>
+                      h(
+                        'label',
+                        {
+                          key: option.value,
+                          className: 'ath-chip ath-chip-radio',
+                          'data-active': datasetMode === option.value ? 'true' : 'false',
+                        },
+                        h('input', {
+                          className: 'ath-radio-input',
+                          type: 'radio',
+                          name: 'new-dataset-source',
+                          value: option.value,
+                          checked: datasetMode === option.value,
+                          onChange: () => setDatasetMode(option.value),
+                        }),
+                        h('span', null, option.label),
+                      ),
+                    ),
+                  ),
                 ),
                 h(
                   'div',
                   { key: 'format', className: 'ath-field' },
                   h('label', { className: 'ath-label' }, t('newModule.datasetFormat')),
-                  h('input', {
-                    className: 'ath-input',
-                    type: 'text',
-                    value: datasetFormat,
-                    placeholder: t('newModule.datasetFormatPlaceholder'),
-                    onChange: (event) => setDatasetFormat(event.target.value),
-                  }),
-                  h('div', { className: 'ath-hint' }, t('newModule.datasetHint')),
+                  h(
+                    'select',
+                    {
+                      className: 'ath-select',
+                      value: datasetFormat,
+                      disabled: datasetMode === 'file',
+                      onChange: (event) => setDatasetFormat(event.target.value),
+                    },
+                    h('option', { value: 'jsonl' }, 'JSONL'),
+                    h('option', { value: 'csv' }, 'CSV'),
+                  ),
+                  h('div', { className: 'ath-hint' }, t('newModule.datasetFormatHint')),
+                ),
+                datasetMode === 'edit'
+                  ? h(
+                      'div',
+                      { key: 'text', className: 'ath-field' },
+                      h('label', { className: 'ath-label' }, t('newModule.datasetText')),
+                      h('textarea', {
+                        className: 'ath-textarea ath-mono',
+                        rows: 7,
+                        value: datasetText,
+                        placeholder: t('newModule.datasetTextPlaceholder'),
+                        spellCheck: false,
+                        onChange: (event) => setDatasetText(event.target.value),
+                      }),
+                    )
+                  : h(
+                      'div',
+                      { key: 'file', className: 'ath-field' },
+                      h('label', { className: 'ath-label' }, t('newModule.datasetFile')),
+                      h(
+                        'div',
+                        { className: 'ath-actions' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'ath-btn ath-btn-ghost',
+                            onClick: () =>
+                              datasetFileInputRef.current && datasetFileInputRef.current.click(),
+                          },
+                          t('newModule.chooseDatasetFile'),
+                        ),
+                        h('input', {
+                          ref: datasetFileInputRef,
+                          type: 'file',
+                          accept: '.jsonl,.csv,application/json,text/csv',
+                          style: { display: 'none' },
+                          onChange: (event) => void handleDatasetFile(event.target.files),
+                        }),
+                      ),
+                      datasetFile
+                        ? h(
+                            'div',
+                            { className: 'ath-asset-chip' },
+                            h('span', { className: 'ath-badge' }, datasetFile.format.toUpperCase()),
+                            h('span', { className: 'ath-mono' }, datasetFile.name),
+                          )
+                        : null,
+                      h('div', { className: 'ath-hint' }, t('newModule.datasetFileHint')),
+                    ),
+                h(
+                  'div',
+                  { key: 'output', className: 'ath-card ath-resource-config ath-resource-config-wide' },
+                  h(
+                    'div',
+                    { className: 'ath-resource-config-head' },
+                    h('h4', { className: 'ath-section-title' }, t('modules.outputs')),
+                    h('span', { className: 'ath-hint' }, t('newModule.datasetOutputHint')),
+                  ),
+                  h(
+                    'div',
+                    { className: 'ath-resource-config-row' },
+                    h('input', {
+                      className: 'ath-input ath-mono',
+                      type: 'text',
+                      value: 'rows',
+                      readOnly: true,
+                    }),
+                    h(TypeSelect, {
+                      t,
+                      value: datasetOutputType,
+                      onChange: setDatasetOutputType,
+                    }),
+                  ),
                 ),
               ],
           h('div', { className: 'ath-hint' }, t('newModule.stepHint')),

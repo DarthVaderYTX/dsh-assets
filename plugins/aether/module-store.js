@@ -209,6 +209,12 @@ export async function writeModuleFolder(root, input) {
     assetPath = path.relative(root, target).split(path.sep).join('/');
   }
   module.assetPath = assetPath;
+  if (module.kind === 'dataset' && module.assetId && assetPath) {
+    const fileName = module.assetName || path.basename(module.assetPath || 'dataset');
+    if (!module.datasetUri || module.datasetUri === fileName || module.datasetUri === 'inline') {
+      module.datasetUri = `${assetPath}/${fileName}`;
+    }
+  }
   await fsp.writeFile(
     path.join(folder, DESCRIPTION_FILE),
     JSON.stringify(descriptionFor(module, assetPath), null, 2),

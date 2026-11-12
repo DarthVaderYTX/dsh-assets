@@ -622,7 +622,9 @@
                 requiredInputs: [],
                 outputs: fields.kind === 'dataset' ? ['rows'] : fields.outputs || [],
                 outputTypes:
-                  fields.kind === 'dataset' ? { rows: 'string' } : fields.outputTypes || {},
+                  fields.kind === 'dataset'
+                    ? fields.outputTypes || { rows: 'json' }
+                    : fields.outputTypes || {},
                 graphId: '',
                 datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
                 datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',
