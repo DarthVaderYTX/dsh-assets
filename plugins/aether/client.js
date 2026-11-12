@@ -6026,29 +6026,31 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   ),
                 ),
               ),
-              h(
-                'div',
-                { className: 'ath-field', style: { marginTop: 12 } },
-                h('label', { className: 'ath-label' }, t('modules.environment')),
-                h(
-                  'select',
-                  {
-                    className: 'ath-select',
-                    value: module.environmentId || 'local',
-                    onChange: (event) => patch({ environmentId: event.target.value }),
-                  },
-                  environments.length
-                    ? environments.map((environment) =>
-                        h('option', { key: environment.id, value: environment.id }, environmentLabel(t, environment)),
-                      )
-                    : h('option', { value: 'local' }, t('environment.local')),
-                ),
-                h(
-                  'div',
-                  { className: 'ath-hint' },
-                  `${environmentHint(t, currentEnvironment)} ${t('modules.environmentHint')}`.trim(),
-                ),
-              ),
+              module.kind === 'command'
+                ? h(
+                    'div',
+                    { className: 'ath-field', style: { marginTop: 12 } },
+                    h('label', { className: 'ath-label' }, t('modules.environment')),
+                    h(
+                      'select',
+                      {
+                        className: 'ath-select',
+                        value: module.environmentId || 'local',
+                        onChange: (event) => patch({ environmentId: event.target.value }),
+                      },
+                      environments.length
+                        ? environments.map((environment) =>
+                            h('option', { key: environment.id, value: environment.id }, environmentLabel(t, environment)),
+                          )
+                        : h('option', { value: 'local' }, t('environment.local')),
+                    ),
+                    h(
+                      'div',
+                      { className: 'ath-hint' },
+                      `${environmentHint(t, currentEnvironment)} ${t('modules.environmentHint')}`.trim(),
+                    ),
+                  )
+                : null,
               module.kind === 'dataset'
                 ? h(
                     'div',
@@ -6282,24 +6284,26 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     ),
                   ),
             ),
-            h(
-              'div',
-              { className: 'ath-card' },
-              h(
-                'div',
-                { className: 'ath-row' },
-                h('h4', { className: 'ath-section-title' }, t('modules.params')),
-                h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
-              ),
-              h(ParamsEditor, {
-                key: module.id || 'new',
-                t,
-                value: module.params,
-                types: module.paramTypes || {},
-                onChange: (params, paramTypes) => patch({ params, paramTypes }),
-              }),
-              h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
-            ),
+            module.kind === 'dataset'
+              ? null
+              : h(
+                  'div',
+                  { className: 'ath-card' },
+                  h(
+                    'div',
+                    { className: 'ath-row' },
+                    h('h4', { className: 'ath-section-title' }, t('modules.params')),
+                    h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
+                  ),
+                  h(ParamsEditor, {
+                    key: module.id || 'new',
+                    t,
+                    value: module.params,
+                    types: module.paramTypes || {},
+                    onChange: (params, paramTypes) => patch({ params, paramTypes }),
+                  }),
+                  h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
+                ),
           ),
           h(
             'div',
@@ -6318,12 +6322,14 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               ),
               h('div', { className: 'ath-hint', style: { marginTop: 6 } }, tr(t, 'modules.versionHint', { version: module.version || 1 })),
             ),
-            h(
-              'div',
-              { className: 'ath-card' },
-              h('h4', { className: 'ath-section-title' }, t('modules.envTitle')),
-              h('div', { className: 'ath-hint' }, t('modules.envHint')),
-            ),
+            module.kind === 'command'
+              ? h(
+                  'div',
+                  { className: 'ath-card' },
+                  h('h4', { className: 'ath-section-title' }, t('modules.envTitle')),
+                  h('div', { className: 'ath-hint' }, t('modules.envHint')),
+                )
+              : null,
             h(
               'div',
               { className: 'ath-card' },

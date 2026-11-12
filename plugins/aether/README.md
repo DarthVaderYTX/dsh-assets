@@ -38,6 +38,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
   - 勾选「覆盖当前版本」则只更新当前版本，版本号不变；
   - 内容没有任何变化时不会产生新版本。
 - 资源类型在创建时确定，编辑模式只读显示，不能改成模块 / 子图 / 数据集中的其他类型；保存按钮统一为「保存」。
+- 资源编辑器按类型只显示各自属性：模块显示文件、命令模板、输入/输出、参数和执行环境；数据集只显示数据集 URI/格式与输出；子图只显示引用的实验、端口与参数。资源类型本身只读。
 - 每个模块按类别在 `<workspace>/resources/modules|subgraphs|datasets/<module>/` 下独立管理：`resource.json` 描述文件是必备文件，`files/` 放提交的文件/目录，`versions/vN.json` 保存历史版本。现有旧的 `state.json` 模块会在加载时自动迁移到对应类别目录；`state.json` 保留索引镜像。
 - 每张图也有自己的目录：可独立运行的实验在 `<workspace>/experiments/<experiment>/experiment.json`，被图模块引用的子图在 `<workspace>/subgraphs/<subgraph>/subgraph.json`。
 - 运行时每个节点会记录当时使用的 `moduleVersion`，运行画布与节点详情会显示对应版本。
