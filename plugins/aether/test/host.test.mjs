@@ -92,6 +92,89 @@ test('seeds a demo module library and graphs', async () => {
   assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
 });
 
+test('graph connections reject incompatible port types', async () => {
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'typed-number-source',
+        name: 'Typed number source',
+        kind: 'command',
+        command: 'echo 42',
+        inputs: [],
+        outputs: ['value'],
+        outputTypes: { value: 'number' },
+      },
+    },
+  });
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'typed-file-sink',
+        name: 'Typed file sink',
+        kind: 'command',
+        command: 'echo file',
+        inputs: ['data'],
+        inputTypes: { data: 'file' },
+        outputs: [],
+      },
+    },
+  });
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'typed-text-sink',
+        name: 'Typed text sink',
+        kind: 'command',
+        command: 'echo text',
+        inputs: ['data'],
+        inputTypes: { data: 'string' },
+        outputs: [],
+      },
+    },
+  });
+
+  const rejected = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: 'typed-incompatible-graph',
+        name: 'Typed incompatible graph',
+        layout: 'vertical',
+        nodes: [
+          { id: 'source', moduleId: 'typed-number-source', label: 'Source', x: 40, y: 40 },
+          { id: 'sink', moduleId: 'typed-file-sink', label: 'Sink', x: 40, y: 200 },
+        ],
+        edges: [{ id: 'edge-1', from: 'source', to: 'sink', fromPort: 'value', toPort: 'data' }],
+      },
+    },
+  });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.payload.error, /端口类型不匹配/);
+
+  const accepted = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: 'typed-compatible-graph',
+        name: 'Typed compatible graph',
+        layout: 'vertical',
+        nodes: [
+          { id: 'source', moduleId: 'typed-number-source', label: 'Source', x: 40, y: 40 },
+          { id: 'sink', moduleId: 'typed-text-sink', label: 'Sink', x: 40, y: 200 },
+        ],
+        edges: [{ id: 'edge-1', from: 'source', to: 'sink', fromPort: 'value', toPort: 'data' }],
+      },
+    },
+  });
+  assert.equal(accepted.status, 200);
+});
+
 test('command templates must reference defined names and validate before save', async () => {
   const missing = await call('/modules', {
     method: 'POST',

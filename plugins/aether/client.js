@@ -172,6 +172,7 @@ window.__ModuleLoader__.load({
       'graphs.saving': '正在保存…',
       'graphs.cycle': '存在环，请调整连线',
       'graphs.cycleBlocked': '这条连线会形成环，已取消',
+      'graphs.typeMismatch': '无法连接：节点「{from}」的输出「{fromPort}」是{fromType}，节点「{to}」的输入「{toPort}」需要{toType}',
       'graphs.planNodes': '{n} 个可执行节点',
       'graphs.unsaved': '有未保存的修改',
       'graphs.subgraph': '子图',
@@ -525,6 +526,7 @@ window.__ModuleLoader__.load({
       'graphs.saving': 'Saving…',
       'graphs.cycle': 'The experiment contains a cycle',
       'graphs.cycleBlocked': 'That connection would create a cycle and was cancelled',
+      'graphs.typeMismatch': 'Cannot connect: output "{fromPort}" on "{from}" is {fromType}, but input "{toPort}" on "{to}" requires {toType}',
       'graphs.planNodes': '{n} executable nodes',
       'graphs.unsaved': 'Unsaved changes',
       'graphs.subgraph': 'Subgraph',
@@ -1602,6 +1604,11 @@ window.__ModuleLoader__.load({
 
     const ATH_VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
     const ATH_PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
+
+    function portTypesCompatible(fromType, toType) {
+      if (fromType === toType) return true;
+      return toType === 'string' && ['number', 'boolean', 'json'].includes(fromType);
+    }
 
     function paramsToRows(params, types) {
       return Object.entries(params || {}).map(([key, value]) => ({
@@ -4285,16 +4292,43 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         return () => element.removeEventListener('wheel', onWheel);
       }, []);
 
-      const notifyCycle = () => {
-        setCycleNotice(t('graphs.cycleBlocked'));
+      const notifyNotice = (message) => {
+        setCycleNotice(message);
         if (cycleTimer.current) window.clearTimeout(cycleTimer.current);
         cycleTimer.current = window.setTimeout(() => setCycleNotice(''), 3400);
+      };
+
+      const notifyCycle = () => {
+        notifyNotice(t('graphs.cycleBlocked'));
+      };
+
+      const notifyTypeMismatch = (fromNode, fromPort, fromType, toNode, toPort, toType) => {
+        notifyNotice(
+          tr(t, 'graphs.typeMismatch', {
+            from: fromNode.label || fromNode.id,
+            fromPort,
+            fromType: t(`modules.type.${fromType}`),
+            to: toNode.label || toNode.id,
+            toPort,
+            toType: t(`modules.type.${toType}`),
+          }),
+        );
       };
 
       const addEdge = (fromId, fromPort, toId, toPort) => {
         const current = draftRef.current;
         if (!fromPort || !toPort) return;
         if (current.graph.edges.some((edge) => edge.from === fromId && edge.to === toId && edge.fromPort === fromPort && edge.toPort === toPort)) {
+          return;
+        }
+        const fromNode = current.graph.nodes.find((node) => node.id === fromId);
+        const toNode = current.graph.nodes.find((node) => node.id === toId);
+        const fromModule = fromNode ? moduleById.get(fromNode.moduleId) : null;
+        const toModule = toNode ? moduleById.get(toNode.moduleId) : null;
+        const fromType = (fromModule && fromModule.outputTypes && fromModule.outputTypes[fromPort]) || 'string';
+        const toType = (toModule && toModule.inputTypes && toModule.inputTypes[toPort]) || 'string';
+        if (fromNode && toNode && !portTypesCompatible(fromType, toType)) {
+          notifyTypeMismatch(fromNode, fromPort, fromType, toNode, toPort, toType);
           return;
         }
         const candidate = {
@@ -4937,7 +4971,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
-                        title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                        title: `${t('canvas.input')}: ${port} · ${t(
+                          `modules.type.${(module.inputTypes && module.inputTypes[port]) || 'string'}`,
+                        )}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
                       }),
                     ),
@@ -4952,7 +4988,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'output',
-                        title: `${t('canvas.output')}: ${port}`,
+                        title: `${t('canvas.output')}: ${port} · ${t(
+                          `modules.type.${(module.outputTypes && module.outputTypes[port]) || 'string'}`,
+                        )}`,
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
                       }),
                     ),

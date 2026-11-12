@@ -17,6 +17,20 @@ export const VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'dire
 export const PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
 export const LAYOUT_DIRECTIONS = ['vertical', 'horizontal'];
 
+const VALUE_TYPE_LABELS = {
+  string: '文本',
+  number: '数字',
+  boolean: '布尔',
+  json: 'JSON',
+  file: '文件',
+  directory: '目录',
+};
+
+export function portTypesCompatible(fromType, toType) {
+  if (fromType === toType) return true;
+  return toType === 'string' && ['number', 'boolean', 'json'].includes(fromType);
+}
+
 /**
  * 内置执行环境。执行环境是「模块在哪里跑」的声明，由执行器解析：
  * `executor` 指向一个执行后端（当前只有 `local`），后续可以由服务器调度器
@@ -516,6 +530,24 @@ export function validateGraph(graph, modules = [], graphs = []) {
         errors.push(`节点「${nodeName(targetNode)}」的模块没有输入端口，不能作为连线终点`);
       } else if (edge.toPort && !inputs.includes(edge.toPort)) {
         errors.push(`节点「${nodeName(targetNode)}」没有输入端口「${edge.toPort}」`);
+      }
+    }
+    if (sourceModule && targetModule) {
+      const fromPort = edge.fromPort || (sourceModule.outputs || [])[0] || '';
+      const toPort = edge.toPort || (targetModule.inputs || [])[0] || '';
+      const fromType = (sourceModule.outputTypes && sourceModule.outputTypes[fromPort]) || 'string';
+      const toType = (targetModule.inputTypes && targetModule.inputTypes[toPort]) || 'string';
+      if (
+        fromPort &&
+        toPort &&
+        (sourceModule.outputs || []).includes(fromPort) &&
+        (targetModule.inputs || []).includes(toPort) &&
+        !portTypesCompatible(fromType, toType)
+      ) {
+        errors.push(
+          `端口类型不匹配：${nodeName(sourceNode)}「${fromPort}」是${VALUE_TYPE_LABELS[fromType] || fromType}，` +
+            `${nodeName(targetNode)}「${toPort}」需要${VALUE_TYPE_LABELS[toType] || toType}`,
+        );
       }
     }
     const pair = `${edge.from}>${edge.to}>${edge.fromPort || ''}>${edge.toPort || ''}`;

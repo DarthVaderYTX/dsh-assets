@@ -64,6 +64,11 @@
     const ATH_VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
     const ATH_PARAM_TYPES = ['string', 'number', 'boolean', 'json'];
 
+    function portTypesCompatible(fromType, toType) {
+      if (fromType === toType) return true;
+      return toType === 'string' && ['number', 'boolean', 'json'].includes(fromType);
+    }
+
     function paramsToRows(params, types) {
       return Object.entries(params || {}).map(([key, value]) => ({
         key,
