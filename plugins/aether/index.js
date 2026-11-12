@@ -949,7 +949,7 @@ function moduleSnapshot(module) {
 }
 
 function assetBaseDir() {
-  return path.join(dataDir(), 'modules', 'assets');
+  return path.join(dataDir(), 'modules', '.uploads');
 }
 
 function moduleAssetRoot(module) {
@@ -1013,7 +1013,7 @@ async function storeModuleAsset(body) {
     assetId,
     assetKind: kind,
     assetName: name,
-    assetPath: path.join('modules', 'assets', assetId),
+    assetPath: path.join('modules', '.uploads', assetId),
     assetFileCount: decoded.length,
     assetSize: total,
   };

@@ -117,9 +117,12 @@ export async function writeModuleFolder(root, input) {
     if (source && source !== target && existsSync(source)) {
       await fsp.rm(target, { recursive: true, force: true });
       await fsp.cp(source, target, { recursive: true, force: true });
-      const assetsRoot = path.resolve(root, 'modules', 'assets');
-      if (source === assetsRoot || source.startsWith(assetsRoot + path.sep)) {
-        await fsp.rm(source, { recursive: true, force: true });
+      for (const tempDir of ['.uploads', 'assets']) {
+        const assetsRoot = path.resolve(root, 'modules', tempDir);
+        if (source === assetsRoot || source.startsWith(assetsRoot + path.sep)) {
+          await fsp.rm(source, { recursive: true, force: true });
+          break;
+        }
       }
     }
     assetPath = path.relative(root, target).split(path.sep).join('/');
