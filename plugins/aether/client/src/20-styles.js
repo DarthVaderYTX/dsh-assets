@@ -493,6 +493,9 @@
 .ath-seg-btn[data-active="true"] {
   background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-weight: 600;
 }
+.ath-layout-toggle { background: #fff; border-color: #d1d5db; }
+.ath-layout-toggle .ath-seg-btn { background: #fff; color: #4b5563; }
+.ath-layout-toggle .ath-seg-btn[data-active="true"] { background: #fff; color: #111827; box-shadow: inset 0 0 0 1px #d1d5db; }
 .ath-palette {
   display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto;
   min-height: 0; max-height: calc(100% - 160px);

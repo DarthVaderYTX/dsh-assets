@@ -1039,7 +1039,7 @@
                 },
                 h(
                   'div',
-                  { className: 'ath-segmented' },
+                  { className: 'ath-segmented ath-layout-toggle' },
                   h(
                     'button',
                     {
