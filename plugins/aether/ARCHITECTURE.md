@@ -71,7 +71,7 @@ npm run build
 
 ## 工作区
 
-`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。模块（含数据集、子图）、实验、运行与模块资产都写在该目录下。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录可选，导入前备份到 `$DSH_HOME/storages/aether-backups`。
+`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；模块（含数据集、子图）、实验、运行、模块资产与 `.aether-backups` 都写在该目录下。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录可选，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
 
 ## 数据版本
 

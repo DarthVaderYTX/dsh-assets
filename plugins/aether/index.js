@@ -50,6 +50,54 @@ function workspaceConfigPath() {
   return path.join(homeDir(), 'storages', 'aether-workspace.json');
 }
 
+function workspaceManifestPath(root = dataDir()) {
+  return path.join(root, 'aether.workspace.json');
+}
+
+async function readWorkspaceManifest(root = dataDir()) {
+  try {
+    return JSON.parse(await fsp.readFile(workspaceManifestPath(root), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function writeWorkspaceManifest(root = dataDir(), seed = {}) {
+  const file = workspaceManifestPath(root);
+  const previous = await readWorkspaceManifest(root);
+  const now = Date.now();
+  const manifest = {
+    format: 'aether-workspace',
+    formatVersion: 1,
+    dataVersion: DATA_VERSION,
+    name: path.basename(root) || 'aether',
+    createdAt: Number(seed.createdAt) || Number(previous && previous.createdAt) || now,
+    updatedAt: now,
+    layout: {
+      state: 'state.json',
+      modules: 'modules',
+      runs: 'runs',
+      backups: '.aether-backups',
+    },
+  };
+  await fsp.mkdir(root, { recursive: true });
+  await fsp.writeFile(file, JSON.stringify(manifest, null, 2), 'utf8');
+  return manifest;
+}
+
+async function ensureWorkspaceManifest(root = dataDir()) {
+  const previous = await readWorkspaceManifest(root);
+  if (
+    previous &&
+    previous.format === 'aether-workspace' &&
+    previous.formatVersion === 1 &&
+    Number(previous.dataVersion) === DATA_VERSION
+  ) {
+    return previous;
+  }
+  return writeWorkspaceManifest(root);
+}
+
 function expandHomePath(raw) {
   const text = String(raw || '').trim();
   if (text === '~') return os.homedir();
@@ -173,16 +221,21 @@ async function exportWorkspaceBundle(includeRuns) {
     dataVersion: DATA_VERSION,
     exportedAt: Date.now(),
     includeRuns: Boolean(includeRuns),
+    manifest: await readWorkspaceManifest(dataDir()),
     state,
     files: await collectWorkspaceFiles(dataDir(), includeRuns),
   };
 }
 
 async function backupWorkspaceForImport(includeRuns) {
-  const root = path.join(homeDir(), 'storages', 'aether-backups', `import-${Date.now()}`);
+  const root = path.join(dataDir(), '.aether-backups', `import-${Date.now()}`);
   await fsp.mkdir(root, { recursive: true });
   const stateSource = statePath();
   if (existsSync(stateSource)) await fsp.copyFile(stateSource, path.join(root, 'state.json'));
+  const manifestSource = workspaceManifestPath();
+  if (existsSync(manifestSource)) {
+    await fsp.copyFile(manifestSource, path.join(root, 'aether.workspace.json'));
+  }
   for (const name of ['modules', ...(includeRuns ? ['runs'] : [])]) {
     const source = path.join(dataDir(), name);
     if (existsSync(source)) await fsp.cp(source, path.join(root, name), { recursive: true, force: true });
@@ -235,6 +288,7 @@ async function importWorkspaceBundle(bundle, options = {}) {
   if (replaceRuns) await rewriteRunDirectories(dataDir());
   state.updatedAt = Date.now();
   await writeState(state);
+  await writeWorkspaceManifest(dataDir(), bundle.manifest || {});
   stateCache = null;
   stateLoading = null;
   recoveredRuns = false;
@@ -295,6 +349,7 @@ async function readState() {
 
 async function loadState() {
   await fsp.mkdir(dataDir(), { recursive: true });
+  await ensureWorkspaceManifest(dataDir()).catch(() => {});
   try {
     const text = await fsp.readFile(statePath(), 'utf8');
     const parsed = JSON.parse(text);

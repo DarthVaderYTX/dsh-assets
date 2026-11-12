@@ -685,6 +685,7 @@ test('workspace export/import can skip or include runs', async () => {
   const exported = await call('/workspace/export?runs=0');
   assert.equal(exported.status, 200);
   assert.equal(exported.payload.format, 'aether-workspace');
+  assert.equal(exported.payload.manifest.format, 'aether-workspace');
   assert.equal(exported.payload.includeRuns, false);
   assert.equal(
     exported.payload.files.some((file) => file.path.startsWith('runs/')),
@@ -712,6 +713,11 @@ test('workspace export/import can skip or include runs', async () => {
   assert.equal(imported.status, 200);
   assert.equal(imported.payload.includeRuns, false);
   assert.equal(existsSync(imported.payload.backup), true);
+  assert.match(imported.payload.backup, /\.aether-backups/);
+  assert.equal(
+    existsSync(path.join(home, 'storages', 'aether', 'aether.workspace.json')),
+    true,
+  );
 
   const restored = await call('/state');
   assert.equal(
@@ -748,6 +754,7 @@ test('switching workspace migrates state and runs under the new root', async () 
   assert.equal(switched.payload.workspace, target);
   assert.equal(switched.payload.copied, true);
   assert.equal(existsSync(path.join(target, 'state.json')), true);
+  assert.equal(existsSync(path.join(target, 'aether.workspace.json')), true);
   assert.equal(existsSync(path.join(target, 'modules', 'assets')), true);
 
   const after = await call('/state');

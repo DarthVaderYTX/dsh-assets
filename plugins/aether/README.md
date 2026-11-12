@@ -153,14 +153,14 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 ## 数据与工作区
 
-默认工作区是 `$DSH_HOME/storages/aether`；也可以点顶栏工作区路径旁的「更改」指定任意目录。切换后，`state.json`（模块、数据集、子图、实验定义）与 `modules/assets`、`runs` 全部保存在新工作区下。
+默认工作区是 `$DSH_HOME/storages/aether`；也可以点顶栏工作区路径旁的「更改」指定任意目录。切换后，工作区清单、`state.json`（模块、数据集、子图、实验定义）、`modules/assets`、`runs` 与导入备份都在同一个目录下。
 
 切换规则：
 - 目标目录为空：复制当前 `state.json`、`modules`、`runs` 后切换；
 - 目标目录已有 `state.json`：直接打开该工作区，不覆盖其中数据；
 - 有运行中的实验、目标位于当前工作区内部（或包含当前工作区）时拒绝切换。
 
-工作区配置保存在固定位置 `$DSH_HOME/storages/aether-workspace.json`（只是路径指针，不属于业务数据）。
+工作区路径指针保存在固定位置 `$DSH_HOME/storages/aether-workspace.json`，只用于启动时定位工作区；真正的配置清单是工作区内的 `aether.workspace.json`。
 
 ### 导入 / 导出
 
@@ -168,17 +168,19 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 - **导出**默认包含模块、数据集、子图、实验定义与 `modules/assets` 文件；勾选「包含运行记录」才会把 `runs` 一起导出。
 - **导入**会替换当前模块/实验与模块文件；运行记录是否替换由导出包内容与「包含运行记录」复选框共同决定。未选择时保留当前运行记录。
-- 导入前会把当前工作区备份到 `$DSH_HOME/storages/aether-backups/import-<时间>/`，不会静默覆盖。
-- 导入包只接受 `modules/assets/**` 与 `runs/**` 路径，带路径越界/大小/文件数校验。
+- 导入前会把当前工作区备份到 `<workspace>/.aether-backups/import-<时间>/`，不会静默覆盖。
+- 导入包只接受 `modules/assets/**` 与 `runs/**` 路径，带路径越界/大小/文件数校验；工作区清单随包导入。
 
 ```
 <workspace>/
+  aether.workspace.json   # 工作区清单：格式/版本/目录布局/创建时间
   state.json              # 模块（含端口、版本历史、文件引用）、实验（含节点坐标与连线端口）、执行环境目录
   modules/assets/<id>/    # 新建命令模块时提交的文件或目录
   runs/<run-id>/
     run.json              # 运行、执行器、布局方向、展开后的连线、逐节点 placement 与状态
     nodes/<node>/         # stdout.log / stderr.log / inputs.json
     outputs/<node>.out    # 供下游读取的 stdout
+  .aether-backups/        # 导入工作区前的自动备份
 ```
 
 面板顶部显示工作区路径，可直接复制；「打开目录」在系统文件管理器里打开它。删除运行会删掉对应的 `runs/<id>` 目录。旧版 `state.json` 加载时会自动迁移：v1 → v2 补执行环境，v2 → v3 给模块补默认端口（`input` / `output`）、给旧连线补默认端口，v3 → v4 记录布局方向（默认上下）并清空旧横向坐标，v4 → v5 给模块补版本号与版本历史，v5 → v6 给模块补必填输入端口列表，不需要手工处理。
