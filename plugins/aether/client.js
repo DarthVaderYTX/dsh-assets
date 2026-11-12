@@ -989,20 +989,9 @@ window.__ModuleLoader__.load({
 .ath-version-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .ath-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .ath-check input { accent-color: var(--ath-accent); }
-.ath-radio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.ath-radio-card {
-  display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
-  padding: 9px 10px; border: 1px solid var(--ath-border-soft); border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
-}
-.ath-radio-card:hover { border-color: color-mix(in srgb, var(--ath-accent) 45%, var(--ath-border-soft)); }
-.ath-radio-card[data-active="true"] {
-  border-color: var(--ath-accent);
-  background: color-mix(in srgb, var(--ath-accent) 8%, var(--dsw-alias-bg-layer-1));
-}
-.ath-radio-card input { margin: 2px 0 0; accent-color: var(--ath-accent); }
-.ath-radio-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ath-radio-copy strong { font-size: 12px; }
+.ath-chip-radio { display: inline-flex; align-items: center; gap: 5px; position: relative; }
+.ath-chip-radio:focus-within { outline: 2px solid color-mix(in srgb, var(--ath-accent) 35%, transparent); outline-offset: 1px; }
+.ath-radio-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .ath-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .ath-type-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
@@ -1463,7 +1452,6 @@ window.__ModuleLoader__.load({
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
-  .ath-radio-grid { grid-template-columns: minmax(0, 1fr); }
   .ath-brand-sub { display: none; }
   .ath-workspace {
     max-width: none; padding: 0; border: 0; background: transparent;
@@ -2422,33 +2410,34 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             h('label', { className: 'ath-label' }, t('newModule.type')),
             h(
               'div',
-              { className: 'ath-radio-grid', role: 'radiogroup', 'aria-label': t('newModule.type') },
+              { className: 'ath-chips', role: 'radiogroup', 'aria-label': t('newModule.type') },
               [
-                { value: 'command', label: t('newModule.typeModule'), desc: t('newModule.commandDesc') },
-                { value: 'dataset', label: t('newModule.typeDataset'), desc: t('newModule.datasetDesc') },
+                { value: 'command', label: t('newModule.typeModule') },
+                { value: 'dataset', label: t('newModule.typeDataset') },
               ].map((option) =>
                 h(
                   'label',
                   {
                     key: option.value,
-                    className: 'ath-radio-card',
+                    className: 'ath-chip ath-chip-radio',
                     'data-active': kind === option.value ? 'true' : 'false',
                   },
                   h('input', {
+                    className: 'ath-radio-input',
                     type: 'radio',
                     name: 'new-resource-kind',
                     value: option.value,
                     checked: kind === option.value,
                     onChange: () => setKind(option.value),
                   }),
-                  h(
-                    'span',
-                    { className: 'ath-radio-copy' },
-                    h('strong', null, option.label),
-                    h('span', { className: 'ath-hint' }, option.desc),
-                  ),
+                  h('span', null, option.label),
                 ),
               ),
+            ),
+            h(
+              'div',
+              { className: 'ath-hint' },
+              kind === 'command' ? t('newModule.commandDesc') : t('newModule.datasetDesc'),
             ),
           ),
           h(
@@ -2467,96 +2456,111 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             'div',
             { className: 'ath-field' },
             h('label', { className: 'ath-label' }, t('newModule.description')),
-            h('textarea', {
-              className: 'ath-textarea',
-              rows: 2,
+            h('input', {
+              className: 'ath-input',
+              type: 'text',
               value: description,
               placeholder: t('newModule.descriptionPlaceholder'),
               onChange: (event) => setDescription(event.target.value),
             }),
           ),
           kind === 'command'
-            ? h(
-                'div',
-                { className: 'ath-field' },
-                h('label', { className: 'ath-label' }, t('newModule.asset')),
+            ? [
                 h(
                   'div',
-                  { className: 'ath-actions' },
+                  { key: 'asset', className: 'ath-field' },
+                  h('label', { className: 'ath-label' }, t('newModule.asset')),
                   h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'ath-btn ath-btn-ghost',
-                      onClick: () => fileInputRef.current && fileInputRef.current.click(),
-                    },
-                    t('newModule.chooseFile'),
+                    'div',
+                    { className: 'ath-actions' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'ath-btn ath-btn-ghost',
+                        onClick: () => fileInputRef.current && fileInputRef.current.click(),
+                      },
+                      t('newModule.chooseFile'),
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'ath-btn ath-btn-ghost',
+                        onClick: () => dirInputRef.current && dirInputRef.current.click(),
+                      },
+                      t('newModule.chooseDirectory'),
+                    ),
+                    h('input', {
+                      ref: fileInputRef,
+                      type: 'file',
+                      style: { display: 'none' },
+                      onChange: (event) => void handleAssetFiles(event.target.files, 'file'),
+                    }),
+                    h('input', {
+                      ref: dirInputRef,
+                      type: 'file',
+                      multiple: true,
+                      style: { display: 'none' },
+                      onChange: (event) => void handleAssetFiles(event.target.files, 'directory'),
+                    }),
                   ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'ath-btn ath-btn-ghost',
-                      onClick: () => dirInputRef.current && dirInputRef.current.click(),
-                    },
-                    t('newModule.chooseDirectory'),
-                  ),
-                  h('input', {
-                    ref: fileInputRef,
-                    type: 'file',
-                    style: { display: 'none' },
-                    onChange: (event) => void handleAssetFiles(event.target.files, 'file'),
-                  }),
-                  h('input', {
-                    ref: dirInputRef,
-                    type: 'file',
-                    multiple: true,
-                    style: { display: 'none' },
-                    onChange: (event) => void handleAssetFiles(event.target.files, 'directory'),
-                  }),
+                  asset
+                    ? h(
+                        'div',
+                        { className: 'ath-asset-chip' },
+                        h(
+                          'span',
+                          { className: 'ath-badge' },
+                          asset.kind === 'directory'
+                            ? t('modules.assetKind.directory')
+                            : t('modules.assetKind.file'),
+                        ),
+                        h('span', { className: 'ath-mono' }, asset.name),
+                      )
+                    : null,
+                  h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
                 ),
-                asset
-                  ? h('div', { className: 'ath-asset-chip' }, h('span', { className: 'ath-badge' }, asset.kind === 'directory' ? t('modules.assetKind.directory') : t('modules.assetKind.file')), h('span', { className: 'ath-mono' }, asset.name))
-                  : null,
-                h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
                 h(
-                  'label',
-                  { className: 'ath-label', style: { marginTop: 8 } },
-                  t('newModule.command'),
+                  'div',
+                  { key: 'command', className: 'ath-field' },
+                  h('label', { className: 'ath-label' }, t('newModule.command')),
+                  h('input', {
+                    className: 'ath-input ath-mono',
+                    type: 'text',
+                    value: command,
+                    placeholder: t('newModule.commandPlaceholder'),
+                    onChange: (event) => setCommand(event.target.value),
+                  }),
                 ),
-                h('input', {
-                  className: 'ath-input ath-mono',
-                  type: 'text',
-                  value: command,
-                  placeholder: t('newModule.commandPlaceholder'),
-                  onChange: (event) => setCommand(event.target.value),
-                }),
-              )
-            : h(
-                'div',
-                { className: 'ath-field' },
-                h('label', { className: 'ath-label' }, t('newModule.datasetUri')),
-                h('input', {
-                  className: 'ath-input ath-mono',
-                  type: 'text',
-                  value: datasetUri,
-                  placeholder: t('newModule.datasetUriPlaceholder'),
-                  onChange: (event) => setDatasetUri(event.target.value),
-                }),
+              ]
+            : [
                 h(
-                  'label',
-                  { className: 'ath-label', style: { marginTop: 8 } },
-                  t('newModule.datasetFormat'),
+                  'div',
+                  { key: 'uri', className: 'ath-field' },
+                  h('label', { className: 'ath-label' }, t('newModule.datasetUri')),
+                  h('input', {
+                    className: 'ath-input ath-mono',
+                    type: 'text',
+                    value: datasetUri,
+                    placeholder: t('newModule.datasetUriPlaceholder'),
+                    onChange: (event) => setDatasetUri(event.target.value),
+                  }),
                 ),
-                h('input', {
-                  className: 'ath-input',
-                  type: 'text',
-                  value: datasetFormat,
-                  placeholder: t('newModule.datasetFormatPlaceholder'),
-                  onChange: (event) => setDatasetFormat(event.target.value),
-                }),
-                h('div', { className: 'ath-hint' }, t('newModule.datasetHint')),
-              ),
+                h(
+                  'div',
+                  { key: 'format', className: 'ath-field' },
+                  h('label', { className: 'ath-label' }, t('newModule.datasetFormat')),
+                  h('input', {
+                    className: 'ath-input',
+                    type: 'text',
+                    value: datasetFormat,
+                    placeholder: t('newModule.datasetFormatPlaceholder'),
+                    onChange: (event) => setDatasetFormat(event.target.value),
+                  }),
+                  h('div', { className: 'ath-hint' }, t('newModule.datasetHint')),
+                ),
+              ],
           h('div', { className: 'ath-hint' }, t('newModule.stepHint')),
           shownError ? h('div', { className: 'ath-error' }, shownError) : null,
         ),
