@@ -1,9 +1,11 @@
-// 模块存储：每个模块一个目录。
-//   modules/<folder>/module.json        描述文件（当前版本）
-//   modules/<folder>/files/             模块提交的文件或目录
-//   modules/<folder>/versions/vN.json   历史版本快照
+// 模块存储：按类别分目录，每个模块一个自己的目录。
+//   modules/commands/<folder>/module.json        命令模块描述
+//   modules/subgraphs/<folder>/module.json       子图模块描述
+//   modules/datasets/<folder>/module.json        数据集模块描述
+//   modules/<category>/<folder>/files/           模块提交的文件或目录
+//   modules/<category>/<folder>/versions/vN.json 历史版本快照
 //
-// state.json 仍保留模块索引/镜像，但每个模块目录始终会被补齐；save/import 时以目录描述为准。
+// state.json 仍保留模块索引/镜像，但每个模块目录始终会被补齐。
 import { existsSync, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -12,12 +14,19 @@ import { DATA_VERSION } from './constants.js';
 import { safeSegment } from './executor.js';
 import { normalizeModule } from './dag.js';
 
+const CATEGORIES = ['commands', 'subgraphs', 'datasets'];
+const CATEGORY_BY_KIND = { command: 'commands', graph: 'subgraphs', dataset: 'datasets' };
+
 function shortHash(value) {
   return createHash('sha1').update(String(value)).digest('hex').slice(0, 8);
 }
 
 function moduleRoot(root) {
   return path.join(root, 'modules');
+}
+
+function categoryFor(module) {
+  return CATEGORY_BY_KIND[module && module.kind] || 'commands';
 }
 
 async function readDescription(folder) {
@@ -28,12 +37,32 @@ async function readDescription(folder) {
   }
 }
 
-export async function findModuleFolder(root, moduleId) {
+async function listModuleFolders(root) {
   const base = moduleRoot(root);
-  const entries = await fsp.readdir(base, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  const folders = [];
+  for (const category of CATEGORIES) {
+    const parent = path.join(base, category);
+    const entries = await fsp.readdir(parent, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const folder = path.join(parent, entry.name);
+      const description = await readDescription(folder);
+      if (description) folders.push(folder);
+    }
+  }
+  // 兼容旧版直接放在 modules/<folder> 的目录。
+  const legacy = await fsp.readdir(base, { withFileTypes: true }).catch(() => []);
+  for (const entry of legacy) {
+    if (!entry.isDirectory() || CATEGORIES.includes(entry.name) || entry.name.startsWith('.')) continue;
     const folder = path.join(base, entry.name);
+    const description = await readDescription(folder);
+    if (description) folders.push(folder);
+  }
+  return folders;
+}
+
+export async function findModuleFolder(root, moduleId) {
+  for (const folder of await listModuleFolders(root)) {
     const description = await readDescription(folder);
     if (description && description.id === moduleId) return folder;
   }
@@ -41,13 +70,20 @@ export async function findModuleFolder(root, moduleId) {
 }
 
 async function chooseFolder(root, module) {
+  const parent = path.join(moduleRoot(root), categoryFor(module));
+  await fsp.mkdir(parent, { recursive: true });
   const existing = await findModuleFolder(root, module.id);
-  if (existing) return existing;
-  const base = path.join(moduleRoot(root), safeSegment(module.id));
-  if (!existsSync(base)) return base;
-  const fallback = `${base}-${shortHash(module.id)}`;
-  if (!existsSync(fallback)) return fallback;
-  return `${base}-${shortHash(module.id)}-${Date.now().toString(36)}`;
+  if (existing) {
+    if (path.dirname(existing) === parent) return existing;
+    let target = path.join(parent, path.basename(existing));
+    if (existsSync(target)) target = `${target}-${shortHash(module.id)}`;
+    await fsp.rename(existing, target);
+    return target;
+  }
+  let target = path.join(parent, safeSegment(module.id));
+  if (existsSync(target)) target = `${target}-${shortHash(module.id)}`;
+  if (existsSync(target)) target = `${target}-${Date.now().toString(36)}`;
+  return target;
 }
 
 function descriptionFor(module, assetPath) {
@@ -59,6 +95,7 @@ function descriptionFor(module, assetPath) {
     name: module.name,
     description: module.description,
     kind: module.kind,
+    category: categoryFor(module),
     command: module.command,
     cwd: module.cwd,
     timeoutSec: module.timeoutSec,
@@ -104,6 +141,16 @@ async function writeVersionFiles(folder, module) {
   }
 }
 
+async function removeDuplicateFolders(root, moduleId, keepFolder) {
+  for (const folder of await listModuleFolders(root)) {
+    if (folder === keepFolder) continue;
+    const description = await readDescription(folder);
+    if (description && description.id === moduleId) {
+      await fsp.rm(folder, { recursive: true, force: true });
+    }
+  }
+}
+
 export async function writeModuleFolder(root, input) {
   const module = normalizeModule(input);
   const folder = await chooseFolder(root, module);
@@ -134,6 +181,7 @@ export async function writeModuleFolder(root, input) {
     'utf8',
   );
   await writeVersionFiles(folder, module);
+  await removeDuplicateFolders(root, module.id, folder);
   return module;
 }
 
@@ -146,17 +194,17 @@ export async function materializeModules(root, modules) {
 }
 
 export async function removeModuleFolder(root, module) {
-  const folder = await findModuleFolder(root, module.id);
-  if (folder) await fsp.rm(folder, { recursive: true, force: true });
+  for (const folder of await listModuleFolders(root)) {
+    const description = await readDescription(folder);
+    if (description && description.id === module.id) {
+      await fsp.rm(folder, { recursive: true, force: true });
+    }
+  }
 }
 
 export async function readModuleFolders(root) {
-  const base = moduleRoot(root);
-  const entries = await fsp.readdir(base, { withFileTypes: true }).catch(() => []);
   const modules = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const folder = path.join(base, entry.name);
+  for (const folder of await listModuleFolders(root)) {
     const description = await readDescription(folder);
     if (!description) continue;
     const versions = [];
@@ -165,8 +213,7 @@ export async function readModuleFolders(root) {
     for (const name of versionFiles) {
       if (!name.endsWith('.json')) continue;
       try {
-        const snapshot = JSON.parse(await fsp.readFile(path.join(versionsDir, name), 'utf8'));
-        versions.push(snapshot);
+        versions.push(JSON.parse(await fsp.readFile(path.join(versionsDir, name), 'utf8')));
       } catch {
         // 跳过损坏的版本快照。
       }

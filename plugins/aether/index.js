@@ -22,6 +22,7 @@ import {
   validateModule,
 } from './dag.js';
 import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
+import { materializeGraphs, removeGraphFolder, writeGraphFolder } from './graph-store.js';
 import { materializeModules, removeModuleFolder, writeModuleFolder } from './module-store.js';
 import { zipDirectory } from './zip.js';
 import {
@@ -77,6 +78,8 @@ async function writeWorkspaceManifest(root = dataDir(), seed = {}) {
     layout: {
       state: 'state.json',
       modules: 'modules',
+      experiments: 'experiments',
+      subgraphs: 'subgraphs',
       runs: 'runs',
       backups: '.aether-backups',
     },
@@ -168,7 +171,7 @@ async function switchWorkspace(rawPath) {
   let copied = false;
   if (!hasState) {
     const state = await readState();
-    for (const name of ['modules', 'runs']) {
+    for (const name of ['modules', 'experiments', 'subgraphs', 'runs']) {
       const source = path.join(current, name);
       if (existsSync(source)) {
         await fsp.cp(source, path.join(target, name), { recursive: true, force: true });
@@ -195,7 +198,11 @@ async function switchWorkspace(rawPath) {
 
 async function collectWorkspaceFiles(root, includeRuns) {
   const files = [];
-  const roots = [path.join(root, 'modules')];
+  const roots = [
+    path.join(root, 'modules'),
+    path.join(root, 'experiments'),
+    path.join(root, 'subgraphs'),
+  ];
   if (includeRuns) roots.push(path.join(root, 'runs'));
   async function walk(directory) {
     const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -237,7 +244,7 @@ async function backupWorkspaceForImport(includeRuns) {
   if (existsSync(manifestSource)) {
     await fsp.copyFile(manifestSource, path.join(root, 'aether.workspace.json'));
   }
-  for (const name of ['modules', ...(includeRuns ? ['runs'] : [])]) {
+  for (const name of ['modules', 'experiments', 'subgraphs', ...(includeRuns ? ['runs'] : [])]) {
     const source = path.join(dataDir(), name);
     if (existsSync(source)) await fsp.cp(source, path.join(root, name), { recursive: true, force: true });
   }
@@ -259,7 +266,11 @@ async function importWorkspaceBundle(bundle, options = {}) {
   let total = 0;
   for (const file of bundleFiles) {
     const cleaned = String(file && file.path ? file.path : '').replace(/\\/g, '/');
-    const allowed = cleaned.startsWith('modules/') || (includeRuns && cleaned.startsWith('runs/'));
+    const allowed =
+      cleaned.startsWith('modules/') ||
+      cleaned.startsWith('experiments/') ||
+      cleaned.startsWith('subgraphs/') ||
+      (includeRuns && cleaned.startsWith('runs/'));
     if (!allowed) continue;
     const relative = safeAssetRelative(cleaned);
     if (!file || typeof file.data !== 'string') throw httpError(400, `工作区文件缺少内容：${cleaned}`);
@@ -273,9 +284,11 @@ async function importWorkspaceBundle(bundle, options = {}) {
   }
 
   const backup = await backupWorkspaceForImport(replaceRuns);
-  const modulesRoot = path.join(dataDir(), 'modules');
-  await fsp.rm(modulesRoot, { recursive: true, force: true });
-  await fsp.mkdir(modulesRoot, { recursive: true });
+  for (const name of ['modules', 'experiments', 'subgraphs']) {
+    const root = path.join(dataDir(), name);
+    await fsp.rm(root, { recursive: true, force: true });
+    await fsp.mkdir(root, { recursive: true });
+  }
   if (replaceRuns) {
     await fsp.rm(path.join(dataDir(), 'runs'), { recursive: true, force: true });
     await fsp.mkdir(path.join(dataDir(), 'runs'), { recursive: true });
@@ -287,6 +300,7 @@ async function importWorkspaceBundle(bundle, options = {}) {
   }
   if (replaceRuns) await rewriteRunDirectories(dataDir());
   state.modules = await materializeModules(dataDir(), state.modules);
+  await materializeGraphs(dataDir(), state.graphs, (graph) => graphUsage(state, graph.id).length > 0);
   state.updatedAt = Date.now();
   await writeState(state);
   await writeWorkspaceManifest(dataDir(), bundle.manifest || {});
@@ -362,7 +376,8 @@ async function loadState() {
     stateCache = normalizeState(parsed);
     // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
     // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
-    // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表。
+    // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表；
+    // v6 → v7 将模块/实验/子图迁移到分类目录。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -390,6 +405,11 @@ async function loadState() {
   stateCache.modules = await materializeModules(dataDir(), stateCache.modules);
   const changed = stateCache.modules.some((module, index) => module.assetPath !== assetPaths[index]);
   if (changed) await writeState(stateCache);
+  await materializeGraphs(
+    dataDir(),
+    stateCache.graphs,
+    (graph) => graphUsage(stateCache, graph.id).length > 0,
+  );
   return stateCache;
 }
 
@@ -1086,6 +1106,8 @@ async function saveModule(input, options = {}) {
   if (refErrors.length) throw httpError(400, refErrors.join('；'));
 
   await writeState({ ...state, modules: moduleList, updatedAt: Date.now() });
+  const next = await readState();
+  await materializeGraphs(dataDir(), next.graphs, (graph) => graphUsage(next, graph.id).length > 0);
   return savedModule;
 }
 
@@ -1101,6 +1123,8 @@ async function deleteModule(id) {
   await removeModuleFolder(dataDir(), module);
   const assetRoot = moduleAssetRoot(module);
   if (assetRoot) await fsp.rm(assetRoot, { recursive: true, force: true }).catch(() => {});
+  const next = await readState();
+  await materializeGraphs(dataDir(), next.graphs, (graph) => graphUsage(next, graph.id).length > 0);
   return { ok: true, id };
 }
 
@@ -1131,6 +1155,8 @@ async function saveGraph(input) {
     graphs: existing ? state.graphs.map((item) => (item.id === graph.id ? graph : item)) : [...state.graphs, graph],
     updatedAt: Date.now(),
   });
+  const next = await readState();
+  await writeGraphFolder(dataDir(), graph, graphUsage(next, graph.id).length > 0);
   return graph;
 }
 
@@ -1143,6 +1169,7 @@ async function deleteGraph(id) {
     throw httpError(409, `实验仍被这些子图模块引用：${usedBy.map((module) => module.name).join('、')}，请先删除对应模块`);
   }
   await writeState({ ...state, graphs: state.graphs.filter((item) => item.id !== id), updatedAt: Date.now() });
+  await removeGraphFolder(dataDir(), id);
   return { ok: true, id };
 }
 

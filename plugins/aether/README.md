@@ -37,9 +37,10 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
   - 默认创建**新版本**（`vN+1`），旧内容进入最多 20 条版本历史；
   - 勾选「覆盖当前版本」则只更新当前版本，版本号不变；
   - 内容没有任何变化时不会产生新版本。
-- 每个模块（包括数据集与子图模块）在 `<workspace>/modules/<module>/` 下独立管理：`module.json` 描述文件是必备文件，`files/` 放提交的文件/目录，`versions/vN.json` 保存历史版本。现有旧的 `state.json` 模块会在加载时自动迁移到模块目录；`state.json` 保留索引镜像。
+- 每个模块按类别在 `<workspace>/modules/commands|subgraphs|datasets/<module>/` 下独立管理：`module.json` 描述文件是必备文件，`files/` 放提交的文件/目录，`versions/vN.json` 保存历史版本。现有旧的 `state.json` 模块会在加载时自动迁移到对应类别目录；`state.json` 保留索引镜像。
+- 每张图也有自己的目录：可独立运行的实验在 `<workspace>/experiments/<experiment>/experiment.json`，被图模块引用的子图在 `<workspace>/subgraphs/<subgraph>/subgraph.json`。
 - 运行时每个节点会记录当时使用的 `moduleVersion`，运行画布与节点详情会显示对应版本。
-- 新建**命令模块**时必须提交一个文件或目录：文件会复制到工作区 `modules/assets/<assetId>/`，可随时替换或移除。执行命令、输入 / 输出端口和参数都可以留空；命令留空时，执行器会尝试按扩展名或 `run.sh` / `main.py` / `index.js` 等入口自动执行提交的内容。提交的文件/目录会作为默认工作目录，并通过 `AETHER_MODULE_ASSET`、`AETHER_MODULE_FILE` 等环境变量暴露给命令。
+- 新建**命令模块**时必须提交一个文件或目录：上传时先到隐藏暂存区 `modules/.uploads/<assetId>/`，保存后移动到模块自己的 `files/`，可随时替换或移除。执行命令、输入 / 输出端口和参数都可以留空；命令留空时，执行器会尝试按扩展名或 `run.sh` / `main.py` / `index.js` 等入口自动执行提交的内容。提交的文件/目录会作为默认工作目录，并通过 `AETHER_MODULE_ASSET`、`AETHER_MODULE_FILE` 等环境变量暴露给命令。
 - 输入端口旁有「必填」复选框：勾选后该输入必须在实验里连线，未勾选为可选；重命名/删除端口会同步维护必填列表。参数值是模块默认值，实验中每个节点可以单独覆盖。
 - **文件 / 目录输出**：模块运行结束前在 `$AETHER_NODE_DIR/aether-outputs.json` 写输出清单，即可把某个输出端口映射到真实文件或目录：
 
@@ -154,7 +155,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 ## 数据与工作区
 
-默认工作区是 `$DSH_HOME/storages/aether`；也可以点顶栏工作区路径旁的「更改」指定任意目录。切换后，工作区清单、`state.json`（模块、数据集、子图、实验定义）、`modules/assets`、`runs` 与导入备份都在同一个目录下。
+默认工作区是 `$DSH_HOME/storages/aether`；也可以点顶栏工作区路径旁的「更改」指定任意目录。切换后，工作区清单、`state.json`、分类模块目录、实验/子图目录、`runs` 与导入备份都在同一个目录下。
 
 切换规则：
 - 目标目录为空：复制当前 `state.json`、`modules`、`runs` 后切换；
@@ -167,19 +168,26 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 
 工作区对话框支持 JSON 工作区包（`aether-workspace-*.json`）：
 
-- **导出**默认包含模块、数据集、子图、实验定义与 `modules/assets` 文件；勾选「包含运行记录」才会把 `runs` 一起导出。
+- **导出**默认包含分类模块目录（`module.json` / `files` / `versions`）、实验与子图目录、`state.json`；勾选「包含运行记录」才会把 `runs` 一起导出。
 - **导入**会替换当前模块/实验与模块文件；运行记录是否替换由导出包内容与「包含运行记录」复选框共同决定。未选择时保留当前运行记录。
 - 导入前会把当前工作区备份到 `<workspace>/.aether-backups/import-<时间>/`，不会静默覆盖。
-- 导入包只接受 `modules/assets/**` 与 `runs/**` 路径，带路径越界/大小/文件数校验；工作区清单随包导入。
+- 导入包只接受 `modules/**`、`experiments/**`、`subgraphs/**` 与可选的 `runs/**` 路径，带路径越界/大小/文件数校验；工作区清单随包导入。
 
 ```
 <workspace>/
   aether.workspace.json   # 工作区清单：格式/版本/目录布局/创建时间
-  state.json              # 模块索引、实验定义、执行环境目录
-  modules/<module>/       # 每个模块一个文件夹
-    module.json           # 模块描述文件：端口/参数/命令/版本/环境等
-    files/                # 模块提交的文件或目录
-    versions/vN.json      # 历史版本快照（最多 20）
+  state.json              # 模块索引、图定义、执行环境目录
+  modules/
+    commands/<module>/    # 命令模块
+    subgraphs/<module>/   # 子图模块
+    datasets/<module>/    # 数据集模块
+      module.json         # 必备描述文件
+      files/              # 模块提交的文件或目录
+      versions/vN.json    # 历史版本快照（最多 20）
+  experiments/<graph>/
+    experiment.json       # 可独立运行的实验定义
+  subgraphs/<graph>/
+    subgraph.json         # 被图模块引用的子图定义
   runs/<run-id>/
     run.json              # 运行、执行器、布局方向、展开后的连线、逐节点 placement 与状态
     nodes/<node>/         # stdout.log / stderr.log / inputs.json
@@ -187,7 +195,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
   .aether-backups/        # 导入工作区前的自动备份
 ```
 
-面板顶部显示工作区路径，可直接复制；「打开目录」在系统文件管理器里打开它。删除运行会删掉对应的 `runs/<id>` 目录。旧版 `state.json` 加载时会自动迁移：v1 → v2 补执行环境，v2 → v3 给模块补默认端口（`input` / `output`）、给旧连线补默认端口，v3 → v4 记录布局方向（默认上下）并清空旧横向坐标，v4 → v5 给模块补版本号与版本历史，v5 → v6 给模块补必填输入端口列表，不需要手工处理。
+面板顶部显示工作区路径，可直接复制；「打开目录」在系统文件管理器里打开它。删除运行会删掉对应的 `runs/<id>` 目录。旧版 `state.json` 加载时会自动迁移：v1 → v2 补执行环境，v2 → v3 给模块补默认端口（`input` / `output`）、给旧连线补默认端口，v3 → v4 记录布局方向（默认上下）并清空旧横向坐标，v4 → v5 给模块补版本号与版本历史，v5 → v6 给模块补必填输入端口列表，v6 → v7 将模块/实验/子图迁移到分类目录，不需要手工处理。
 
 首次加载（还没有 `state.json`）时会写入一组示例数据：4 个命令模块（准备数据、训练模型、评估结果、生成报告；带 `dataset` / `model` / `metrics` 端口）、1 个子图模块（演示流水线）、1 个数据集模块（`datasets/demo.jsonl`）和 2 个实验（`demo-pipeline`、`nightly-experiment`），画布坐标也已就位。可以直接运行「夜间实验」看一次完整的子图执行，也可以全部删掉从零开始。
 

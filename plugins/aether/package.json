@@ -18,6 +18,7 @@
     "dag.js",
     "executor.js",
     "module-store.js",
+    "graph-store.js",
     "zip.js",
     "client.js",
     "client/src",

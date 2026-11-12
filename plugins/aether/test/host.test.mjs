@@ -84,6 +84,12 @@ test('seeds a demo module library and graphs', async () => {
   assert.equal(payload.environments[0].executor, 'local');
   assert.equal(payload.executors.find((executor) => executor.id === 'local').available, true);
   assert.ok(payload.modules.every((module) => module.environmentId === 'local'));
+  const root = path.join(home, 'storages', 'aether');
+  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'prepare', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'modules', 'subgraphs', 'demo-pipeline', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'modules', 'datasets', 'demo-dataset', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
+  assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
 });
 
 test('modules record their execution environment', async () => {
@@ -383,9 +389,14 @@ test('module assets can be uploaded and run without an explicit command', async 
     },
   });
   assert.equal(created.status, 200);
-  assert.equal(existsSync(path.join(home, 'storages', 'aether', 'modules', 'asset-module', 'module.json')), true);
   assert.equal(
-    existsSync(path.join(home, 'storages', 'aether', 'modules', 'asset-module', 'files', 'run.js')),
+    existsSync(path.join(home, 'storages', 'aether', 'modules', 'commands', 'asset-module', 'module.json')),
+    true,
+  );
+  assert.equal(
+    existsSync(
+      path.join(home, 'storages', 'aether', 'modules', 'commands', 'asset-module', 'files', 'run.js'),
+    ),
     true,
   );
 
@@ -680,6 +691,78 @@ console.log('artifacts ready');
   assert.match(archive.toString('utf8'), /nested\/detail\.txt/);
 });
 
+test('graphs move between experiment and subgraph folders by usage', async () => {
+  const root = path.join(home, 'storages', 'aether');
+  await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: { id: 'category-graph', name: 'Category graph', layout: 'vertical', nodes: [], edges: [] },
+    },
+  });
+  assert.equal(existsSync(path.join(root, 'experiments', 'category-graph', 'experiment.json')), true);
+
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'category-graph-module',
+        name: 'Category graph module',
+        kind: 'graph',
+        graphId: 'category-graph',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(
+    existsSync(path.join(root, 'modules', 'subgraphs', 'category-graph-module', 'module.json')),
+    true,
+  );
+  assert.equal(existsSync(path.join(root, 'subgraphs', 'category-graph', 'subgraph.json')), true);
+  assert.equal(existsSync(path.join(root, 'experiments', 'category-graph')), false);
+
+  await call('/modules?id=category-graph-module', { method: 'DELETE' });
+  assert.equal(existsSync(path.join(root, 'experiments', 'category-graph', 'experiment.json')), true);
+  assert.equal(existsSync(path.join(root, 'subgraphs', 'category-graph')), false);
+});
+
+test('module folders follow the module category', async () => {
+  const root = path.join(home, 'storages', 'aether');
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: 'category-module',
+        name: 'Category module',
+        kind: 'command',
+        command: 'echo category',
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'category-module', 'module.json')), true);
+
+  const updated = await call('/modules', {
+    method: 'POST',
+    body: {
+      module: {
+        id: 'category-module',
+        name: 'Category module',
+        kind: 'dataset',
+        datasetUri: 'datasets/category.jsonl',
+        inputs: [],
+        outputs: ['rows'],
+      },
+    },
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(existsSync(path.join(root, 'modules', 'datasets', 'category-module', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'category-module')), false);
+});
+
 test('workspace export/import can skip or include runs', async () => {
   const submitted = await call('/experiments', {
     method: 'POST',
@@ -730,6 +813,9 @@ test('workspace export/import can skip or include runs', async () => {
     false,
   );
   assert.equal(restored.payload.experiments.length, before.payload.experiments.length);
+  const root = path.join(home, 'storages', 'aether');
+  assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
+  assert.equal(existsSync(path.join(root, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
 
   const withRuns = await call('/workspace/export?runs=1');
   assert.equal(withRuns.payload.includeRuns, true);
@@ -760,8 +846,10 @@ test('switching workspace migrates state and runs under the new root', async () 
   assert.equal(switched.payload.copied, true);
   assert.equal(existsSync(path.join(target, 'state.json')), true);
   assert.equal(existsSync(path.join(target, 'aether.workspace.json')), true);
-  assert.equal(existsSync(path.join(target, 'modules', 'prepare', 'module.json')), true);
-  assert.equal(existsSync(path.join(target, 'modules', 'prepare', 'files')), true);
+  assert.equal(existsSync(path.join(target, 'modules', 'commands', 'prepare', 'module.json')), true);
+  assert.equal(existsSync(path.join(target, 'modules', 'commands', 'prepare', 'files')), true);
+  assert.equal(existsSync(path.join(target, 'experiments', 'nightly-experiment', 'experiment.json')), true);
+  assert.equal(existsSync(path.join(target, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
 
   const after = await call('/state');
   assert.equal(after.payload.workspace, target);
