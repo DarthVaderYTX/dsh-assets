@@ -196,14 +196,13 @@ async function switchWorkspace(rawPath) {
   return { workspace: target, copied, existing: hasState, unchanged: false };
 }
 
-async function collectWorkspaceFiles(root, includeRuns) {
+async function collectWorkspaceFiles(root) {
   const files = [];
   const roots = [
     path.join(root, 'modules'),
     path.join(root, 'experiments'),
     path.join(root, 'subgraphs'),
   ];
-  if (includeRuns) roots.push(path.join(root, 'runs'));
   async function walk(directory) {
     const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
@@ -221,21 +220,21 @@ async function collectWorkspaceFiles(root, includeRuns) {
   return files;
 }
 
-async function exportWorkspaceBundle(includeRuns) {
+async function exportWorkspaceBundle() {
   const state = await readState();
   return {
     format: 'aether-workspace',
     formatVersion: 1,
     dataVersion: DATA_VERSION,
     exportedAt: Date.now(),
-    includeRuns: Boolean(includeRuns),
+    includeRuns: false,
     manifest: await readWorkspaceManifest(dataDir()),
     state,
-    files: await collectWorkspaceFiles(dataDir(), includeRuns),
+    files: await collectWorkspaceFiles(dataDir()),
   };
 }
 
-async function backupWorkspaceForImport(includeRuns) {
+async function backupWorkspaceForImport() {
   const root = path.join(dataDir(), '.aether-backups', `import-${Date.now()}`);
   await fsp.mkdir(root, { recursive: true });
   const stateSource = statePath();
@@ -244,23 +243,19 @@ async function backupWorkspaceForImport(includeRuns) {
   if (existsSync(manifestSource)) {
     await fsp.copyFile(manifestSource, path.join(root, 'aether.workspace.json'));
   }
-  for (const name of ['modules', 'experiments', 'subgraphs', ...(includeRuns ? ['runs'] : [])]) {
+  for (const name of ['modules', 'experiments', 'subgraphs']) {
     const source = path.join(dataDir(), name);
     if (existsSync(source)) await fsp.cp(source, path.join(root, name), { recursive: true, force: true });
   }
   return root;
 }
 
-async function importWorkspaceBundle(bundle, options = {}) {
+async function importWorkspaceBundle(bundle) {
   if (activeRuns.size) throw httpError(409, '仍有实验在运行，请先取消再导入工作区');
   if (!bundle || bundle.format !== 'aether-workspace' || bundle.formatVersion !== 1) {
     throw httpError(400, '不是有效的 Aether 工作区导出文件');
   }
-  const includeRuns = Boolean(options.includeRuns);
   const bundleFiles = Array.isArray(bundle.files) ? bundle.files : [];
-  const replaceRuns =
-    includeRuns &&
-    bundleFiles.some((file) => String(file && file.path ? file.path : '').replace(/\\/g, '/').startsWith('runs/'));
   const state = normalizeState(bundle.state);
   const incoming = [];
   let total = 0;
@@ -269,8 +264,7 @@ async function importWorkspaceBundle(bundle, options = {}) {
     const allowed =
       cleaned.startsWith('modules/') ||
       cleaned.startsWith('experiments/') ||
-      cleaned.startsWith('subgraphs/') ||
-      (includeRuns && cleaned.startsWith('runs/'));
+      cleaned.startsWith('subgraphs/');
     if (!allowed) continue;
     const relative = safeAssetRelative(cleaned);
     if (!file || typeof file.data !== 'string') throw httpError(400, `工作区文件缺少内容：${cleaned}`);
@@ -283,22 +277,17 @@ async function importWorkspaceBundle(bundle, options = {}) {
     incoming.push({ relative, buffer });
   }
 
-  const backup = await backupWorkspaceForImport(replaceRuns);
+  const backup = await backupWorkspaceForImport();
   for (const name of ['modules', 'experiments', 'subgraphs']) {
     const root = path.join(dataDir(), name);
     await fsp.rm(root, { recursive: true, force: true });
     await fsp.mkdir(root, { recursive: true });
-  }
-  if (replaceRuns) {
-    await fsp.rm(path.join(dataDir(), 'runs'), { recursive: true, force: true });
-    await fsp.mkdir(path.join(dataDir(), 'runs'), { recursive: true });
   }
   for (const file of incoming) {
     const target = path.join(dataDir(), file.relative);
     await fsp.mkdir(path.dirname(target), { recursive: true });
     await fsp.writeFile(target, file.buffer);
   }
-  if (replaceRuns) await rewriteRunDirectories(dataDir());
   state.modules = await materializeModules(dataDir(), state.modules);
   await materializeGraphs(dataDir(), state.graphs, (graph) => graphUsage(state, graph.id).length > 0);
   state.updatedAt = Date.now();
@@ -308,18 +297,13 @@ async function importWorkspaceBundle(bundle, options = {}) {
   stateLoading = null;
   recoveredRuns = false;
   const loaded = await readState();
-  const runCount = replaceRuns
-    ? (await fsp.readdir(path.join(dataDir(), 'runs'), { withFileTypes: true }).catch(() => [])).filter(
-        (entry) => entry.isDirectory(),
-      ).length
-    : null;
   return {
     workspace: dataDir(),
-    includeRuns: replaceRuns,
+    includeRuns: false,
     files: incoming.length,
     modules: loaded.modules.length,
     graphs: loaded.graphs.length,
-    runs: runCount,
+    runs: null,
     backup,
   };
 }
@@ -1538,8 +1522,7 @@ async function handleApi(req, res) {
   }
 
   if (method === 'GET' && route === '/workspace/export') {
-    const includeRuns = ['1', 'true'].includes(String(url.searchParams.get('runs') || ''));
-    const bundle = await exportWorkspaceBundle(includeRuns);
+    const bundle = await exportWorkspaceBundle();
     const body = JSON.stringify(bundle);
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     res.writeHead(200, {
@@ -1555,7 +1538,7 @@ async function handleApi(req, res) {
   if (method === 'POST' && route === '/workspace/import') {
     const body = await readBody(req, MAX_WORKSPACE_BYTES * 2);
     const bundle = body.bundle || body;
-    const result = await importWorkspaceBundle(bundle, { includeRuns: Boolean(body.includeRuns) });
+    const result = await importWorkspaceBundle(bundle);
     sendJson(res, 200, { ok: true, ...result });
     return;
   }

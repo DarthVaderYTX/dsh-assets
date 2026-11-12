@@ -425,16 +425,16 @@
         }
       };
 
-      const exportWorkspace = (includeRuns) => {
+      const exportWorkspace = () => {
         const anchor = document.createElement('a');
-        anchor.href = `${API}/workspace/export?runs=${includeRuns ? '1' : '0'}`;
+        anchor.href = `${API}/workspace/export`;
         anchor.download = '';
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
       };
 
-      const importWorkspace = (bundle, includeRuns) => {
+      const importWorkspace = (bundle) => {
         setConfirm({
           title: t('confirm.importWorkspace.title'),
           body: t('confirm.importWorkspace.body'),
@@ -443,19 +443,15 @@
             try {
               const payload = await request('/workspace/import', {
                 method: 'POST',
-                body: { bundle, includeRuns },
+                body: { bundle },
               });
               setWorkspaceOpen(false);
               resetWorkspaceView();
               pushToast(
-                `${tr(t, 'workspace.imported', {
+                tr(t, 'workspace.imported', {
                   modules: payload.modules,
                   graphs: payload.graphs,
-                })} ${
-                  payload.runs == null
-                    ? t('workspace.runsKept')
-                    : tr(t, 'workspace.runsImported', { n: payload.runs })
-                }`,
+                }),
               );
               await loadState(true);
             } catch (error) {
@@ -891,8 +887,8 @@
               busy: workspaceBusy,
               onClose: () => setWorkspaceOpen(false),
               onSubmit: (pathValue) => void changeWorkspace(pathValue),
-              onExport: (includeRuns) => exportWorkspace(includeRuns),
-              onImport: (bundle, includeRuns) => importWorkspace(bundle, includeRuns),
+              onExport: () => exportWorkspace(),
+              onImport: (bundle) => importWorkspace(bundle),
             })
           : null,
         newModuleOpen

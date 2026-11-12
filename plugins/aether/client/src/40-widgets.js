@@ -274,8 +274,6 @@
 
 function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, busy }) {
   const [pathValue, setPathValue] = useState(current || '');
-  const [includeRunsExport, setIncludeRunsExport] = useState(false);
-  const [includeRunsImport, setIncludeRunsImport] = useState(false);
   const [ioError, setIoError] = useState('');
   const importInputRef = useRef(null);
 
@@ -286,7 +284,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     try {
       const text = await file.text();
       const bundle = JSON.parse(text);
-      await onImport(bundle, includeRunsImport);
+      await onImport(bundle);
     } catch (error) {
       setIoError(error && error.message ? error.message : String(error));
     } finally {
@@ -335,16 +333,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       { className: 'ath-card', style: { marginTop: 14 } },
       h('h4', { className: 'ath-section-title' }, t('workspace.ioTitle')),
       h(
-        'label',
-        { className: 'ath-check' },
-        h('input', {
-          type: 'checkbox',
-          checked: includeRunsExport,
-          onChange: (event) => setIncludeRunsExport(event.target.checked),
-        }),
-        h('span', null, t('workspace.includeRunsExport')),
-      ),
-      h(
         'div',
         { className: 'ath-actions', style: { marginTop: 8 } },
         h(
@@ -352,20 +340,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           {
             type: 'button',
             className: 'ath-btn ath-btn-ghost',
-            onClick: () => onExport(includeRunsExport),
+            onClick: () => onExport(),
           },
           t('workspace.export'),
         ),
-      ),
-      h(
-        'label',
-        { className: 'ath-check', style: { marginTop: 10 } },
-        h('input', {
-          type: 'checkbox',
-          checked: includeRunsImport,
-          onChange: (event) => setIncludeRunsImport(event.target.checked),
-        }),
-        h('span', null, t('workspace.includeRunsImport')),
       ),
       h(
         'div',

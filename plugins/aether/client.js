@@ -23,7 +23,7 @@ window.__ModuleLoader__.load({
       subtitle: '有向无环图任务执行管理器',
       'tab.runs': '运行',
       'tab.experiments': '实验',
-      'tab.modules': '模块',
+      'tab.modules': '资源',
       workspace: '工作区',
       'workspace.title': '工作区',
       'workspace.change': '更改',
@@ -37,14 +37,10 @@ window.__ModuleLoader__.load({
       'workspace.ioTitle': '导入 / 导出',
       'workspace.export': '导出工作区',
       'workspace.import': '导入工作区',
-      'workspace.includeRunsExport': '包含运行记录',
-      'workspace.includeRunsImport': '包含运行记录（若包内存在）',
-      'workspace.ioHint': '默认导出模块、数据集、子图、实验与模块文件；运行记录可选。导入会替换当前模块/实验，并先自动备份到 aether-backups。',
+      'workspace.ioHint': '默认导出分类模块目录、实验/子图目录与模块文件；暂不包含运行记录。导入会替换当前资源与图，并先自动备份到工作区 .aether-backups。',
       'workspace.imported': '工作区已导入：{modules} 个模块、{graphs} 个实验',
-      'workspace.runsKept': '运行记录保持原样',
-      'workspace.runsImported': '已导入 {n} 条运行',
       'confirm.importWorkspace.title': '导入工作区？',
-      'confirm.importWorkspace.body': '导入会替换当前工作区的模块、数据集、子图与实验；是否导入运行记录由复选框决定。当前数据会先备份。',
+      'confirm.importWorkspace.body': '导入会替换当前工作区的模块、数据集、子图、实验与模块文件；运行记录不会导入。当前数据会先备份。',
       'language.title': '插件语言',
       'language.auto': '自动',
       'language.zh': '中文',
@@ -221,12 +217,12 @@ window.__ModuleLoader__.load({
       'canvas.direction': '布局',
       'canvas.vertical': '上下',
       'canvas.horizontal': '左右',
-      'modules.title': '模块',
-      'modules.subtitle': '模块是可复用的执行单元：一段命令、另一个实验（子图），或一个数据集指针。',
-      'modules.empty': '还没有模块。创建一个命令模块开始。',
-      'modules.new': '新建模块',
-      'modules.edit': '编辑模块',
-      'modules.delete': '删除模块',
+      'modules.title': '资源',
+      'modules.subtitle': '资源包括命令模块、子图模块与数据集；新建时可选模块或数据集，已有子图资源仍可编辑。',
+      'modules.empty': '还没有资源。创建一个模块或数据集开始。',
+      'modules.new': '新建资源',
+      'modules.edit': '编辑资源',
+      'modules.delete': '删除资源',
       'modules.id': '模块 id',
       'modules.idHint': '小写字母、数字和连字符；留空时按名称生成。',
       'modules.kind': '模块类型',
@@ -287,7 +283,7 @@ window.__ModuleLoader__.load({
       'modules.versionHistory': '历史版本：{n} 个',
       'modules.searchPlaceholder': '搜索模块、子图、数据集',
       'modules.emptyResult': '没有匹配的模块',
-      'newModule.title': '新建',
+      'newModule.title': '新建资源',
       'newModule.subtitle': '选择要创建的类型',
       'newModule.commandDesc': '一段通过 shell 执行的命令，可配置输入 / 输出与参数。',
       'newModule.graphDesc': '引用另一个实验，作为子图内联执行。',
@@ -342,7 +338,7 @@ window.__ModuleLoader__.load({
       subtitle: 'Directed-acyclic-graph task execution manager',
       'tab.runs': 'Runs',
       'tab.experiments': 'Experiments',
-      'tab.modules': 'Modules',
+      'tab.modules': 'Resources',
       workspace: 'Workspace',
       'workspace.title': 'Workspace',
       'workspace.change': 'Change',
@@ -356,14 +352,10 @@ window.__ModuleLoader__.load({
       'workspace.ioTitle': 'Import / export',
       'workspace.export': 'Export workspace',
       'workspace.import': 'Import workspace',
-      'workspace.includeRunsExport': 'Include runs',
-      'workspace.includeRunsImport': 'Include runs (if present)',
-      'workspace.ioHint': 'Exports modules, datasets, subgraphs, experiments and module files; runs are optional. Import replaces modules/experiments and backs up current data under aether-backups first.',
+      'workspace.ioHint': 'Exports categorized modules, experiment/subgraph folders and module files; runs are not included for now. Import replaces resources and graphs, backing up the current workspace under .aether-backups first.',
       'workspace.imported': 'Workspace imported: {modules} modules, {graphs} experiments',
-      'workspace.runsKept': 'Runs left unchanged',
-      'workspace.runsImported': '{n} runs imported',
       'confirm.importWorkspace.title': 'Import workspace?',
-      'confirm.importWorkspace.body': 'Importing replaces the current modules, datasets, subgraphs and experiments; runs are controlled by the checkbox. Current data is backed up first.',
+      'confirm.importWorkspace.body': 'Importing replaces the current modules, datasets, subgraphs, experiments and module files; runs are not imported. Current data is backed up first.',
       'language.title': 'Plugin language',
       'language.auto': 'Auto',
       'language.zh': '中文',
@@ -540,12 +532,12 @@ window.__ModuleLoader__.load({
       'canvas.direction': 'Layout',
       'canvas.vertical': 'Vertical',
       'canvas.horizontal': 'Horizontal',
-      'modules.title': 'Modules',
-      'modules.subtitle': 'Modules are reusable execution units: a shell command, another experiment (a subgraph), or a dataset pointer.',
-      'modules.empty': 'No modules yet. Create a command module to start.',
-      'modules.new': 'New module',
-      'modules.edit': 'Edit module',
-      'modules.delete': 'Delete module',
+      'modules.title': 'Resources',
+      'modules.subtitle': 'Resources include command modules, subgraph modules and datasets; new resources can be modules or datasets, existing subgraph resources remain editable.',
+      'modules.empty': 'No resources yet. Create a module or dataset to start.',
+      'modules.new': 'New resource',
+      'modules.edit': 'Edit resource',
+      'modules.delete': 'Delete resource',
       'modules.id': 'Module id',
       'modules.idHint': 'Lowercase letters, digits and hyphens; generated from the name when blank.',
       'modules.kind': 'Module type',
@@ -606,7 +598,7 @@ window.__ModuleLoader__.load({
       'modules.versionHistory': 'History: {n} versions',
       'modules.searchPlaceholder': 'Search modules, subgraphs, datasets',
       'modules.emptyResult': 'No modules match',
-      'newModule.title': 'New',
+      'newModule.title': 'New resource',
       'newModule.subtitle': 'Choose what to create',
       'newModule.commandDesc': 'A shell command with configurable ports and parameters.',
       'newModule.graphDesc': 'Reference another experiment and inline it as a subgraph.',
@@ -1851,8 +1843,6 @@ window.__ModuleLoader__.load({
 
 function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, busy }) {
   const [pathValue, setPathValue] = useState(current || '');
-  const [includeRunsExport, setIncludeRunsExport] = useState(false);
-  const [includeRunsImport, setIncludeRunsImport] = useState(false);
   const [ioError, setIoError] = useState('');
   const importInputRef = useRef(null);
 
@@ -1863,7 +1853,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     try {
       const text = await file.text();
       const bundle = JSON.parse(text);
-      await onImport(bundle, includeRunsImport);
+      await onImport(bundle);
     } catch (error) {
       setIoError(error && error.message ? error.message : String(error));
     } finally {
@@ -1912,16 +1902,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       { className: 'ath-card', style: { marginTop: 14 } },
       h('h4', { className: 'ath-section-title' }, t('workspace.ioTitle')),
       h(
-        'label',
-        { className: 'ath-check' },
-        h('input', {
-          type: 'checkbox',
-          checked: includeRunsExport,
-          onChange: (event) => setIncludeRunsExport(event.target.checked),
-        }),
-        h('span', null, t('workspace.includeRunsExport')),
-      ),
-      h(
         'div',
         { className: 'ath-actions', style: { marginTop: 8 } },
         h(
@@ -1929,20 +1909,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           {
             type: 'button',
             className: 'ath-btn ath-btn-ghost',
-            onClick: () => onExport(includeRunsExport),
+            onClick: () => onExport(),
           },
           t('workspace.export'),
         ),
-      ),
-      h(
-        'label',
-        { className: 'ath-check', style: { marginTop: 10 } },
-        h('input', {
-          type: 'checkbox',
-          checked: includeRunsImport,
-          onChange: (event) => setIncludeRunsImport(event.target.checked),
-        }),
-        h('span', null, t('workspace.includeRunsImport')),
       ),
       h(
         'div',
@@ -2290,7 +2260,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     function NewModuleDialog({ t, onClose, onPick }) {
       const options = [
         { kind: 'command', desc: 'newModule.commandDesc' },
-        { kind: 'graph', desc: 'newModule.graphDesc' },
         { kind: 'dataset', desc: 'newModule.datasetDesc' },
       ];
       return h(
@@ -5023,6 +4992,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
+      const kindOptions = module.kind === 'graph' ? ['command', 'graph', 'dataset'] : ['command', 'dataset'];
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -5184,7 +5154,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 h(
                   'div',
                   { className: 'ath-chips' },
-                  ['command', 'graph', 'dataset'].map((kind) =>
+                  kindOptions.map((kind) =>
                     h(
                       'button',
                       {
@@ -5942,16 +5912,16 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         }
       };
 
-      const exportWorkspace = (includeRuns) => {
+      const exportWorkspace = () => {
         const anchor = document.createElement('a');
-        anchor.href = `${API}/workspace/export?runs=${includeRuns ? '1' : '0'}`;
+        anchor.href = `${API}/workspace/export`;
         anchor.download = '';
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
       };
 
-      const importWorkspace = (bundle, includeRuns) => {
+      const importWorkspace = (bundle) => {
         setConfirm({
           title: t('confirm.importWorkspace.title'),
           body: t('confirm.importWorkspace.body'),
@@ -5960,19 +5930,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             try {
               const payload = await request('/workspace/import', {
                 method: 'POST',
-                body: { bundle, includeRuns },
+                body: { bundle },
               });
               setWorkspaceOpen(false);
               resetWorkspaceView();
               pushToast(
-                `${tr(t, 'workspace.imported', {
+                tr(t, 'workspace.imported', {
                   modules: payload.modules,
                   graphs: payload.graphs,
-                })} ${
-                  payload.runs == null
-                    ? t('workspace.runsKept')
-                    : tr(t, 'workspace.runsImported', { n: payload.runs })
-                }`,
+                }),
               );
               await loadState(true);
             } catch (error) {
@@ -6408,8 +6374,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               busy: workspaceBusy,
               onClose: () => setWorkspaceOpen(false),
               onSubmit: (pathValue) => void changeWorkspace(pathValue),
-              onExport: (includeRuns) => exportWorkspace(includeRuns),
-              onImport: (bundle, includeRuns) => importWorkspace(bundle, includeRuns),
+              onExport: () => exportWorkspace(),
+              onImport: (bundle) => importWorkspace(bundle),
             })
           : null,
         newModuleOpen

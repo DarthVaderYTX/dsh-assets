@@ -763,14 +763,14 @@ test('module folders follow the module category', async () => {
   assert.equal(existsSync(path.join(root, 'modules', 'commands', 'category-module')), false);
 });
 
-test('workspace export/import can skip or include runs', async () => {
+test('workspace export/import excludes runs', async () => {
   const submitted = await call('/experiments', {
     method: 'POST',
     body: { graphId: 'nightly-experiment', name: 'Workspace export run' },
   });
   await waitForRun(submitted.payload.experiment.id);
   const before = await call('/state');
-  const exported = await call('/workspace/export?runs=0');
+  const exported = await call('/workspace/export?runs=1');
   assert.equal(exported.status, 200);
   assert.equal(exported.payload.format, 'aether-workspace');
   assert.equal(exported.payload.manifest.format, 'aether-workspace');
@@ -796,10 +796,11 @@ test('workspace export/import can skip or include runs', async () => {
   });
   const imported = await call('/workspace/import', {
     method: 'POST',
-    body: { bundle: exported.payload, includeRuns: false },
+    body: { bundle: exported.payload },
   });
   assert.equal(imported.status, 200);
   assert.equal(imported.payload.includeRuns, false);
+  assert.equal(imported.payload.runs, null);
   assert.equal(existsSync(imported.payload.backup), true);
   assert.match(imported.payload.backup, /\.aether-backups/);
   assert.equal(
@@ -813,23 +814,14 @@ test('workspace export/import can skip or include runs', async () => {
     false,
   );
   assert.equal(restored.payload.experiments.length, before.payload.experiments.length);
+  const runsAfter = await call('/experiments');
+  assert.equal(
+    runsAfter.payload.experiments.some((run) => run.id === submitted.payload.experiment.id),
+    true,
+  );
   const root = path.join(home, 'storages', 'aether');
   assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
   assert.equal(existsSync(path.join(root, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
-
-  const withRuns = await call('/workspace/export?runs=1');
-  assert.equal(withRuns.payload.includeRuns, true);
-  assert.equal(
-    withRuns.payload.files.some((file) => file.path.startsWith('runs/')),
-    true,
-  );
-  const importedRuns = await call('/workspace/import', {
-    method: 'POST',
-    body: { bundle: withRuns.payload, includeRuns: true },
-  });
-  assert.equal(importedRuns.status, 200);
-  assert.equal(importedRuns.payload.includeRuns, true);
-  assert.equal(importedRuns.payload.runs, before.payload.experiments.length);
 });
 
 test('switching workspace migrates state and runs under the new root', async () => {

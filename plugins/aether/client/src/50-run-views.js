@@ -315,7 +315,6 @@
     function NewModuleDialog({ t, onClose, onPick }) {
       const options = [
         { kind: 'command', desc: 'newModule.commandDesc' },
-        { kind: 'graph', desc: 'newModule.graphDesc' },
         { kind: 'dataset', desc: 'newModule.datasetDesc' },
       ];
       return h(

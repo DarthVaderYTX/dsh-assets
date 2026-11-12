@@ -154,6 +154,7 @@
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
+      const kindOptions = module.kind === 'graph' ? ['command', 'graph', 'dataset'] : ['command', 'dataset'];
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -315,7 +316,7 @@
                 h(
                   'div',
                   { className: 'ath-chips' },
-                  ['command', 'graph', 'dataset'].map((kind) =>
+                  kindOptions.map((kind) =>
                     h(
                       'button',
                       {
