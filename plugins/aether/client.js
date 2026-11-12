@@ -1426,6 +1426,18 @@ window.__ModuleLoader__.load({
   overflow: hidden;
 }
 .ath-modal[data-wide="true"] { width: min(860px, 100%); }
+.ath-modal.ath-resource-modal { background: #fff; color: #111827; }
+.ath-resource-modal .ath-modal-head { border-bottom-color: #e5e7eb; }
+.ath-resource-modal .ath-modal-head h3 { color: #111827; }
+.ath-resource-modal .ath-modal-foot { background: #fff; border-top-color: #e5e7eb; }
+.ath-resource-modal .ath-label { color: #374151; }
+.ath-resource-modal .ath-hint { color: #6b7280; }
+.ath-resource-modal .ath-chip { color: #4b5563; }
+.ath-resource-modal .ath-chip[data-active="true"] { color: #111827; background: #f3f4f6; border-color: #9ca3af; }
+.ath-resource-modal .ath-asset-chip { background: #f9fafb; }
+.ath-resource-modal .ath-btn-ghost { color: #374151; }
+.ath-resource-modal .ath-input,
+.ath-resource-modal .ath-select { background: #fff; color: #111827; border-color: #d1d5db; }
 .ath-modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 11px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .ath-modal-head h3 { margin: 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .ath-modal-head .ath-icon-btn { margin-left: auto; }
@@ -1893,7 +1905,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function Modal({ t, title, children, footer, onClose, wide = false }) {
+    function Modal({ t, title, children, footer, onClose, wide = false, className = '' }) {
       const closeRef = useRef(onClose);
       closeRef.current = onClose;
       useEffect(() => {
@@ -1914,7 +1926,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           {
-            className: 'ath-modal',
+            className: `ath-modal${className ? ` ${className}` : ''}`,
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': title,
@@ -2476,6 +2488,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         {
           t,
           title: t('newModule.title'),
+          className: 'ath-resource-modal',
           onClose: busy ? () => {} : onClose,
           footer: [
             h(

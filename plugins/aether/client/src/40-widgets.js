@@ -229,7 +229,7 @@
       );
     }
 
-    function Modal({ t, title, children, footer, onClose, wide = false }) {
+    function Modal({ t, title, children, footer, onClose, wide = false, className = '' }) {
       const closeRef = useRef(onClose);
       closeRef.current = onClose;
       useEffect(() => {
@@ -250,7 +250,7 @@
         h(
           'div',
           {
-            className: 'ath-modal',
+            className: `ath-modal${className ? ` ${className}` : ''}`,
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': title,

@@ -388,6 +388,7 @@
         {
           t,
           title: t('newModule.title'),
+          className: 'ath-resource-modal',
           onClose: busy ? () => {} : onClose,
           footer: [
             h(
