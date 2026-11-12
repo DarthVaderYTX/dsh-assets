@@ -290,6 +290,20 @@
 .ath-version-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .ath-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .ath-check input { accent-color: var(--ath-accent); }
+.ath-radio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ath-radio-card {
+  display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+  padding: 9px 10px; border: 1px solid var(--ath-border-soft); border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
+}
+.ath-radio-card:hover { border-color: color-mix(in srgb, var(--ath-accent) 45%, var(--ath-border-soft)); }
+.ath-radio-card[data-active="true"] {
+  border-color: var(--ath-accent);
+  background: color-mix(in srgb, var(--ath-accent) 8%, var(--dsw-alias-bg-layer-1));
+}
+.ath-radio-card input { margin: 2px 0 0; accent-color: var(--ath-accent); }
+.ath-radio-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ath-radio-copy strong { font-size: 12px; }
 .ath-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .ath-type-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
@@ -750,6 +764,7 @@
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-radio-grid { grid-template-columns: minmax(0, 1fr); }
   .ath-brand-sub { display: none; }
   .ath-workspace {
     max-width: none; padding: 0; border: 0; background: transparent;

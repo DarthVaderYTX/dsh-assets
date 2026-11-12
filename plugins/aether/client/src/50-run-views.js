@@ -312,33 +312,245 @@
       );
     }
 
-    function NewModuleDialog({ t, onClose, onPick }) {
-      const options = [
-        { kind: 'command', desc: 'newModule.commandDesc' },
-        { kind: 'dataset', desc: 'newModule.datasetDesc' },
-      ];
+    function NewModuleDialog({ t, busy, error, onClose, onCreate }) {
+      const [kind, setKind] = useState('command');
+      const [name, setName] = useState('');
+      const [description, setDescription] = useState('');
+      const [command, setCommand] = useState('');
+      const [datasetUri, setDatasetUri] = useState('');
+      const [datasetFormat, setDatasetFormat] = useState('');
+      const [asset, setAsset] = useState(null);
+      const [formError, setFormError] = useState('');
+      const fileInputRef = useRef(null);
+      const dirInputRef = useRef(null);
+
+      useEffect(() => {
+        const input = dirInputRef.current;
+        if (input) {
+          input.webkitdirectory = true;
+          input.setAttribute('webkitdirectory', '');
+        }
+      }, []);
+
+      const handleAssetFiles = async (fileList, assetKind) => {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        setFormError('');
+        try {
+          const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+          if (totalSize > 12 * 1024 * 1024) throw new Error(t('modules.assetTooLarge'));
+          const first = files[0];
+          const rootName =
+            assetKind === 'directory'
+              ? (first.webkitRelativePath || '').split('/')[0] || first.name
+              : first.name;
+          const payloadFiles = [];
+          for (const file of files) {
+            const parts = (file.webkitRelativePath || file.name).split('/');
+            const relative =
+              assetKind === 'directory' && parts.length > 1 ? parts.slice(1).join('/') : file.name;
+            payloadFiles.push({ path: relative, data: await readFileAsBase64(file) });
+          }
+          setAsset({ kind: assetKind, name: rootName, files: payloadFiles, count: files.length });
+        } catch (uploadError) {
+          setFormError(uploadError && uploadError.message ? uploadError.message : String(uploadError));
+        }
+      };
+
+      const submit = () => {
+        setFormError('');
+        if (!name.trim()) {
+          setFormError(t('newModule.validationName'));
+          return;
+        }
+        if (kind === 'command' && !asset) {
+          setFormError(t('newModule.validationAsset'));
+          return;
+        }
+        if (kind === 'dataset' && !datasetUri.trim()) {
+          setFormError(t('newModule.validationDatasetUri'));
+          return;
+        }
+        onCreate({
+          kind,
+          name: name.trim(),
+          description: description.trim(),
+          command: command.trim(),
+          datasetUri: datasetUri.trim(),
+          datasetFormat: datasetFormat.trim(),
+          asset: kind === 'command' ? asset : null,
+        });
+      };
+
+      const shownError = formError || error;
       return h(
         Modal,
-        { t, title: t('newModule.title'), onClose },
-        h('div', { className: 'ath-hint', style: { marginBottom: 12 } }, t('newModule.subtitle')),
-        h(
-          'div',
-          { className: 'ath-type-grid' },
-          options.map((option) =>
+        {
+          t,
+          title: t('newModule.title'),
+          onClose,
+          footer: [
+            h('button', { key: 'cancel', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: onClose }, t('common.cancel')),
             h(
               'button',
               {
-                key: option.kind,
+                key: 'create',
                 type: 'button',
-                className: 'ath-type-card',
-                onClick: () => onPick(option.kind),
+                className: 'ath-btn ath-btn-primary',
+                disabled: busy,
+                onClick: submit,
               },
-              h('span', { className: 'ath-badge', 'data-kind': option.kind }, t(`modules.kind.${option.kind}`)),
-              h('strong', { className: 'ath-type-title' }, t(`modules.kind.${option.kind}`)),
-              h('span', { className: 'ath-hint' }, t(option.desc)),
-              h('span', { className: 'ath-type-action' }, t('newModule.choose')),
+              busy ? t('newModule.creating') : t('newModule.create'),
+            ),
+          ],
+        },
+        h(
+          'div',
+          { className: 'ath-detail', style: { gap: 12 } },
+          h('div', { className: 'ath-hint' }, t('newModule.subtitle')),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.type')),
+            h(
+              'div',
+              { className: 'ath-radio-grid', role: 'radiogroup', 'aria-label': t('newModule.type') },
+              [
+                { value: 'command', label: t('newModule.typeModule'), desc: t('newModule.commandDesc') },
+                { value: 'dataset', label: t('newModule.typeDataset'), desc: t('newModule.datasetDesc') },
+              ].map((option) =>
+                h(
+                  'label',
+                  {
+                    key: option.value,
+                    className: 'ath-radio-card',
+                    'data-active': kind === option.value ? 'true' : 'false',
+                  },
+                  h('input', {
+                    type: 'radio',
+                    name: 'new-resource-kind',
+                    value: option.value,
+                    checked: kind === option.value,
+                    onChange: () => setKind(option.value),
+                  }),
+                  h(
+                    'span',
+                    { className: 'ath-radio-copy' },
+                    h('strong', null, option.label),
+                    h('span', { className: 'ath-hint' }, option.desc),
+                  ),
+                ),
+              ),
             ),
           ),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.name')),
+            h('input', {
+              className: 'ath-input',
+              type: 'text',
+              value: name,
+              placeholder: t('newModule.namePlaceholder'),
+              onChange: (event) => setName(event.target.value),
+            }),
+          ),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.description')),
+            h('textarea', {
+              className: 'ath-textarea',
+              rows: 2,
+              value: description,
+              placeholder: t('newModule.descriptionPlaceholder'),
+              onChange: (event) => setDescription(event.target.value),
+            }),
+          ),
+          kind === 'command'
+            ? h(
+                'div',
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('newModule.asset')),
+                h(
+                  'div',
+                  { className: 'ath-actions' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-ghost',
+                      onClick: () => fileInputRef.current && fileInputRef.current.click(),
+                    },
+                    t('newModule.chooseFile'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-ghost',
+                      onClick: () => dirInputRef.current && dirInputRef.current.click(),
+                    },
+                    t('newModule.chooseDirectory'),
+                  ),
+                  h('input', {
+                    ref: fileInputRef,
+                    type: 'file',
+                    style: { display: 'none' },
+                    onChange: (event) => void handleAssetFiles(event.target.files, 'file'),
+                  }),
+                  h('input', {
+                    ref: dirInputRef,
+                    type: 'file',
+                    multiple: true,
+                    style: { display: 'none' },
+                    onChange: (event) => void handleAssetFiles(event.target.files, 'directory'),
+                  }),
+                ),
+                asset
+                  ? h('div', { className: 'ath-asset-chip' }, h('span', { className: 'ath-badge' }, asset.kind === 'directory' ? t('modules.assetKind.directory') : t('modules.assetKind.file')), h('span', { className: 'ath-mono' }, asset.name))
+                  : null,
+                h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
+                h(
+                  'label',
+                  { className: 'ath-label', style: { marginTop: 8 } },
+                  t('newModule.command'),
+                ),
+                h('input', {
+                  className: 'ath-input ath-mono',
+                  type: 'text',
+                  value: command,
+                  placeholder: t('newModule.commandPlaceholder'),
+                  onChange: (event) => setCommand(event.target.value),
+                }),
+              )
+            : h(
+                'div',
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('newModule.datasetUri')),
+                h('input', {
+                  className: 'ath-input ath-mono',
+                  type: 'text',
+                  value: datasetUri,
+                  placeholder: t('newModule.datasetUriPlaceholder'),
+                  onChange: (event) => setDatasetUri(event.target.value),
+                }),
+                h(
+                  'label',
+                  { className: 'ath-label', style: { marginTop: 8 } },
+                  t('newModule.datasetFormat'),
+                ),
+                h('input', {
+                  className: 'ath-input',
+                  type: 'text',
+                  value: datasetFormat,
+                  placeholder: t('newModule.datasetFormatPlaceholder'),
+                  onChange: (event) => setDatasetFormat(event.target.value),
+                }),
+                h('div', { className: 'ath-hint' }, t('newModule.datasetHint')),
+              ),
+          h('div', { className: 'ath-hint' }, t('newModule.stepHint')),
+          shownError ? h('div', { className: 'ath-error' }, shownError) : null,
         ),
       );
     }

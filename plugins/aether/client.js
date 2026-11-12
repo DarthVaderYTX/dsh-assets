@@ -284,11 +284,35 @@ window.__ModuleLoader__.load({
       'modules.searchPlaceholder': '搜索模块、子图、数据集',
       'modules.emptyResult': '没有匹配的模块',
       'newModule.title': '新建资源',
-      'newModule.subtitle': '选择要创建的类型',
+      'newModule.subtitle': '选择资源类型并填写基础配置，创建后进入完整编辑器。',
+      'newModule.type': '资源类型',
+      'newModule.typeModule': '模块',
+      'newModule.typeDataset': '数据集',
       'newModule.commandDesc': '一段通过 shell 执行的命令，可配置输入 / 输出与参数。',
       'newModule.graphDesc': '引用另一个实验，作为子图内联执行。',
       'newModule.datasetDesc': '数据集 URI / 路径，只有输出端口。',
       'newModule.choose': '创建',
+      'newModule.name': '名称',
+      'newModule.namePlaceholder': '例如：数据清洗',
+      'newModule.description': '描述',
+      'newModule.descriptionPlaceholder': '可选，说明资源的用途',
+      'newModule.asset': '模块文件 / 文件夹',
+      'newModule.assetHint': '必须选择提交内容；文件或文件夹会复制到资源自己的 files/ 目录。',
+      'newModule.chooseFile': '选择文件',
+      'newModule.chooseDirectory': '选择文件夹',
+      'newModule.command': '执行命令（可选）',
+      'newModule.commandPlaceholder': '留空时自动执行提交文件的入口',
+      'newModule.datasetUri': '数据集 URI / 路径',
+      'newModule.datasetUriPlaceholder': '例如 datasets/data.jsonl 或 https://…',
+      'newModule.datasetFormat': '格式（可选）',
+      'newModule.datasetFormatPlaceholder': '例如 jsonl / csv / parquet',
+      'newModule.datasetHint': '创建后默认输出端口为 rows，可在编辑器中继续添加。',
+      'newModule.create': '创建资源',
+      'newModule.creating': '创建中…',
+      'newModule.stepHint': '创建后会打开资源编辑器，可继续配置端口、参数、执行环境与版本。',
+      'newModule.validationName': '请填写资源名称',
+      'newModule.validationAsset': '请选择模块文件或文件夹',
+      'newModule.validationDatasetUri': '请填写数据集 URI / 路径',
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
       'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
@@ -599,11 +623,35 @@ window.__ModuleLoader__.load({
       'modules.searchPlaceholder': 'Search modules, subgraphs, datasets',
       'modules.emptyResult': 'No modules match',
       'newModule.title': 'New resource',
-      'newModule.subtitle': 'Choose what to create',
+      'newModule.subtitle': 'Choose a resource type and fill in the basics; the full editor opens after creation.',
+      'newModule.type': 'Resource type',
+      'newModule.typeModule': 'Module',
+      'newModule.typeDataset': 'Dataset',
       'newModule.commandDesc': 'A shell command with configurable ports and parameters.',
       'newModule.graphDesc': 'Reference another experiment and inline it as a subgraph.',
       'newModule.datasetDesc': 'A dataset URI / path with output ports only.',
       'newModule.choose': 'Create',
+      'newModule.name': 'Name',
+      'newModule.namePlaceholder': 'e.g. Data cleaning',
+      'newModule.description': 'Description',
+      'newModule.descriptionPlaceholder': 'Optional purpose of this resource',
+      'newModule.asset': 'Module file / folder',
+      'newModule.assetHint': 'Required. The selected file or folder is copied into this resource\'s own files/ directory.',
+      'newModule.chooseFile': 'Choose file',
+      'newModule.chooseDirectory': 'Choose folder',
+      'newModule.command': 'Command (optional)',
+      'newModule.commandPlaceholder': 'Leave empty to run the submitted entrypoint',
+      'newModule.datasetUri': 'Dataset URI / path',
+      'newModule.datasetUriPlaceholder': 'e.g. datasets/data.jsonl or https://…',
+      'newModule.datasetFormat': 'Format (optional)',
+      'newModule.datasetFormatPlaceholder': 'e.g. jsonl / csv / parquet',
+      'newModule.datasetHint': 'Created with a default rows output port; add more in the editor.',
+      'newModule.create': 'Create resource',
+      'newModule.creating': 'Creating…',
+      'newModule.stepHint': 'The resource editor opens after creation for ports, parameters, environment and versions.',
+      'newModule.validationName': 'Enter a resource name',
+      'newModule.validationAsset': 'Choose a module file or folder',
+      'newModule.validationDatasetUri': 'Enter a dataset URI / path',
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
       'modules.placeholder.command': 'node scripts/train.js --lr {{lr}}',
@@ -941,6 +989,20 @@ window.__ModuleLoader__.load({
 .ath-version-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .ath-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .ath-check input { accent-color: var(--ath-accent); }
+.ath-radio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ath-radio-card {
+  display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+  padding: 9px 10px; border: 1px solid var(--ath-border-soft); border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary);
+}
+.ath-radio-card:hover { border-color: color-mix(in srgb, var(--ath-accent) 45%, var(--ath-border-soft)); }
+.ath-radio-card[data-active="true"] {
+  border-color: var(--ath-accent);
+  background: color-mix(in srgb, var(--ath-accent) 8%, var(--dsw-alias-bg-layer-1));
+}
+.ath-radio-card input { margin: 2px 0 0; accent-color: var(--ath-accent); }
+.ath-radio-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ath-radio-copy strong { font-size: 12px; }
 .ath-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .ath-type-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
@@ -1401,6 +1463,7 @@ window.__ModuleLoader__.load({
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-radio-grid { grid-template-columns: minmax(0, 1fr); }
   .ath-brand-sub { display: none; }
   .ath-workspace {
     max-width: none; padding: 0; border: 0; background: transparent;
@@ -2257,33 +2320,245 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       );
     }
 
-    function NewModuleDialog({ t, onClose, onPick }) {
-      const options = [
-        { kind: 'command', desc: 'newModule.commandDesc' },
-        { kind: 'dataset', desc: 'newModule.datasetDesc' },
-      ];
+    function NewModuleDialog({ t, busy, error, onClose, onCreate }) {
+      const [kind, setKind] = useState('command');
+      const [name, setName] = useState('');
+      const [description, setDescription] = useState('');
+      const [command, setCommand] = useState('');
+      const [datasetUri, setDatasetUri] = useState('');
+      const [datasetFormat, setDatasetFormat] = useState('');
+      const [asset, setAsset] = useState(null);
+      const [formError, setFormError] = useState('');
+      const fileInputRef = useRef(null);
+      const dirInputRef = useRef(null);
+
+      useEffect(() => {
+        const input = dirInputRef.current;
+        if (input) {
+          input.webkitdirectory = true;
+          input.setAttribute('webkitdirectory', '');
+        }
+      }, []);
+
+      const handleAssetFiles = async (fileList, assetKind) => {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        setFormError('');
+        try {
+          const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+          if (totalSize > 12 * 1024 * 1024) throw new Error(t('modules.assetTooLarge'));
+          const first = files[0];
+          const rootName =
+            assetKind === 'directory'
+              ? (first.webkitRelativePath || '').split('/')[0] || first.name
+              : first.name;
+          const payloadFiles = [];
+          for (const file of files) {
+            const parts = (file.webkitRelativePath || file.name).split('/');
+            const relative =
+              assetKind === 'directory' && parts.length > 1 ? parts.slice(1).join('/') : file.name;
+            payloadFiles.push({ path: relative, data: await readFileAsBase64(file) });
+          }
+          setAsset({ kind: assetKind, name: rootName, files: payloadFiles, count: files.length });
+        } catch (uploadError) {
+          setFormError(uploadError && uploadError.message ? uploadError.message : String(uploadError));
+        }
+      };
+
+      const submit = () => {
+        setFormError('');
+        if (!name.trim()) {
+          setFormError(t('newModule.validationName'));
+          return;
+        }
+        if (kind === 'command' && !asset) {
+          setFormError(t('newModule.validationAsset'));
+          return;
+        }
+        if (kind === 'dataset' && !datasetUri.trim()) {
+          setFormError(t('newModule.validationDatasetUri'));
+          return;
+        }
+        onCreate({
+          kind,
+          name: name.trim(),
+          description: description.trim(),
+          command: command.trim(),
+          datasetUri: datasetUri.trim(),
+          datasetFormat: datasetFormat.trim(),
+          asset: kind === 'command' ? asset : null,
+        });
+      };
+
+      const shownError = formError || error;
       return h(
         Modal,
-        { t, title: t('newModule.title'), onClose },
-        h('div', { className: 'ath-hint', style: { marginBottom: 12 } }, t('newModule.subtitle')),
-        h(
-          'div',
-          { className: 'ath-type-grid' },
-          options.map((option) =>
+        {
+          t,
+          title: t('newModule.title'),
+          onClose,
+          footer: [
+            h('button', { key: 'cancel', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: onClose }, t('common.cancel')),
             h(
               'button',
               {
-                key: option.kind,
+                key: 'create',
                 type: 'button',
-                className: 'ath-type-card',
-                onClick: () => onPick(option.kind),
+                className: 'ath-btn ath-btn-primary',
+                disabled: busy,
+                onClick: submit,
               },
-              h('span', { className: 'ath-badge', 'data-kind': option.kind }, t(`modules.kind.${option.kind}`)),
-              h('strong', { className: 'ath-type-title' }, t(`modules.kind.${option.kind}`)),
-              h('span', { className: 'ath-hint' }, t(option.desc)),
-              h('span', { className: 'ath-type-action' }, t('newModule.choose')),
+              busy ? t('newModule.creating') : t('newModule.create'),
+            ),
+          ],
+        },
+        h(
+          'div',
+          { className: 'ath-detail', style: { gap: 12 } },
+          h('div', { className: 'ath-hint' }, t('newModule.subtitle')),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.type')),
+            h(
+              'div',
+              { className: 'ath-radio-grid', role: 'radiogroup', 'aria-label': t('newModule.type') },
+              [
+                { value: 'command', label: t('newModule.typeModule'), desc: t('newModule.commandDesc') },
+                { value: 'dataset', label: t('newModule.typeDataset'), desc: t('newModule.datasetDesc') },
+              ].map((option) =>
+                h(
+                  'label',
+                  {
+                    key: option.value,
+                    className: 'ath-radio-card',
+                    'data-active': kind === option.value ? 'true' : 'false',
+                  },
+                  h('input', {
+                    type: 'radio',
+                    name: 'new-resource-kind',
+                    value: option.value,
+                    checked: kind === option.value,
+                    onChange: () => setKind(option.value),
+                  }),
+                  h(
+                    'span',
+                    { className: 'ath-radio-copy' },
+                    h('strong', null, option.label),
+                    h('span', { className: 'ath-hint' }, option.desc),
+                  ),
+                ),
+              ),
             ),
           ),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.name')),
+            h('input', {
+              className: 'ath-input',
+              type: 'text',
+              value: name,
+              placeholder: t('newModule.namePlaceholder'),
+              onChange: (event) => setName(event.target.value),
+            }),
+          ),
+          h(
+            'div',
+            { className: 'ath-field' },
+            h('label', { className: 'ath-label' }, t('newModule.description')),
+            h('textarea', {
+              className: 'ath-textarea',
+              rows: 2,
+              value: description,
+              placeholder: t('newModule.descriptionPlaceholder'),
+              onChange: (event) => setDescription(event.target.value),
+            }),
+          ),
+          kind === 'command'
+            ? h(
+                'div',
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('newModule.asset')),
+                h(
+                  'div',
+                  { className: 'ath-actions' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-ghost',
+                      onClick: () => fileInputRef.current && fileInputRef.current.click(),
+                    },
+                    t('newModule.chooseFile'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-ghost',
+                      onClick: () => dirInputRef.current && dirInputRef.current.click(),
+                    },
+                    t('newModule.chooseDirectory'),
+                  ),
+                  h('input', {
+                    ref: fileInputRef,
+                    type: 'file',
+                    style: { display: 'none' },
+                    onChange: (event) => void handleAssetFiles(event.target.files, 'file'),
+                  }),
+                  h('input', {
+                    ref: dirInputRef,
+                    type: 'file',
+                    multiple: true,
+                    style: { display: 'none' },
+                    onChange: (event) => void handleAssetFiles(event.target.files, 'directory'),
+                  }),
+                ),
+                asset
+                  ? h('div', { className: 'ath-asset-chip' }, h('span', { className: 'ath-badge' }, asset.kind === 'directory' ? t('modules.assetKind.directory') : t('modules.assetKind.file')), h('span', { className: 'ath-mono' }, asset.name))
+                  : null,
+                h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
+                h(
+                  'label',
+                  { className: 'ath-label', style: { marginTop: 8 } },
+                  t('newModule.command'),
+                ),
+                h('input', {
+                  className: 'ath-input ath-mono',
+                  type: 'text',
+                  value: command,
+                  placeholder: t('newModule.commandPlaceholder'),
+                  onChange: (event) => setCommand(event.target.value),
+                }),
+              )
+            : h(
+                'div',
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('newModule.datasetUri')),
+                h('input', {
+                  className: 'ath-input ath-mono',
+                  type: 'text',
+                  value: datasetUri,
+                  placeholder: t('newModule.datasetUriPlaceholder'),
+                  onChange: (event) => setDatasetUri(event.target.value),
+                }),
+                h(
+                  'label',
+                  { className: 'ath-label', style: { marginTop: 8 } },
+                  t('newModule.datasetFormat'),
+                ),
+                h('input', {
+                  className: 'ath-input',
+                  type: 'text',
+                  value: datasetFormat,
+                  placeholder: t('newModule.datasetFormatPlaceholder'),
+                  onChange: (event) => setDatasetFormat(event.target.value),
+                }),
+                h('div', { className: 'ath-hint' }, t('newModule.datasetHint')),
+              ),
+          h('div', { className: 'ath-hint' }, t('newModule.stepHint')),
+          shownError ? h('div', { className: 'ath-error' }, shownError) : null,
         ),
       );
     }
@@ -5533,6 +5808,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
       const [newModuleOpen, setNewModuleOpen] = useState(false);
+      const [newResourceBusy, setNewResourceBusy] = useState(false);
+      const [newResourceError, setNewResourceError] = useState('');
       const [workspaceOpen, setWorkspaceOpen] = useState(false);
       const [workspaceBusy, setWorkspaceBusy] = useState(false);
       const [moduleErrors, setModuleErrors] = useState([]);
@@ -6072,6 +6349,55 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         setTab('modules');
       };
 
+      const createResource = async (fields) => {
+        setNewResourceBusy(true);
+        setNewResourceError('');
+        try {
+          let assetFields = {};
+          if (fields.asset) {
+            const uploaded = await request('/modules/assets', {
+              method: 'POST',
+              body: fields.asset,
+            });
+            assetFields = uploaded.asset || {};
+          }
+          const created = await request('/modules', {
+            method: 'POST',
+            body: {
+              create: true,
+              requireAsset: fields.kind === 'command',
+              module: {
+                id: '',
+                name: fields.name,
+                description: fields.description || '',
+                kind: fields.kind,
+                command: fields.kind === 'command' ? fields.command || '' : '',
+                cwd: '',
+                timeoutSec: 300,
+                params: {},
+                inputs: fields.kind === 'dataset' ? [] : ['input'],
+                requiredInputs: [],
+                outputs: fields.kind === 'dataset' ? ['rows'] : ['output'],
+                graphId: '',
+                datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
+                datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',
+                environmentId: 'local',
+                ...assetFields,
+              },
+            },
+          });
+          setNewModuleOpen(false);
+          pushToast(t('toast.saved'));
+          await loadState(true);
+          startModule(created.module, false);
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setNewResourceError(message.split('；').filter(Boolean).join('；'));
+        } finally {
+          setNewResourceBusy(false);
+        }
+      };
+
       const saveModule = async () => {
         if (!moduleDraft) return;
         setModuleSaving(true);
@@ -6158,7 +6484,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           return h(ModulesView, {
             t,
             data,
-            onNew: () => setNewModuleOpen(true),
+            onNew: () => {
+              setNewResourceError('');
+              setNewModuleOpen(true);
+            },
             onEdit: (module) => startModule(module),
             onDelete: deleteModule,
           });
@@ -6381,11 +6710,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         newModuleOpen
           ? h(NewModuleDialog, {
               t,
-              onClose: () => setNewModuleOpen(false),
-              onPick: (kind) => {
+              busy: newResourceBusy,
+              error: newResourceError,
+              onClose: () => {
                 setNewModuleOpen(false);
-                startModule(null, kind);
+                setNewResourceError('');
               },
+              onCreate: (fields) => void createResource(fields),
             })
           : null,
         submitOpen

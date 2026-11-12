@@ -46,6 +46,8 @@
       const [graphSaving, setGraphSaving] = useState(false);
       const [moduleDraft, setModuleDraft] = useState(null);
       const [newModuleOpen, setNewModuleOpen] = useState(false);
+      const [newResourceBusy, setNewResourceBusy] = useState(false);
+      const [newResourceError, setNewResourceError] = useState('');
       const [workspaceOpen, setWorkspaceOpen] = useState(false);
       const [workspaceBusy, setWorkspaceBusy] = useState(false);
       const [moduleErrors, setModuleErrors] = useState([]);
@@ -585,6 +587,55 @@
         setTab('modules');
       };
 
+      const createResource = async (fields) => {
+        setNewResourceBusy(true);
+        setNewResourceError('');
+        try {
+          let assetFields = {};
+          if (fields.asset) {
+            const uploaded = await request('/modules/assets', {
+              method: 'POST',
+              body: fields.asset,
+            });
+            assetFields = uploaded.asset || {};
+          }
+          const created = await request('/modules', {
+            method: 'POST',
+            body: {
+              create: true,
+              requireAsset: fields.kind === 'command',
+              module: {
+                id: '',
+                name: fields.name,
+                description: fields.description || '',
+                kind: fields.kind,
+                command: fields.kind === 'command' ? fields.command || '' : '',
+                cwd: '',
+                timeoutSec: 300,
+                params: {},
+                inputs: fields.kind === 'dataset' ? [] : ['input'],
+                requiredInputs: [],
+                outputs: fields.kind === 'dataset' ? ['rows'] : ['output'],
+                graphId: '',
+                datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
+                datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',
+                environmentId: 'local',
+                ...assetFields,
+              },
+            },
+          });
+          setNewModuleOpen(false);
+          pushToast(t('toast.saved'));
+          await loadState(true);
+          startModule(created.module, false);
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setNewResourceError(message.split('；').filter(Boolean).join('；'));
+        } finally {
+          setNewResourceBusy(false);
+        }
+      };
+
       const saveModule = async () => {
         if (!moduleDraft) return;
         setModuleSaving(true);
@@ -671,7 +722,10 @@
           return h(ModulesView, {
             t,
             data,
-            onNew: () => setNewModuleOpen(true),
+            onNew: () => {
+              setNewResourceError('');
+              setNewModuleOpen(true);
+            },
             onEdit: (module) => startModule(module),
             onDelete: deleteModule,
           });
@@ -894,11 +948,13 @@
         newModuleOpen
           ? h(NewModuleDialog, {
               t,
-              onClose: () => setNewModuleOpen(false),
-              onPick: (kind) => {
+              busy: newResourceBusy,
+              error: newResourceError,
+              onClose: () => {
                 setNewModuleOpen(false);
-                startModule(null, kind);
+                setNewResourceError('');
               },
+              onCreate: (fields) => void createResource(fields),
             })
           : null,
         submitOpen
