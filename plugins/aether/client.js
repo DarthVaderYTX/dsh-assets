@@ -744,9 +744,9 @@ window.__ModuleLoader__.load({
   --ath-yellow-ink: #a16207;
   --ath-red-ink: #b91c1c;
   --ath-gray-ink: #4b5563;
-  --ath-dataset-ink: #5b21b6;
-  --ath-dataset: #6d28d9;
-  --ath-dataset-40: rgba(109, 40, 217, 0.4);
+  --ath-dataset-ink: #3f5366;
+  --ath-dataset: #5b7185;
+  --ath-dataset-40: rgba(91, 113, 133, 0.4);
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 2px 10px rgba(32, 43, 61, .05);
@@ -1064,7 +1064,7 @@ window.__ModuleLoader__.load({
 .ath-canvas-node:hover { border-color: #64748b; }
 .ath-canvas-node[data-kind="dataset"] {
   border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
-  background: color-mix(in srgb, var(--ath-dataset) 5%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
 }
 .ath-canvas-node[data-selected="true"] { border-color: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, .18); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
@@ -1119,7 +1119,7 @@ window.__ModuleLoader__.load({
 .ath-node-card:active { cursor: grabbing; }
 .ath-node-card[data-kind="dataset"] {
   border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
-  background: color-mix(in srgb, var(--ath-dataset) 5%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
 }
 .ath-node-card[data-kind="dataset"]::before {
   content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
@@ -1315,7 +1315,7 @@ window.__ModuleLoader__.load({
   box-shadow: inset 0 3px 0 var(--ath-status), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] {
-  background: var(--ath-dataset-40);
+  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
   border-color: color-mix(in srgb, var(--ath-dataset) 60%, #64748b);
   box-shadow: inset 4px 0 0 var(--ath-dataset), 0 1px 2px rgba(32, 43, 61, .05);
 }
