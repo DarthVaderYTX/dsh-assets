@@ -22,6 +22,7 @@ import {
   validateModule,
 } from './dag.js';
 import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
+import { materializeModules, removeModuleFolder, writeModuleFolder } from './module-store.js';
 import { zipDirectory } from './zip.js';
 import {
   API_PREFIX,
@@ -194,7 +195,7 @@ async function switchWorkspace(rawPath) {
 
 async function collectWorkspaceFiles(root, includeRuns) {
   const files = [];
-  const roots = [path.join(root, 'modules', 'assets')];
+  const roots = [path.join(root, 'modules')];
   if (includeRuns) roots.push(path.join(root, 'runs'));
   async function walk(directory) {
     const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -258,8 +259,7 @@ async function importWorkspaceBundle(bundle, options = {}) {
   let total = 0;
   for (const file of bundleFiles) {
     const cleaned = String(file && file.path ? file.path : '').replace(/\\/g, '/');
-    const allowed =
-      cleaned.startsWith('modules/assets/') || (includeRuns && cleaned.startsWith('runs/'));
+    const allowed = cleaned.startsWith('modules/') || (includeRuns && cleaned.startsWith('runs/'));
     if (!allowed) continue;
     const relative = safeAssetRelative(cleaned);
     if (!file || typeof file.data !== 'string') throw httpError(400, `工作区文件缺少内容：${cleaned}`);
@@ -273,9 +273,9 @@ async function importWorkspaceBundle(bundle, options = {}) {
   }
 
   const backup = await backupWorkspaceForImport(replaceRuns);
-  const assetsRoot = path.join(dataDir(), 'modules', 'assets');
-  await fsp.rm(assetsRoot, { recursive: true, force: true });
-  await fsp.mkdir(assetsRoot, { recursive: true });
+  const modulesRoot = path.join(dataDir(), 'modules');
+  await fsp.rm(modulesRoot, { recursive: true, force: true });
+  await fsp.mkdir(modulesRoot, { recursive: true });
   if (replaceRuns) {
     await fsp.rm(path.join(dataDir(), 'runs'), { recursive: true, force: true });
     await fsp.mkdir(path.join(dataDir(), 'runs'), { recursive: true });
@@ -286,6 +286,7 @@ async function importWorkspaceBundle(bundle, options = {}) {
     await fsp.writeFile(target, file.buffer);
   }
   if (replaceRuns) await rewriteRunDirectories(dataDir());
+  state.modules = await materializeModules(dataDir(), state.modules);
   state.updatedAt = Date.now();
   await writeState(state);
   await writeWorkspaceManifest(dataDir(), bundle.manifest || {});
@@ -385,6 +386,10 @@ async function loadState() {
     }
     await writeState(stateCache);
   }
+  const assetPaths = (stateCache.modules || []).map((module) => module.assetPath);
+  stateCache.modules = await materializeModules(dataDir(), stateCache.modules);
+  const changed = stateCache.modules.some((module, index) => module.assetPath !== assetPaths[index]);
+  if (changed) await writeState(stateCache);
   return stateCache;
 }
 
@@ -1065,13 +1070,14 @@ async function saveModule(input, options = {}) {
       versions = [...existingVersions, moduleSnapshot(existing)].slice(-20);
     }
   }
-  const savedModule = {
+  let savedModule = {
     ...module,
     version,
     versions,
     createdAt: existing?.createdAt || Date.now(),
     updatedAt: Date.now(),
   };
+  savedModule = await writeModuleFolder(dataDir(), savedModule);
 
   const moduleList = existing
     ? state.modules.map((item) => (item.id === module.id ? savedModule : item))
@@ -1092,6 +1098,7 @@ async function deleteModule(id) {
     throw httpError(409, `模块仍被这些实验使用：${usedBy.map((graph) => graph.name).join('、')}，请先删除对应节点`);
   }
   await writeState({ ...state, modules: state.modules.filter((item) => item.id !== id), updatedAt: Date.now() });
+  await removeModuleFolder(dataDir(), module);
   const assetRoot = moduleAssetRoot(module);
   if (assetRoot) await fsp.rm(assetRoot, { recursive: true, force: true }).catch(() => {});
   return { ok: true, id };

@@ -383,6 +383,11 @@ test('module assets can be uploaded and run without an explicit command', async 
     },
   });
   assert.equal(created.status, 200);
+  assert.equal(existsSync(path.join(home, 'storages', 'aether', 'modules', 'asset-module', 'module.json')), true);
+  assert.equal(
+    existsSync(path.join(home, 'storages', 'aether', 'modules', 'asset-module', 'files', 'run.js')),
+    true,
+  );
 
   const graph = await call('/graphs', {
     method: 'POST',
@@ -755,7 +760,8 @@ test('switching workspace migrates state and runs under the new root', async () 
   assert.equal(switched.payload.copied, true);
   assert.equal(existsSync(path.join(target, 'state.json')), true);
   assert.equal(existsSync(path.join(target, 'aether.workspace.json')), true);
-  assert.equal(existsSync(path.join(target, 'modules', 'assets')), true);
+  assert.equal(existsSync(path.join(target, 'modules', 'prepare', 'module.json')), true);
+  assert.equal(existsSync(path.join(target, 'modules', 'prepare', 'files')), true);
 
   const after = await call('/state');
   assert.equal(after.payload.workspace, target);

@@ -17,6 +17,7 @@
     "http.js",
     "dag.js",
     "executor.js",
+    "module-store.js",
     "zip.js",
     "client.js",
     "client/src",

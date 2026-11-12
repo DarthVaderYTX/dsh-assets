@@ -37,6 +37,7 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
   - 默认创建**新版本**（`vN+1`），旧内容进入最多 20 条版本历史；
   - 勾选「覆盖当前版本」则只更新当前版本，版本号不变；
   - 内容没有任何变化时不会产生新版本。
+- 每个模块（包括数据集与子图模块）在 `<workspace>/modules/<module>/` 下独立管理：`module.json` 描述文件是必备文件，`files/` 放提交的文件/目录，`versions/vN.json` 保存历史版本。现有旧的 `state.json` 模块会在加载时自动迁移到模块目录；`state.json` 保留索引镜像。
 - 运行时每个节点会记录当时使用的 `moduleVersion`，运行画布与节点详情会显示对应版本。
 - 新建**命令模块**时必须提交一个文件或目录：文件会复制到工作区 `modules/assets/<assetId>/`，可随时替换或移除。执行命令、输入 / 输出端口和参数都可以留空；命令留空时，执行器会尝试按扩展名或 `run.sh` / `main.py` / `index.js` 等入口自动执行提交的内容。提交的文件/目录会作为默认工作目录，并通过 `AETHER_MODULE_ASSET`、`AETHER_MODULE_FILE` 等环境变量暴露给命令。
 - 输入端口旁有「必填」复选框：勾选后该输入必须在实验里连线，未勾选为可选；重命名/删除端口会同步维护必填列表。参数值是模块默认值，实验中每个节点可以单独覆盖。
@@ -174,8 +175,11 @@ Aether 是 dsh 的左侧栏插件：一个**有向无环图（DAG）任务执行
 ```
 <workspace>/
   aether.workspace.json   # 工作区清单：格式/版本/目录布局/创建时间
-  state.json              # 模块（含端口、版本历史、文件引用）、实验（含节点坐标与连线端口）、执行环境目录
-  modules/assets/<id>/    # 新建命令模块时提交的文件或目录
+  state.json              # 模块索引、实验定义、执行环境目录
+  modules/<module>/       # 每个模块一个文件夹
+    module.json           # 模块描述文件：端口/参数/命令/版本/环境等
+    files/                # 模块提交的文件或目录
+    versions/vN.json      # 历史版本快照（最多 20）
   runs/<run-id>/
     run.json              # 运行、执行器、布局方向、展开后的连线、逐节点 placement 与状态
     nodes/<node>/         # stdout.log / stderr.log / inputs.json
