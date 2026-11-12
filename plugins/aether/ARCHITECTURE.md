@@ -12,7 +12,7 @@ aether/
   http.js                  统一错误、JSON/文本响应、请求体读取
   dag.js                   纯 DAG 核心：归一化、校验、拓扑、子图展开、图引用环
   executor.js              执行器边界：LocalExecutor、placement、进程树取消
-  module-store.js          模块目录：按 commands/subgraphs/datasets 分类，module.json + files + versions
+  module-store.js          资源目录：按 modules/subgraphs/datasets 分类，resource.json + files + versions
   graph-store.js           图目录：实验/子图各自的 experiment.json / subgraph.json
   zip.js                   目录输出打包（store 模式 ZIP，无第三方依赖）
   client.js                构建产物（唯一被 DSH 加载的客户端文件）
@@ -73,8 +73,8 @@ npm run build
 
 ## 工作区
 
-`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；模块按类别在 `modules/commands|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行、模块资产与 `.aether-backups` 也都在该目录。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录可选，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
+`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；资源按类别在 `resources/modules|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行与 `.aether-backups` 也都在该目录。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录暂不导出，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
 
 ## 数据版本
 
-`const DATA_VERSION = 7`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。
+`const DATA_VERSION = 8`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。

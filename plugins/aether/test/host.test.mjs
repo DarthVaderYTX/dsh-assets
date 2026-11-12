@@ -85,9 +85,9 @@ test('seeds a demo module library and graphs', async () => {
   assert.equal(payload.executors.find((executor) => executor.id === 'local').available, true);
   assert.ok(payload.modules.every((module) => module.environmentId === 'local'));
   const root = path.join(home, 'storages', 'aether');
-  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'prepare', 'module.json')), true);
-  assert.equal(existsSync(path.join(root, 'modules', 'subgraphs', 'demo-pipeline', 'module.json')), true);
-  assert.equal(existsSync(path.join(root, 'modules', 'datasets', 'demo-dataset', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'modules', 'prepare', 'resource.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'subgraphs', 'demo-pipeline', 'resource.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'datasets', 'demo-dataset', 'resource.json')), true);
   assert.equal(existsSync(path.join(root, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
   assert.equal(existsSync(path.join(root, 'experiments', 'nightly-experiment', 'experiment.json')), true);
 });
@@ -390,12 +390,12 @@ test('module assets can be uploaded and run without an explicit command', async 
   });
   assert.equal(created.status, 200);
   assert.equal(
-    existsSync(path.join(home, 'storages', 'aether', 'modules', 'commands', 'asset-module', 'module.json')),
+    existsSync(path.join(home, 'storages', 'aether', 'resources', 'modules', 'asset-module', 'resource.json')),
     true,
   );
   assert.equal(
     existsSync(
-      path.join(home, 'storages', 'aether', 'modules', 'commands', 'asset-module', 'files', 'run.js'),
+      path.join(home, 'storages', 'aether', 'resources', 'modules', 'asset-module', 'files', 'run.js'),
     ),
     true,
   );
@@ -716,7 +716,7 @@ test('graphs move between experiment and subgraph folders by usage', async () =>
     },
   });
   assert.equal(
-    existsSync(path.join(root, 'modules', 'subgraphs', 'category-graph-module', 'module.json')),
+    existsSync(path.join(root, 'resources', 'subgraphs', 'category-graph-module', 'resource.json')),
     true,
   );
   assert.equal(existsSync(path.join(root, 'subgraphs', 'category-graph', 'subgraph.json')), true);
@@ -743,7 +743,7 @@ test('module folders follow the module category', async () => {
       },
     },
   });
-  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'category-module', 'module.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'modules', 'category-module', 'resource.json')), true);
 
   const updated = await call('/modules', {
     method: 'POST',
@@ -759,8 +759,8 @@ test('module folders follow the module category', async () => {
     },
   });
   assert.equal(updated.status, 200);
-  assert.equal(existsSync(path.join(root, 'modules', 'datasets', 'category-module', 'module.json')), true);
-  assert.equal(existsSync(path.join(root, 'modules', 'commands', 'category-module')), false);
+  assert.equal(existsSync(path.join(root, 'resources', 'datasets', 'category-module', 'resource.json')), true);
+  assert.equal(existsSync(path.join(root, 'resources', 'modules', 'category-module')), false);
 });
 
 test('workspace export/import excludes runs', async () => {
@@ -838,8 +838,8 @@ test('switching workspace migrates state and runs under the new root', async () 
   assert.equal(switched.payload.copied, true);
   assert.equal(existsSync(path.join(target, 'state.json')), true);
   assert.equal(existsSync(path.join(target, 'aether.workspace.json')), true);
-  assert.equal(existsSync(path.join(target, 'modules', 'commands', 'prepare', 'module.json')), true);
-  assert.equal(existsSync(path.join(target, 'modules', 'commands', 'prepare', 'files')), true);
+  assert.equal(existsSync(path.join(target, 'resources', 'modules', 'prepare', 'resource.json')), true);
+  assert.equal(existsSync(path.join(target, 'resources', 'modules', 'prepare', 'files')), true);
   assert.equal(existsSync(path.join(target, 'experiments', 'nightly-experiment', 'experiment.json')), true);
   assert.equal(existsSync(path.join(target, 'subgraphs', 'demo-pipeline', 'subgraph.json')), true);
 

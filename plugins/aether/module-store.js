@@ -1,11 +1,11 @@
-// 模块存储：按类别分目录，每个模块一个自己的目录。
-//   modules/commands/<folder>/module.json        命令模块描述
-//   modules/subgraphs/<folder>/module.json       子图模块描述
-//   modules/datasets/<folder>/module.json        数据集模块描述
-//   modules/<category>/<folder>/files/           模块提交的文件或目录
-//   modules/<category>/<folder>/versions/vN.json 历史版本快照
+// 资源存储：按类别分目录，每个资源一个自己的目录。
+//   resources/modules/<folder>/resource.json        模块资源描述
+//   resources/subgraphs/<folder>/resource.json      子图资源描述
+//   resources/datasets/<folder>/resource.json       数据集资源描述
+//   resources/<category>/<folder>/files/            资源提交的文件或目录
+//   resources/<category>/<folder>/versions/vN.json  历史版本快照
 //
-// state.json 仍保留模块索引/镜像，但每个模块目录始终会被补齐。
+// state.json 仍保留资源索引/镜像，但每个资源目录始终会被补齐。
 import { existsSync, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -14,49 +14,78 @@ import { DATA_VERSION } from './constants.js';
 import { safeSegment } from './executor.js';
 import { normalizeModule } from './dag.js';
 
-const CATEGORIES = ['commands', 'subgraphs', 'datasets'];
-const CATEGORY_BY_KIND = { command: 'commands', graph: 'subgraphs', dataset: 'datasets' };
+const RESOURCE_ROOT = 'resources';
+const LEGACY_ROOT = 'modules';
+const DESCRIPTION_FILE = 'resource.json';
+const LEGACY_DESCRIPTION_FILE = 'module.json';
+const CATEGORIES = ['modules', 'subgraphs', 'datasets'];
+const CATEGORY_BY_KIND = { command: 'modules', graph: 'subgraphs', dataset: 'datasets' };
 
 function shortHash(value) {
   return createHash('sha1').update(String(value)).digest('hex').slice(0, 8);
 }
 
 function moduleRoot(root) {
-  return path.join(root, 'modules');
+  return path.join(root, RESOURCE_ROOT);
+}
+
+function legacyModuleRoot(root) {
+  return path.join(root, LEGACY_ROOT);
 }
 
 function categoryFor(module) {
-  return CATEGORY_BY_KIND[module && module.kind] || 'commands';
+  return CATEGORY_BY_KIND[module && module.kind] || 'modules';
 }
 
 async function readDescription(folder) {
-  try {
-    return JSON.parse(await fsp.readFile(path.join(folder, 'module.json'), 'utf8'));
-  } catch {
-    return null;
+  for (const name of [DESCRIPTION_FILE, LEGACY_DESCRIPTION_FILE]) {
+    try {
+      return JSON.parse(await fsp.readFile(path.join(folder, name), 'utf8'));
+    } catch {
+      // 尝试下一个兼容文件名。
+    }
   }
+  return null;
 }
 
 async function listModuleFolders(root) {
-  const base = moduleRoot(root);
   const folders = [];
-  for (const category of CATEGORIES) {
-    const parent = path.join(base, category);
-    const entries = await fsp.readdir(parent, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const folder = path.join(parent, entry.name);
-      const description = await readDescription(folder);
-      if (description) folders.push(folder);
+  const seen = new Set();
+  const roots = [
+    { base: moduleRoot(root), categories: CATEGORIES },
+    { base: legacyModuleRoot(root), categories: ['commands', ...CATEGORIES] },
+  ];
+  for (const { base, categories } of roots) {
+    for (const category of categories) {
+      const parent = path.join(base, category);
+      const entries = await fsp.readdir(parent, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const folder = path.join(parent, entry.name);
+        const description = await readDescription(folder);
+        if (description && !seen.has(folder)) {
+          seen.add(folder);
+          folders.push(folder);
+        }
+      }
     }
-  }
-  // 兼容旧版直接放在 modules/<folder> 的目录。
-  const legacy = await fsp.readdir(base, { withFileTypes: true }).catch(() => []);
-  for (const entry of legacy) {
-    if (!entry.isDirectory() || CATEGORIES.includes(entry.name) || entry.name.startsWith('.')) continue;
-    const folder = path.join(base, entry.name);
-    const description = await readDescription(folder);
-    if (description) folders.push(folder);
+    // 兼容更早的 modules/<folder> 平铺目录。
+    const legacy = await fsp.readdir(base, { withFileTypes: true }).catch(() => []);
+    for (const entry of legacy) {
+      if (
+        !entry.isDirectory() ||
+        categories.includes(entry.name) ||
+        entry.name.startsWith('.')
+      ) {
+        continue;
+      }
+      const folder = path.join(base, entry.name);
+      const description = await readDescription(folder);
+      if (description && !seen.has(folder)) {
+        seen.add(folder);
+        folders.push(folder);
+      }
+    }
   }
   return folders;
 }
@@ -88,7 +117,7 @@ async function chooseFolder(root, module) {
 
 function descriptionFor(module, assetPath) {
   return {
-    format: 'aether-module',
+    format: 'aether-resource',
     formatVersion: 1,
     dataVersion: DATA_VERSION,
     id: module.id,
@@ -129,7 +158,7 @@ async function writeVersionFiles(folder, module) {
     keep.add(name);
     await fsp.writeFile(
       path.join(versionsDir, name),
-      JSON.stringify({ format: 'aether-module-version', ...snapshot }, null, 2),
+      JSON.stringify({ format: 'aether-resource-version', ...snapshot }, null, 2),
       'utf8',
     );
   }
@@ -164,11 +193,13 @@ export async function writeModuleFolder(root, input) {
     if (source && source !== target && existsSync(source)) {
       await fsp.rm(target, { recursive: true, force: true });
       await fsp.cp(source, target, { recursive: true, force: true });
-      for (const tempDir of ['.uploads', 'assets']) {
-        const assetsRoot = path.resolve(root, 'modules', tempDir);
-        if (source === assetsRoot || source.startsWith(assetsRoot + path.sep)) {
-          await fsp.rm(source, { recursive: true, force: true });
-          break;
+      for (const tempRoot of [moduleRoot(root), legacyModuleRoot(root)]) {
+        for (const tempDir of ['.uploads', 'assets']) {
+          const assetsRoot = path.resolve(tempRoot, tempDir);
+          if (source === assetsRoot || source.startsWith(assetsRoot + path.sep)) {
+            await fsp.rm(source, { recursive: true, force: true });
+            break;
+          }
         }
       }
     }
@@ -176,13 +207,27 @@ export async function writeModuleFolder(root, input) {
   }
   module.assetPath = assetPath;
   await fsp.writeFile(
-    path.join(folder, 'module.json'),
+    path.join(folder, DESCRIPTION_FILE),
     JSON.stringify(descriptionFor(module, assetPath), null, 2),
     'utf8',
   );
+  await fsp.rm(path.join(folder, LEGACY_DESCRIPTION_FILE), { force: true }).catch(() => {});
   await writeVersionFiles(folder, module);
   await removeDuplicateFolders(root, module.id, folder);
   return module;
+}
+
+async function pruneLegacyRoot(root) {
+  const legacy = legacyModuleRoot(root);
+  async function prune(directory) {
+    const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isDirectory()) await prune(path.join(directory, entry.name));
+    }
+    const remaining = await fsp.readdir(directory).catch(() => ['keep']);
+    if (!remaining.length) await fsp.rmdir(directory).catch(() => {});
+  }
+  await prune(legacy);
 }
 
 export async function materializeModules(root, modules) {
@@ -190,6 +235,7 @@ export async function materializeModules(root, modules) {
   for (const module of modules || []) {
     updated.push(await writeModuleFolder(root, module));
   }
+  await pruneLegacyRoot(root);
   return updated;
 }
 

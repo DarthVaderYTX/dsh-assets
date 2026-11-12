@@ -1,5 +1,5 @@
 export const API_PREFIX = '/aether-api';
-export const DATA_VERSION = 7;
+export const DATA_VERSION = 8;
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const MAX_ASSET_BYTES = 20 * 1024 * 1024;
 export const MAX_ASSET_FILES = 500;

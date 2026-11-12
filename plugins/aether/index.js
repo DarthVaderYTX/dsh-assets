@@ -77,7 +77,7 @@ async function writeWorkspaceManifest(root = dataDir(), seed = {}) {
     updatedAt: now,
     layout: {
       state: 'state.json',
-      modules: 'modules',
+      resources: 'resources',
       experiments: 'experiments',
       subgraphs: 'subgraphs',
       runs: 'runs',
@@ -171,7 +171,7 @@ async function switchWorkspace(rawPath) {
   let copied = false;
   if (!hasState) {
     const state = await readState();
-    for (const name of ['modules', 'experiments', 'subgraphs', 'runs']) {
+    for (const name of ['resources', 'experiments', 'subgraphs', 'runs']) {
       const source = path.join(current, name);
       if (existsSync(source)) {
         await fsp.cp(source, path.join(target, name), { recursive: true, force: true });
@@ -199,7 +199,7 @@ async function switchWorkspace(rawPath) {
 async function collectWorkspaceFiles(root) {
   const files = [];
   const roots = [
-    path.join(root, 'modules'),
+    path.join(root, 'resources'),
     path.join(root, 'experiments'),
     path.join(root, 'subgraphs'),
   ];
@@ -243,7 +243,7 @@ async function backupWorkspaceForImport() {
   if (existsSync(manifestSource)) {
     await fsp.copyFile(manifestSource, path.join(root, 'aether.workspace.json'));
   }
-  for (const name of ['modules', 'experiments', 'subgraphs']) {
+  for (const name of ['resources', 'modules', 'experiments', 'subgraphs']) {
     const source = path.join(dataDir(), name);
     if (existsSync(source)) await fsp.cp(source, path.join(root, name), { recursive: true, force: true });
   }
@@ -262,6 +262,7 @@ async function importWorkspaceBundle(bundle) {
   for (const file of bundleFiles) {
     const cleaned = String(file && file.path ? file.path : '').replace(/\\/g, '/');
     const allowed =
+      cleaned.startsWith('resources/') ||
       cleaned.startsWith('modules/') ||
       cleaned.startsWith('experiments/') ||
       cleaned.startsWith('subgraphs/');
@@ -278,7 +279,7 @@ async function importWorkspaceBundle(bundle) {
   }
 
   const backup = await backupWorkspaceForImport();
-  for (const name of ['modules', 'experiments', 'subgraphs']) {
+  for (const name of ['resources', 'modules', 'experiments', 'subgraphs']) {
     const root = path.join(dataDir(), name);
     await fsp.rm(root, { recursive: true, force: true });
     await fsp.mkdir(root, { recursive: true });
@@ -361,7 +362,7 @@ async function loadState() {
     // v1 → v2 补执行环境；v2 → v3 补模块端口与旧连线的默认端口；
     // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
     // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表；
-    // v6 → v7 将模块/实验/子图迁移到分类目录。
+    // v6 → v7 将模块/实验/子图迁移到分类目录；v7 → v8 将 modules 重命名为 resources、module.json 重命名为 resource.json。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -953,7 +954,7 @@ function moduleSnapshot(module) {
 }
 
 function assetBaseDir() {
-  return path.join(dataDir(), 'modules', '.uploads');
+  return path.join(dataDir(), 'resources', '.uploads');
 }
 
 function moduleAssetRoot(module) {
@@ -1017,7 +1018,7 @@ async function storeModuleAsset(body) {
     assetId,
     assetKind: kind,
     assetName: name,
-    assetPath: path.join('modules', '.uploads', assetId),
+    assetPath: path.join('resources', '.uploads', assetId),
     assetFileCount: decoded.length,
     assetSize: total,
   };
