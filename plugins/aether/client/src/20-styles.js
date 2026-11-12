@@ -330,16 +330,16 @@
   position: absolute; width: 168px; height: 68px;
   display: flex; flex-direction: column; justify-content: center; gap: 3px;
   padding: 8px 11px; text-align: left;
-  border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px;
+  border: 1px solid #94a3b8; border-radius: 10px;
   background: var(--dsw-alias-bg-layer-1); color: inherit; cursor: pointer;
   box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
 }
-.ath-canvas-node:hover { border-color: var(--dsw-alias-border-l2); }
+.ath-canvas-node:hover { border-color: #64748b; }
 .ath-canvas-node[data-kind="dataset"] {
-  border-color: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-border-l1));
+  border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
   background: color-mix(in srgb, var(--ath-dataset) 5%, var(--dsw-alias-bg-layer-1));
 }
-.ath-canvas-node[data-selected="true"] { border-color: #94a3b8; box-shadow: 0 0 0 2px rgba(100, 116, 139, .14); }
+.ath-canvas-node[data-selected="true"] { border-color: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, .18); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
 .ath-canvas-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-canvas-node-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; white-space: nowrap; }
@@ -384,31 +384,31 @@
 }
 .ath-node-card {
   position: absolute; width: 200px;
-  border: 1px solid var(--ath-border-soft); border-radius: 11px;
+  border: 1px solid #94a3b8; border-radius: 11px;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: 0 1px 2px rgba(32, 43, 61, .05);
   cursor: grab;
 }
 .ath-node-card:active { cursor: grabbing; }
 .ath-node-card[data-kind="dataset"] {
-  border-color: color-mix(in srgb, var(--ath-dataset) 32%, var(--ath-border-soft));
+  border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
   background: color-mix(in srgb, var(--ath-dataset) 5%, var(--dsw-alias-bg-layer-1));
 }
 .ath-node-card[data-kind="dataset"]::before {
   content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--ath-dataset);
 }
-.ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-dataset) 34%, var(--ath-border-soft)); }
+.ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-dataset) 45%, #64748b); }
 .ath-node-card[data-kind="dataset"] .ath-node-tag { color: var(--ath-dataset); }
 .ath-node-card[data-selected="true"] {
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 2px rgba(100, 116, 139, .14);
+  border-color: #64748b;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, .18);
 }
 .ath-node-head {
   height: 38px; padding: 5px 10px;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto;
   column-gap: 5px; align-content: center;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 .ath-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-node-tag {
@@ -583,13 +583,13 @@
   --ath-status-ink: var(--ath-gray-ink);
 }
 .ath-run-node {
-  border-color: var(--ath-status-40);
+  border-color: color-mix(in srgb, var(--ath-status) 62%, #64748b);
   background: var(--ath-status-40);
   box-shadow: inset 0 3px 0 var(--ath-status), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] {
   background: var(--ath-dataset-40);
-  border-color: var(--ath-dataset-40);
+  border-color: color-mix(in srgb, var(--ath-dataset) 60%, #64748b);
   box-shadow: inset 4px 0 0 var(--ath-dataset), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] .ath-node-sub { color: var(--ath-dataset-ink); }
@@ -598,11 +598,11 @@
   box-shadow: 0 0 0 2px var(--ath-dataset-40), inset 4px 0 0 var(--ath-dataset);
 }
 .ath-run-node[data-selected="true"] {
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 2px rgba(100, 116, 139, .14), inset 0 3px 0 var(--ath-status);
+  border-color: #64748b;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, .18), inset 0 3px 0 var(--ath-status);
 }
 .ath-run-node .ath-node-sub { color: var(--ath-status-ink); font-weight: 600; }
-.ath-run-node .ath-node-head { border-bottom-color: var(--ath-status-40); }
+.ath-run-node .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-status) 55%, #64748b); }
 .ath-run-pulse {
   width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; margin-left: auto;
   background: var(--ath-yellow);
