@@ -69,6 +69,10 @@
       return toType === 'string' && ['number', 'boolean', 'json'].includes(fromType);
     }
 
+    function portTypeHint(t, name, type) {
+      return `${name} · ${t(`modules.type.${type || 'string'}`)}`;
+    }
+
     function paramsToRows(params, types) {
       return Object.entries(params || {}).map(([key, value]) => ({
         key,

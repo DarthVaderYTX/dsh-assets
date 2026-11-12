@@ -972,7 +972,11 @@
                                       key: `in-${port}`,
                                       className: 'ath-vport-name',
                                       'data-required': requiredInputs.has(port) ? 'true' : 'false',
-                                      title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                                      title: portTypeHint(
+                                        t,
+                                        port,
+                                        module.inputTypes && module.inputTypes[port],
+                                      ),
                                     },
                                     `${port}${requiredInputs.has(port) ? ' *' : ''}`,
                                   ),
@@ -984,7 +988,21 @@
                           h(
                             'div',
                             { className: 'ath-node-vports-row ath-node-vports-bottom' },
-                            ports.outputs.map((port) => h('span', { key: `out-${port}`, className: 'ath-vport-name' }, port)),
+                            ports.outputs.map((port) =>
+                              h(
+                                'span',
+                                {
+                                  key: `out-${port}`,
+                                  className: 'ath-vport-name',
+                                  title: portTypeHint(
+                                    t,
+                                    port,
+                                    module.outputTypes && module.outputTypes[port],
+                                  ),
+                                },
+                                port,
+                              ),
+                            ),
                           ),
                         )
                       : rows
@@ -1000,10 +1018,30 @@
                                   {
                                     className: 'ath-port-name ath-port-in-name',
                                     'data-required': requiredInputs.has(ports.inputs[row]) ? 'true' : 'false',
+                                    title: ports.inputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.inputs[row],
+                                          module.inputTypes && module.inputTypes[ports.inputs[row]],
+                                        )
+                                      : undefined,
                                   },
                                   `${ports.inputs[row] || ''}${requiredInputs.has(ports.inputs[row]) ? ' *' : ''}`,
                                 ),
-                                h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
+                                h(
+                                  'span',
+                                  {
+                                    className: 'ath-port-name ath-port-out-name',
+                                    title: ports.outputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.outputs[row],
+                                          module.outputTypes && module.outputTypes[ports.outputs[row]],
+                                        )
+                                      : undefined,
+                                  },
+                                  ports.outputs[row] || '',
+                                ),
                               ),
                             ),
                           )
@@ -1019,9 +1057,11 @@
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
-                        title: `${t('canvas.input')}: ${port} · ${t(
-                          `modules.type.${(module.inputTypes && module.inputTypes[port]) || 'string'}`,
-                        )}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          module.inputTypes && module.inputTypes[port],
+                        ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
                       }),
                     ),
@@ -1036,9 +1076,11 @@
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'output',
-                        title: `${t('canvas.output')}: ${port} · ${t(
-                          `modules.type.${(module.outputTypes && module.outputTypes[port]) || 'string'}`,
-                        )}`,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          module.outputTypes && module.outputTypes[port],
+                        ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
                       }),
                     ),

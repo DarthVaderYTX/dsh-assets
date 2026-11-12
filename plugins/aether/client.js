@@ -1610,6 +1610,10 @@ window.__ModuleLoader__.load({
       return toType === 'string' && ['number', 'boolean', 'json'].includes(fromType);
     }
 
+    function portTypeHint(t, name, type) {
+      return `${name} · ${t(`modules.type.${type || 'string'}`)}`;
+    }
+
     function paramsToRows(params, types) {
       return Object.entries(params || {}).map(([key, value]) => ({
         key,
@@ -3712,7 +3716,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                       key: `in-${port}`,
                                       className: 'ath-vport-name',
                                       'data-required': requiredInputs.has(port) ? 'true' : 'false',
-                                      title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                                      title: portTypeHint(
+                                        t,
+                                        port,
+                                        node.inputTypes && node.inputTypes[port],
+                                      ),
                                     },
                                     `${port}${requiredInputs.has(port) ? ' *' : ''}`,
                                   ),
@@ -3728,10 +3736,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                 {
                                   key: `out-${port}`,
                                   className: 'ath-vport-name',
-                                  title:
-                                    node.kind === 'dataset' || node.status === 'succeeded'
-                                      ? t('runs.outputHint')
-                                      : undefined,
+                                  title: portTypeHint(
+                                    t,
+                                    port,
+                                    node.outputTypes && node.outputTypes[port],
+                                  ),
                                   onClick: (event) => openOutputMenu(event, node, port),
                                   onPointerDown: (event) => event.stopPropagation(),
                                   onContextMenu: (event) => openOutputMenu(event, node, port),
@@ -3754,6 +3763,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                   {
                                     className: 'ath-port-name ath-port-in-name',
                                     'data-required': requiredInputs.has(ports.inputs[row]) ? 'true' : 'false',
+                                    title: ports.inputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.inputs[row],
+                                          node.inputTypes && node.inputTypes[ports.inputs[row]],
+                                        )
+                                      : undefined,
                                   },
                                   `${ports.inputs[row] || ''}${requiredInputs.has(ports.inputs[row]) ? ' *' : ''}`,
                                 ),
@@ -3761,10 +3777,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                   'span',
                                   {
                                     className: 'ath-port-name ath-port-out-name',
-                                    title:
-                                      node.kind === 'dataset' || node.status === 'succeeded'
-                                        ? t('runs.outputHint')
-                                        : undefined,
+                                    title: ports.outputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.outputs[row],
+                                          node.outputTypes && node.outputTypes[ports.outputs[row]],
+                                        )
+                                      : undefined,
                                     onClick: ports.outputs[row]
                                       ? (event) => openOutputMenu(event, node, ports.outputs[row])
                                       : undefined,
@@ -3785,7 +3804,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       h('div', {
                         key: `in-${port}`,
                         className: `ath-port-dot ath-run-port ath-port-in${requiredInputs.has(port) ? ' ath-port-required' : ''}${direction === 'vertical' ? ' ath-port-top' : ''}`,
-                        title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          node.inputTypes && node.inputTypes[port],
+                        ),
                         style:
                           direction === 'vertical'
                             ? { left: portX(index, ports.inputs.length, size.width) - 5, top: -5 }
@@ -3796,10 +3819,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       h('div', {
                         key: `out-${port}`,
                         className: `ath-port-dot ath-run-port ath-run-port-output ath-port-out${direction === 'vertical' ? ' ath-port-bottom' : ''}`,
-                        title:
-                          node.kind === 'dataset' || node.status === 'succeeded'
-                            ? t('runs.outputHint')
-                            : undefined,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          node.outputTypes && node.outputTypes[port],
+                        ),
                         onClick: (event) => openOutputMenu(event, node, port),
                         onPointerDown: (event) => event.stopPropagation(),
                         onContextMenu: (event) => openOutputMenu(event, node, port),
@@ -4924,7 +4948,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                       key: `in-${port}`,
                                       className: 'ath-vport-name',
                                       'data-required': requiredInputs.has(port) ? 'true' : 'false',
-                                      title: `${t('canvas.input')}: ${port}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                                      title: portTypeHint(
+                                        t,
+                                        port,
+                                        module.inputTypes && module.inputTypes[port],
+                                      ),
                                     },
                                     `${port}${requiredInputs.has(port) ? ' *' : ''}`,
                                   ),
@@ -4936,7 +4964,21 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                           h(
                             'div',
                             { className: 'ath-node-vports-row ath-node-vports-bottom' },
-                            ports.outputs.map((port) => h('span', { key: `out-${port}`, className: 'ath-vport-name' }, port)),
+                            ports.outputs.map((port) =>
+                              h(
+                                'span',
+                                {
+                                  key: `out-${port}`,
+                                  className: 'ath-vport-name',
+                                  title: portTypeHint(
+                                    t,
+                                    port,
+                                    module.outputTypes && module.outputTypes[port],
+                                  ),
+                                },
+                                port,
+                              ),
+                            ),
                           ),
                         )
                       : rows
@@ -4952,10 +4994,30 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                   {
                                     className: 'ath-port-name ath-port-in-name',
                                     'data-required': requiredInputs.has(ports.inputs[row]) ? 'true' : 'false',
+                                    title: ports.inputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.inputs[row],
+                                          module.inputTypes && module.inputTypes[ports.inputs[row]],
+                                        )
+                                      : undefined,
                                   },
                                   `${ports.inputs[row] || ''}${requiredInputs.has(ports.inputs[row]) ? ' *' : ''}`,
                                 ),
-                                h('span', { className: 'ath-port-name ath-port-out-name' }, ports.outputs[row] || ''),
+                                h(
+                                  'span',
+                                  {
+                                    className: 'ath-port-name ath-port-out-name',
+                                    title: ports.outputs[row]
+                                      ? portTypeHint(
+                                          t,
+                                          ports.outputs[row],
+                                          module.outputTypes && module.outputTypes[ports.outputs[row]],
+                                        )
+                                      : undefined,
+                                  },
+                                  ports.outputs[row] || '',
+                                ),
                               ),
                             ),
                           )
@@ -4971,9 +5033,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
-                        title: `${t('canvas.input')}: ${port} · ${t(
-                          `modules.type.${(module.inputTypes && module.inputTypes[port]) || 'string'}`,
-                        )}${requiredInputs.has(port) ? ` (${t('modules.requiredInput')})` : ''}`,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          module.inputTypes && module.inputTypes[port],
+                        ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
                       }),
                     ),
@@ -4988,9 +5052,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'output',
-                        title: `${t('canvas.output')}: ${port} · ${t(
-                          `modules.type.${(module.outputTypes && module.outputTypes[port]) || 'string'}`,
-                        )}`,
+                        title: portTypeHint(
+                          t,
+                          port,
+                          module.outputTypes && module.outputTypes[port],
+                        ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
                       }),
                     ),
