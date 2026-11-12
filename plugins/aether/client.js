@@ -2384,9 +2384,19 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         {
           t,
           title: t('newModule.title'),
-          onClose,
+          onClose: busy ? () => {} : onClose,
           footer: [
-            h('button', { key: 'cancel', type: 'button', className: 'ath-btn ath-btn-ghost', onClick: onClose }, t('common.cancel')),
+            h(
+              'button',
+              {
+                key: 'cancel',
+                type: 'button',
+                className: 'ath-btn',
+                disabled: busy,
+                onClick: onClose,
+              },
+              t('action.cancel'),
+            ),
             h(
               'button',
               {
