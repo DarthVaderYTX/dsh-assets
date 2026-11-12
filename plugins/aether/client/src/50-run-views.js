@@ -319,6 +319,9 @@
       const [command, setCommand] = useState('');
       const [datasetUri, setDatasetUri] = useState('');
       const [datasetFormat, setDatasetFormat] = useState('');
+      const [inputRows, setInputRows] = useState([]);
+      const [outputRows, setOutputRows] = useState([]);
+      const [paramRows, setParamRows] = useState([]);
       const [asset, setAsset] = useState(null);
       const [formError, setFormError] = useState('');
       const fileInputRef = useRef(null);
@@ -357,6 +360,12 @@
         }
       };
 
+      const addConfigRow = (setter) => setter((rows) => [...rows, { name: '', type: 'string' }]);
+      const updateConfigRow = (setter, index, patchValue) =>
+        setter((rows) => rows.map((row, position) => (position === index ? { ...row, ...patchValue } : row)));
+      const removeConfigRow = (setter, index) =>
+        setter((rows) => rows.filter((_, position) => position !== index));
+
       const submit = () => {
         setFormError('');
         if (!name.trim()) {
@@ -371,6 +380,45 @@
           setFormError(t('newModule.validationDatasetUri'));
           return;
         }
+
+        const inputs = [];
+        const inputTypes = {};
+        const outputs = [];
+        const outputTypes = {};
+        const params = {};
+        const paramTypes = {};
+        const seen = new Set();
+        if (kind === 'command') {
+          for (const [category, rows] of [
+            ['input', inputRows],
+            ['output', outputRows],
+            ['param', paramRows],
+          ]) {
+            for (const row of rows) {
+              const key = String(row.name || '').trim();
+              if (!key) {
+                setFormError(t('newModule.validationConfigName'));
+                return;
+              }
+              if (seen.has(key)) {
+                setFormError(tr(t, 'newModule.validationDuplicateName', { name: key }));
+                return;
+              }
+              seen.add(key);
+              if (category === 'input') {
+                inputs.push(key);
+                inputTypes[key] = row.type || 'string';
+              } else if (category === 'output') {
+                outputs.push(key);
+                outputTypes[key] = row.type || 'string';
+              } else {
+                params[key] = '';
+                paramTypes[key] = row.type || 'string';
+              }
+            }
+          }
+        }
+
         onCreate({
           kind,
           name: name.trim(),
@@ -379,8 +427,71 @@
           datasetUri: datasetUri.trim(),
           datasetFormat: datasetFormat.trim(),
           asset: kind === 'command' ? asset : null,
+          inputs,
+          inputTypes,
+          outputs: kind === 'command' ? outputs : ['rows'],
+          outputTypes: kind === 'command' ? outputTypes : { rows: 'string' },
+          params,
+          paramTypes,
         });
       };
+
+      const renderConfigCard = (title, rows, setter, paramOnly = false, wide = false) =>
+        h(
+          'div',
+          { className: `ath-card ath-resource-config${wide ? ' ath-resource-config-wide' : ''}` },
+          h(
+            'div',
+            { className: 'ath-resource-config-head' },
+            h('h4', { className: 'ath-section-title' }, title),
+            h('span', { className: 'ath-hint' }, String(rows.length)),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ath-icon-btn',
+                title: t('action.add'),
+                'aria-label': t('action.add'),
+                onClick: () => addConfigRow(setter),
+              },
+              '+',
+            ),
+          ),
+          rows.length
+            ? rows.map((row, index) =>
+                h(
+                  'div',
+                  { className: 'ath-resource-config-row', key: index },
+                  h('input', {
+                    className: 'ath-input ath-mono',
+                    type: 'text',
+                    value: row.name,
+                    maxLength: 40,
+                    placeholder: t('newModule.configName'),
+                    spellCheck: false,
+                    onChange: (event) => updateConfigRow(setter, index, { name: event.target.value }),
+                  }),
+                  h(TypeSelect, {
+                    t,
+                    value: row.type,
+                    paramOnly,
+                    onChange: (type) => updateConfigRow(setter, index, { type }),
+                  }),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-icon-btn',
+                      title: t('action.remove'),
+                      'aria-label': t('action.remove'),
+                      onClick: () => removeConfigRow(setter, index),
+                    },
+                    '−',
+                  ),
+                ),
+              )
+            : h('div', { className: 'ath-hint' }, t('newModule.configEmpty')),
+        );
 
       const shownError = formError || error;
       return h(
@@ -535,6 +646,13 @@
                       )
                     : null,
                   h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
+                ),
+                h(
+                  'div',
+                  { key: 'config', className: 'ath-resource-config-grid' },
+                  renderConfigCard(t('modules.inputs'), inputRows, setInputRows),
+                  renderConfigCard(t('modules.outputs'), outputRows, setOutputRows),
+                  renderConfigCard(t('common.params'), paramRows, setParamRows, true, true),
                 ),
                 h(
                   'div',

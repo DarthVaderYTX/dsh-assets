@@ -323,6 +323,10 @@ window.__ModuleLoader__.load({
       'newModule.validationName': '请填写资源名称',
       'newModule.validationAsset': '请选择模块文件或文件夹',
       'newModule.validationDatasetUri': '请填写数据集 URI / 路径',
+      'newModule.configName': '名称',
+      'newModule.configEmpty': '还没有配置，点击 + 添加',
+      'newModule.validationConfigName': '请填写输入 / 输出 / 参数的名称',
+      'newModule.validationDuplicateName': '名称「{name}」重复',
       'modules.placeholder.name': '例如：训练模型',
       'modules.placeholder.description': '这个模块做什么、输入输出是什么',
       'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
@@ -672,6 +676,10 @@ window.__ModuleLoader__.load({
       'newModule.validationName': 'Enter a resource name',
       'newModule.validationAsset': 'Choose a module file or folder',
       'newModule.validationDatasetUri': 'Enter a dataset URI / path',
+      'newModule.configName': 'Name',
+      'newModule.configEmpty': 'Nothing configured yet; click + to add',
+      'newModule.validationConfigName': 'Enter a name for each input / output / parameter',
+      'newModule.validationDuplicateName': 'Duplicate name "{name}"',
       'modules.placeholder.name': 'e.g. Train model',
       'modules.placeholder.description': 'What this module does and what it consumes or produces',
       'modules.placeholder.command': 'node scripts/run.js --input "@@input@@" --output "@@output@@"',
@@ -1440,8 +1448,27 @@ window.__ModuleLoader__.load({
 .ath-resource-modal .ath-chip[data-active="true"] { color: #111827; background: #f3f4f6; border-color: #9ca3af; }
 .ath-resource-modal .ath-asset-chip { background: #f9fafb; }
 .ath-resource-modal .ath-btn-ghost { color: #374151; }
+.ath-resource-modal .ath-icon-btn { color: #6b7280; }
+.ath-resource-modal .ath-icon-btn:hover { color: #111827; background: #f3f4f6; border-color: #d1d5db; }
 .ath-resource-modal .ath-input,
 .ath-resource-modal .ath-select { background: #fff; color: #111827; border-color: #d1d5db; }
+.ath-resource-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ath-resource-config {
+  padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px;
+  background: #f8fafc; box-shadow: none;
+}
+.ath-resource-config-wide { grid-column: 1 / -1; }
+.ath-resource-config-head { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+.ath-resource-config-head .ath-section-title { margin: 0; font-size: 12px; color: #111827; }
+.ath-resource-config-head .ath-hint { margin-left: auto; }
+.ath-resource-config-head .ath-icon-btn { width: 22px; height: 22px; }
+.ath-resource-config-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 76px 22px;
+  gap: 5px; align-items: center;
+}
+.ath-resource-config-row + .ath-resource-config-row { margin-top: 5px; }
+.ath-resource-config-row .ath-input { min-width: 0; }
+.ath-resource-config .ath-hint { margin-top: 2px; }
 .ath-modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 11px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .ath-modal-head h3 { margin: 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .ath-modal-head .ath-icon-btn { margin-left: auto; }
@@ -1495,6 +1522,8 @@ window.__ModuleLoader__.load({
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-resource-config-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-resource-config-wide { grid-column: auto; }
   .ath-brand-sub { display: none; }
   .ath-workspace {
     max-width: none; padding: 0; border: 0; background: transparent;
@@ -2423,6 +2452,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [command, setCommand] = useState('');
       const [datasetUri, setDatasetUri] = useState('');
       const [datasetFormat, setDatasetFormat] = useState('');
+      const [inputRows, setInputRows] = useState([]);
+      const [outputRows, setOutputRows] = useState([]);
+      const [paramRows, setParamRows] = useState([]);
       const [asset, setAsset] = useState(null);
       const [formError, setFormError] = useState('');
       const fileInputRef = useRef(null);
@@ -2461,6 +2493,12 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         }
       };
 
+      const addConfigRow = (setter) => setter((rows) => [...rows, { name: '', type: 'string' }]);
+      const updateConfigRow = (setter, index, patchValue) =>
+        setter((rows) => rows.map((row, position) => (position === index ? { ...row, ...patchValue } : row)));
+      const removeConfigRow = (setter, index) =>
+        setter((rows) => rows.filter((_, position) => position !== index));
+
       const submit = () => {
         setFormError('');
         if (!name.trim()) {
@@ -2475,6 +2513,45 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           setFormError(t('newModule.validationDatasetUri'));
           return;
         }
+
+        const inputs = [];
+        const inputTypes = {};
+        const outputs = [];
+        const outputTypes = {};
+        const params = {};
+        const paramTypes = {};
+        const seen = new Set();
+        if (kind === 'command') {
+          for (const [category, rows] of [
+            ['input', inputRows],
+            ['output', outputRows],
+            ['param', paramRows],
+          ]) {
+            for (const row of rows) {
+              const key = String(row.name || '').trim();
+              if (!key) {
+                setFormError(t('newModule.validationConfigName'));
+                return;
+              }
+              if (seen.has(key)) {
+                setFormError(tr(t, 'newModule.validationDuplicateName', { name: key }));
+                return;
+              }
+              seen.add(key);
+              if (category === 'input') {
+                inputs.push(key);
+                inputTypes[key] = row.type || 'string';
+              } else if (category === 'output') {
+                outputs.push(key);
+                outputTypes[key] = row.type || 'string';
+              } else {
+                params[key] = '';
+                paramTypes[key] = row.type || 'string';
+              }
+            }
+          }
+        }
+
         onCreate({
           kind,
           name: name.trim(),
@@ -2483,8 +2560,71 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           datasetUri: datasetUri.trim(),
           datasetFormat: datasetFormat.trim(),
           asset: kind === 'command' ? asset : null,
+          inputs,
+          inputTypes,
+          outputs: kind === 'command' ? outputs : ['rows'],
+          outputTypes: kind === 'command' ? outputTypes : { rows: 'string' },
+          params,
+          paramTypes,
         });
       };
+
+      const renderConfigCard = (title, rows, setter, paramOnly = false, wide = false) =>
+        h(
+          'div',
+          { className: `ath-card ath-resource-config${wide ? ' ath-resource-config-wide' : ''}` },
+          h(
+            'div',
+            { className: 'ath-resource-config-head' },
+            h('h4', { className: 'ath-section-title' }, title),
+            h('span', { className: 'ath-hint' }, String(rows.length)),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ath-icon-btn',
+                title: t('action.add'),
+                'aria-label': t('action.add'),
+                onClick: () => addConfigRow(setter),
+              },
+              '+',
+            ),
+          ),
+          rows.length
+            ? rows.map((row, index) =>
+                h(
+                  'div',
+                  { className: 'ath-resource-config-row', key: index },
+                  h('input', {
+                    className: 'ath-input ath-mono',
+                    type: 'text',
+                    value: row.name,
+                    maxLength: 40,
+                    placeholder: t('newModule.configName'),
+                    spellCheck: false,
+                    onChange: (event) => updateConfigRow(setter, index, { name: event.target.value }),
+                  }),
+                  h(TypeSelect, {
+                    t,
+                    value: row.type,
+                    paramOnly,
+                    onChange: (type) => updateConfigRow(setter, index, { type }),
+                  }),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-icon-btn',
+                      title: t('action.remove'),
+                      'aria-label': t('action.remove'),
+                      onClick: () => removeConfigRow(setter, index),
+                    },
+                    '−',
+                  ),
+                ),
+              )
+            : h('div', { className: 'ath-hint' }, t('newModule.configEmpty')),
+        );
 
       const shownError = formError || error;
       return h(
@@ -2639,6 +2779,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       )
                     : null,
                   h('div', { className: 'ath-hint' }, t('newModule.assetHint')),
+                ),
+                h(
+                  'div',
+                  { key: 'config', className: 'ath-resource-config-grid' },
+                  renderConfigCard(t('modules.inputs'), inputRows, setInputRows),
+                  renderConfigCard(t('modules.outputs'), outputRows, setOutputRows),
+                  renderConfigCard(t('common.params'), paramRows, setParamRows, true, true),
                 ),
                 h(
                   'div',
@@ -6523,13 +6670,14 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 command: fields.kind === 'command' ? fields.command || '' : '',
                 cwd: '',
                 timeoutSec: 300,
-                params: {},
-                paramTypes: {},
-                inputs: fields.kind === 'dataset' ? [] : ['input'],
-                inputTypes: fields.kind === 'dataset' ? {} : { input: 'string' },
+                params: fields.kind === 'dataset' ? {} : fields.params || {},
+                paramTypes: fields.kind === 'dataset' ? {} : fields.paramTypes || {},
+                inputs: fields.kind === 'dataset' ? [] : fields.inputs || [],
+                inputTypes: fields.kind === 'dataset' ? {} : fields.inputTypes || {},
                 requiredInputs: [],
-                outputs: fields.kind === 'dataset' ? ['rows'] : ['output'],
-                outputTypes: fields.kind === 'dataset' ? { rows: 'string' } : { output: 'string' },
+                outputs: fields.kind === 'dataset' ? ['rows'] : fields.outputs || [],
+                outputTypes:
+                  fields.kind === 'dataset' ? { rows: 'string' } : fields.outputTypes || {},
                 graphId: '',
                 datasetUri: fields.kind === 'dataset' ? fields.datasetUri : '',
                 datasetFormat: fields.kind === 'dataset' ? fields.datasetFormat || '' : '',

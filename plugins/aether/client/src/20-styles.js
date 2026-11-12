@@ -721,8 +721,27 @@
 .ath-resource-modal .ath-chip[data-active="true"] { color: #111827; background: #f3f4f6; border-color: #9ca3af; }
 .ath-resource-modal .ath-asset-chip { background: #f9fafb; }
 .ath-resource-modal .ath-btn-ghost { color: #374151; }
+.ath-resource-modal .ath-icon-btn { color: #6b7280; }
+.ath-resource-modal .ath-icon-btn:hover { color: #111827; background: #f3f4f6; border-color: #d1d5db; }
 .ath-resource-modal .ath-input,
 .ath-resource-modal .ath-select { background: #fff; color: #111827; border-color: #d1d5db; }
+.ath-resource-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ath-resource-config {
+  padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px;
+  background: #f8fafc; box-shadow: none;
+}
+.ath-resource-config-wide { grid-column: 1 / -1; }
+.ath-resource-config-head { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+.ath-resource-config-head .ath-section-title { margin: 0; font-size: 12px; color: #111827; }
+.ath-resource-config-head .ath-hint { margin-left: auto; }
+.ath-resource-config-head .ath-icon-btn { width: 22px; height: 22px; }
+.ath-resource-config-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 76px 22px;
+  gap: 5px; align-items: center;
+}
+.ath-resource-config-row + .ath-resource-config-row { margin-top: 5px; }
+.ath-resource-config-row .ath-input { min-width: 0; }
+.ath-resource-config .ath-hint { margin-top: 2px; }
 .ath-modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 11px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .ath-modal-head h3 { margin: 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .ath-modal-head .ath-icon-btn { margin-left: auto; }
@@ -776,6 +795,8 @@
   .ath-page { padding: 12px; }
   .ath-editor-meta { grid-template-columns: minmax(0, 1fr); }
   .ath-type-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-resource-config-grid { grid-template-columns: minmax(0, 1fr); }
+  .ath-resource-config-wide { grid-column: auto; }
   .ath-brand-sub { display: none; }
   .ath-workspace {
     max-width: none; padding: 0; border: 0; background: transparent;
