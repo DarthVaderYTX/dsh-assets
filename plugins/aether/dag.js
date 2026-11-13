@@ -3,10 +3,15 @@
 // 这一层是纯函数，宿主运行时和 test/ 都直接调用；客户端只做轻量的本地预检，
 // 真正的判定以这里为准。
 
-const MODULE_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PARAM_KEY = /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/;
 const MAX_PORTS = 16;
 const MAX_PORT_LABEL = 40;
+
+/** 所有资源与实验的 id 都是 UUID（v4），保证全局唯一、与名称无关。 */
+export function isUuid(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value.trim());
+}
 
 export const DEFAULT_TIMEOUT_SEC = 300;
 export const MAX_TIMEOUT_SEC = 86400;
@@ -70,15 +75,6 @@ export function normalizeEnvironments(raw) {
     seen.add(item.id);
     return true;
   });
-}
-
-export function slugify(value, fallback = 'item') {
-  const text = String(value == null ? '' : value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
-  return text || fallback;
 }
 
 function isPlainObject(value) {
@@ -219,6 +215,12 @@ function normalizeCoordinate(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function normalizeNodeSize(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(2400, Math.round(number));
+}
+
 export function normalizeGraph(raw) {
   const source = isPlainObject(raw) ? raw : {};
   const nodes = (Array.isArray(source.nodes) ? source.nodes : [])
@@ -230,6 +232,8 @@ export function normalizeGraph(raw) {
       params: normalizeParams(node.params),
       x: normalizeCoordinate(node.x),
       y: normalizeCoordinate(node.y),
+      width: normalizeNodeSize(node.width),
+      height: normalizeNodeSize(node.height),
     }));
   const edges = (Array.isArray(source.edges) ? source.edges : [])
     .filter((edge) => edge && typeof edge === 'object')
@@ -404,7 +408,7 @@ function validateCommandTemplate(command, definedNames) {
 export function validateModule(module, modules = [], graphs = [], environments = []) {
   const errors = [];
   if (!module.id) errors.push('模块 id 不能为空');
-  else if (!MODULE_ID.test(module.id)) errors.push('模块 id 只能包含小写字母、数字和连字符，且不超过 63 个字符');
+  else if (!isUuid(module.id)) errors.push('模块 id 必须是 UUID');
   if (!module.name) errors.push('模块需要名称');
   if (!MODULE_KINDS.includes(module.kind)) errors.push('模块类型无效');
   if (modules.some((item) => item.id !== module.id && item.name.toLowerCase() === module.name.toLowerCase())) {
@@ -485,6 +489,7 @@ export function validateModule(module, modules = [], graphs = [], environments =
 
 export function validateGraph(graph, modules = [], graphs = []) {
   const errors = [];
+  if (graph.id && !isUuid(graph.id)) errors.push('实验 id 必须是 UUID');
   if (!graph.name) errors.push('实验需要名称');
   const moduleById = new Map(modules.map((module) => [module.id, module]));
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -704,6 +709,8 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         requiredInputs: module?.requiredInputs || [],
         datasetUri: module?.datasetUri || '',
         datasetFormat: module?.datasetFormat || '',
+        width: node.width || 0,
+        height: node.height || 0,
         assetPath: module?.assetPath || '',
         assetKind: module?.assetKind || '',
         assetName: module?.assetName || '',

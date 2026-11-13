@@ -34,6 +34,13 @@
       return t(`status.${status}`);
     }
 
+    // 实例的状态由它的执行单元决定：任一单元失败即算失败，其余沿用实例自身的状态。
+    function instanceStatus(run) {
+      if (!run) return 'pending';
+      if ((run.nodes || []).some((node) => node.status === 'failed')) return 'failed';
+      return run.status;
+    }
+
     function statusClass(status) {
       return status;
     }

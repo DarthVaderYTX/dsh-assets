@@ -191,6 +191,7 @@ export async function writeModuleFolder(root, input) {
 
   let assetPath = '';
   if (module.assetId) {
+    // 上传目录的内容直接放到 files/ 根下（前端上传文件夹时已经去掉所选文件夹这一层）。
     const target = path.join(folder, 'files');
     const source = module.assetPath ? path.resolve(root, module.assetPath) : '';
     if (source && source !== target && existsSync(source)) {

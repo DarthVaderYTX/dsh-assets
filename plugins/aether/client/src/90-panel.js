@@ -32,6 +32,7 @@
       const [runId, setRunId] = useState('');
       const [runDetail, setRunDetail] = useState(null);
       const [submitOpen, setSubmitOpen] = useState(false);
+      const [submitDraft, setSubmitDraft] = useState(null);
       const [submitting, setSubmitting] = useState(false);
       const [logView, setLogView] = useState(null);
       const [outputView, setOutputView] = useState(null);
@@ -198,24 +199,23 @@
         return () => window.clearInterval(timer);
       }, [hasRunning, refresh]);
 
-      const openSubmit = () => {
-        if (!data || !(data.graphs || []).filter((graph) => !graph.isSubgraph).length) {
-          pushToast(t('experiments.noRunnableGraphs'), 'error');
+      const openSubmitDraft = () => {
+        if (!graphDraft || !graphDraft.graph || !graphDraft.graph.nodes.length) {
+          pushToast(t('experiments.noNodesToSubmit'), 'error');
           return;
         }
+        setSubmitDraft(clone(graphDraft.graph));
         setSubmitOpen(true);
       };
 
       const submitExperiment = async (values) => {
         setSubmitting(true);
         try {
-          const payload = await request('/experiments', { method: 'POST', body: values });
+          await request('/experiments', { method: 'POST', body: values });
           setSubmitOpen(false);
+          setSubmitDraft(null);
           pushToast(t('toast.submitted'));
           await loadState(true);
-          setTab('runs');
-          setRunId(payload.experiment.id);
-          setRunDetail(payload.experiment);
         } catch (error) {
           fail(error);
         } finally {
@@ -246,6 +246,14 @@
             entry.key === activeEditorKey
               ? { ...entry, draft: typeof next === 'function' ? next(entry.draft) : next }
               : entry,
+          ),
+        );
+      };
+
+      const persistEditorState = (key, patch) => {
+        setEditorTabs((tabs) =>
+          tabs.map((entry) =>
+            entry.key === key ? { ...entry, draft: { ...entry.draft, ...patch } } : entry,
           ),
         );
       };
@@ -558,7 +566,7 @@
       const startModule = (module, kind = 'command') => {
         setModuleErrors([]);
         if (module) {
-          setModuleDraft({ module: clone(module), isNew: false, overwriteVersion: false });
+          setModuleDraft({ module: clone(module), isNew: false });
         } else {
           const nextKind = kind === 'graph' ? 'graph' : kind === 'dataset' ? 'dataset' : 'command';
           setModuleDraft({
@@ -584,7 +592,6 @@
               versions: [],
             },
             isNew: true,
-            overwriteVersion: false,
           });
         }
         setTab('modules');
@@ -652,7 +659,6 @@
             body: {
               module: moduleDraft.module,
               create: Boolean(moduleDraft.isNew),
-              overwriteVersion: Boolean(moduleDraft.overwriteVersion),
               requireAsset: Boolean(
                 moduleDraft.isNew && moduleDraft.module.kind === 'command' && !moduleDraft.module.assetId,
               ),
@@ -666,6 +672,15 @@
           setModuleErrors(message.split('；').filter(Boolean));
         } finally {
           setModuleSaving(false);
+        }
+      };
+
+      const copyModuleId = async (module) => {
+        try {
+          await navigator.clipboard.writeText(module.id);
+          pushToast(t('toast.copied'));
+        } catch {
+          // 剪贴板不可用时静默失败，id 仍然在卡片上可见。
         }
       };
 
@@ -721,7 +736,6 @@
             data,
             onNew: () => void startGraph(''),
             onEdit: (id) => void startGraph(id),
-            onDelete: deleteGraph,
           });
         }
         if (tab === 'modules') {
@@ -733,6 +747,7 @@
               setNewModuleOpen(true);
             },
             onEdit: (module) => startModule(module),
+            onCopy: copyModuleId,
             onDelete: deleteModule,
           });
         }
@@ -744,7 +759,6 @@
           filter,
           setFilter,
           onOpenRun: (id) => void openRun(id),
-          onNew: openSubmit,
           onCancelRun: cancelRun,
           onCopyRun: (run) => void copyRun(run),
           onRerun: (run) => void rerun(run),
@@ -779,6 +793,9 @@
           environments: data ? data.environments : [],
           draft: graphDraft,
           onDraftChange: updateActiveDraft,
+          onPersistState: (patch) => persistEditorState(activeEditorKey, patch),
+          onSubmit: () => openSubmitDraft(),
+          dirty: activeEditor ? JSON.stringify(activeEditor.draft.graph) !== activeEditor.baseline : false,
           onSave: () => void saveGraph(),
           onBack: () => {
             setActiveEditorKey('');
@@ -810,7 +827,7 @@
           h(
             'div',
             { className: 'ath-brand' },
-            h('div', { className: 'ath-brand-mark' }, h(NavIcon, { size: 20, active: true })),
+            h('div', { className: 'ath-brand-mark' }, h(AetherLogo, { size: 28 })),
             h(
               'div',
               { className: 'ath-brand-copy' },
@@ -868,8 +885,10 @@
                     className: 'ath-tab',
                     'data-active': tab === key ? 'true' : 'false',
                     onClick: () => {
+                      // 从其它 tab 切回实验时保留正在编辑的草稿；已经在实验页时
+                      // 再点一次实验 tab 才回到实验列表。
+                      if (key === 'experiments' && tab === 'experiments') setActiveEditorKey('');
                       setTab(key);
-                      if (key === 'experiments') setActiveEditorKey('');
                     },
                   },
                   t(`tab.${key}`),
@@ -967,9 +986,13 @@
           ? h(SubmitDialog, {
               t,
               graphs: data ? data.graphs.filter((graph) => !graph.isSubgraph) : [],
+              draftGraph: submitDraft,
               executors: data ? data.executors : [],
               busy: submitting,
-              onClose: () => setSubmitOpen(false),
+              onClose: () => {
+                setSubmitOpen(false);
+                setSubmitDraft(null);
+              },
               onSubmit: (values) => void submitExperiment(values),
             })
           : null,

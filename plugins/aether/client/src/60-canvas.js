@@ -15,17 +15,68 @@
       };
     }
 
-    function nodeSizeFor(module, direction) {
+    function nodeSizeFor(module, direction, node) {
       const ports = modulePorts(module);
+      let width = NODE_WIDTH;
+      let height;
       if (direction === 'vertical') {
         const columns = Math.max(1, ports.inputs.length, ports.outputs.length);
-        return {
-          width: Math.min(360, Math.max(NODE_WIDTH, 56 + columns * 64)),
-          height: VERTICAL_HEIGHT,
-        };
+        width = Math.min(360, Math.max(NODE_WIDTH, 56 + columns * 64));
+        height = VERTICAL_HEIGHT;
+      } else {
+        const rows = Math.max(1, ports.inputs.length, ports.outputs.length);
+        height = NODE_HEADER + rows * PORT_ROW + NODE_BOTTOM + 2;
       }
-      const rows = Math.max(1, ports.inputs.length, ports.outputs.length);
-      return { width: NODE_WIDTH, height: NODE_HEADER + rows * PORT_ROW + NODE_BOTTOM + 2 };
+      const customWidth = node && Number(node.width) > 0 ? Number(node.width) : 0;
+      const customHeight = node && Number(node.height) > 0 ? Number(node.height) : 0;
+      return {
+        width: Math.min(2400, Math.max(160, customWidth || width)),
+        height: Math.min(2400, Math.max(80, customHeight || height)),
+      };
+    }
+
+    function nodeInfoPairs(module, node) {
+      const params = { ...((module && module.params) || {}), ...((node && node.params) || {}) };
+      return Object.entries(params).map(([key, value]) => [
+        key,
+        String(value == null ? '' : value).replace(/\s+/g, ' '),
+      ]);
+    }
+
+    function NodeInfo({ node, module, rows, direction, height }) {
+      const pairs = nodeInfoPairs(module, node);
+      const lineHeight = 11;
+      const infoTop = direction === 'vertical' ? 53 : NODE_HEADER + rows * PORT_ROW + 2;
+      const available = height - infoTop - (direction === 'vertical' ? 14 : 4);
+      const lines = [];
+      if (available >= lineHeight) lines.push({ key: 'id', text: `id=${node.moduleId}` });
+      const slots = Math.max(0, Math.floor((available - lineHeight) / lineHeight));
+      for (const [key, value] of pairs.slice(0, slots)) lines.push({ key: `param-${key}`, text: `${key}=${value}` });
+      if (!lines.length) return null;
+      return h(
+        'div',
+        {
+          className: 'ath-node-info',
+          style: {
+            top: infoTop,
+            left: direction === 'vertical' ? 8 : 10,
+            right: direction === 'vertical' ? 8 : 10,
+            height: lines.length * lineHeight,
+          },
+          title: [`id=${node.moduleId}`, ...pairs.map(([key, value]) => `${key}=${value}`)].join('\n'),
+        },
+        lines.map((line) =>
+          h(
+            'div',
+            {
+              key: line.key,
+              className: `ath-node-kv ath-mono${line.key === 'id' ? ' ath-node-id' : ''}`,
+              style: { height: lineHeight, lineHeight: `${lineHeight}px` },
+            },
+            line.text,
+          ),
+        ),
+      );
     }
 
     function portTop(index) {
@@ -219,13 +270,35 @@
         }),
         [nodes, edgesData],
       );
-      const sizes = useMemo(
-        () => new Map(nodes.map((node) => [node.path, nodeSizeFor(modules.get(node.path), direction)])),
+      const [sizeOverrides, setSizeOverrides] = useState({});
+      const baseSizes = useMemo(
+        () =>
+          new Map(
+            nodes.map((node) => [
+              node.path,
+              nodeSizeFor(modules.get(node.path), direction, node),
+            ]),
+          ),
         [nodes, modules, direction],
       );
+      const sizes = useMemo(
+        () =>
+          new Map(
+            [...baseSizes].map(([path, base]) => {
+              const override = sizeOverrides[path];
+              return [
+                path,
+                override
+                  ? { width: Math.max(160, override.width), height: Math.max(80, override.height) }
+                  : base,
+              ];
+            }),
+          ),
+        [baseSizes, sizeOverrides],
+      );
       const basePositions = useMemo(
-        () => layoutNodes(graphForLayout, modules, direction, sizes),
-        [graphForLayout, modules, direction, sizes],
+        () => layoutNodes(graphForLayout, modules, direction, baseSizes),
+        [graphForLayout, modules, direction, baseSizes],
       );
 
       const [overrides, setOverrides] = useState({});
@@ -234,22 +307,32 @@
       const [interaction, setInteraction] = useState(null);
       const [outputMenu, setOutputMenu] = useState(null);
       const canvasRef = useRef(null);
+      const movedRef = useRef(false);
 
       useEffect(() => {
         setOutputMenu(null);
+        setSizeOverrides({});
       }, [experiment.id]);
 
       useEffect(() => {
         if (!outputMenu) return undefined;
         const close = () => setOutputMenu(null);
+        const onPointerDown = (event) => {
+          // 画布里的按下可能是拖动节点或平移画布，菜单要跟着端口走，是否关闭交给 pointerup 判断。
+          const target = event.target;
+          if (target && typeof target.closest === 'function' && target.closest('.ath-run-viewport')) return;
+          close();
+        };
         const onKey = (event) => {
           if (event.key === 'Escape') close();
         };
-        window.addEventListener('pointerdown', close);
+        window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('keydown', onKey);
+        window.addEventListener('resize', close);
         return () => {
-          window.removeEventListener('pointerdown', close);
+          window.removeEventListener('pointerdown', onPointerDown);
           window.removeEventListener('keydown', onKey);
+          window.removeEventListener('resize', close);
         };
       }, [outputMenu]);
 
@@ -261,6 +344,7 @@
         setOutputMenu({
           path: node.path,
           port,
+          anchor: event.currentTarget,
           x: Math.min(event.clientX, Math.max(12, window.innerWidth - 210)),
           y: Math.min(event.clientY, Math.max(12, window.innerHeight - 120)),
         });
@@ -288,6 +372,34 @@
         return map;
       }, [nodes, basePositions, overrides]);
 
+      // 菜单锚定在触发它的输出端口上：拖动节点、平移或缩放画布后重新测量，菜单跟着端口走。
+      useLayoutEffect(() => {
+        if (!outputMenu) return;
+        const anchor = outputMenu.anchor;
+        if (!anchor || !anchor.isConnected) {
+          setOutputMenu(null);
+          return;
+        }
+        const rect = anchor.getBoundingClientRect();
+        const menuWidth = 210;
+        const menuHeight = 128;
+        const margin = 8;
+        let x;
+        let y;
+        if (direction === 'vertical') {
+          x = rect.left;
+          y = rect.bottom + 8;
+          if (y + menuHeight > window.innerHeight - margin) y = rect.top - menuHeight - 8;
+        } else {
+          x = rect.right + 8;
+          y = rect.top - 4;
+          if (x + menuWidth > window.innerWidth - margin) x = rect.left - menuWidth - 8;
+        }
+        x = Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin));
+        y = Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin));
+        if (x !== outputMenu.x || y !== outputMenu.y) setOutputMenu({ ...outputMenu, x, y });
+      }, [outputMenu, view, positions, direction]);
+
       const viewRef = useRef(view);
       viewRef.current = view;
       const positionsRef = useRef(positions);
@@ -304,6 +416,23 @@
       nodeByPathRef.current = nodeByPath;
       const selectedRef = useRef(selectedPath);
       selectedRef.current = selectedPath;
+
+      const startNodeResize = (event, node, corner) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const position = positionsRef.current.get(node.path) || { x: 0, y: 0 };
+        const size = sizesRef.current.get(node.path);
+        if (!size) return;
+        setInteraction({
+          type: 'resize',
+          path: node.path,
+          corner,
+          startX: event.clientX,
+          startY: event.clientY,
+          origin: { ...position, width: size.width, height: size.height },
+        });
+      };
 
       const fitTo = useCallback((positionMap) => {
         const element = canvasRef.current;
@@ -330,6 +459,7 @@
 
       useEffect(() => {
         setOverrides({});
+        setSizeOverrides({});
         setSelectedPath('');
         setInteraction(null);
         const frame = requestAnimationFrame(() => fitTo(positionsRef.current));
@@ -385,7 +515,11 @@
 
       useEffect(() => {
         if (!interaction) return undefined;
+        movedRef.current = false;
         const onMove = (event) => {
+          if (!movedRef.current && (Math.abs(event.clientX - interaction.startX) > 3 || Math.abs(event.clientY - interaction.startY) > 3)) {
+            movedRef.current = true;
+          }
           if (interaction.type === 'pan') {
             setView({
               ...interaction.origin,
@@ -399,9 +533,30 @@
             const x = interaction.origin.x + (event.clientX - interaction.startX) / zoom;
             const y = interaction.origin.y + (event.clientY - interaction.startY) / zoom;
             setOverrides((previous) => ({ ...previous, [interaction.path]: { x, y } }));
+            return;
+          }
+          if (interaction.type === 'resize') {
+            const zoom = viewRef.current.zoom;
+            const dx = (event.clientX - interaction.startX) / zoom;
+            const dy = (event.clientY - interaction.startY) / zoom;
+            const origin = interaction.origin;
+            const east = interaction.corner.includes('e');
+            const south = interaction.corner.includes('s');
+            let width = origin.width + (east ? dx : -dx);
+            let height = origin.height + (south ? dy : -dy);
+            width = Math.max(160, Math.min(2400, width));
+            height = Math.max(80, Math.min(2400, height));
+            const x = east ? origin.x : origin.x + origin.width - width;
+            const y = south ? origin.y : origin.y + origin.height - height;
+            setSizeOverrides((previous) => ({ ...previous, [interaction.path]: { width, height } }));
+            setOverrides((previous) => ({ ...previous, [interaction.path]: { x, y } }));
           }
         };
-        const onUp = () => setInteraction(null);
+        const onUp = () => {
+          setInteraction(null);
+          // 只是单击（没有拖动）时关闭输出菜单；拖动时菜单保持打开并跟随端口。
+          if (!movedRef.current) setOutputMenu(null);
+        };
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('pointercancel', onUp);
@@ -477,7 +632,10 @@
                 origin: { ...viewRef.current },
               });
             },
-            onContextMenu: (event) => event.preventDefault(),
+            onContextMenu: (event) => {
+              event.preventDefault();
+              if (outputMenu) setOutputMenu(null);
+            },
           },
           nodes.length
             ? h(
@@ -526,20 +684,10 @@
                   const module = modules.get(node.path);
                   const ports = modulePorts(module);
                   const position = positions.get(node.path) || { x: 0, y: 0 };
-                  const size = sizes.get(node.path) || nodeSizeFor(module, direction);
+                  const size = sizes.get(node.path) || nodeSizeFor(module, direction, node);
                   const group = node.kind === 'dataset' ? 'dataset' : RUN_STATUS_GROUP[node.status] || 'pending';
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
                   const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
-                  const runParams = node.params || {};
-                  const runParamPairs = Object.entries(runParams).map(([key, value]) => [
-                    key,
-                    String(value == null ? '' : value).replace(/\s+/g, ' '),
-                  ]);
-                  const runParamShort = runParamPairs
-                    .slice(0, 1)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(' · ');
-                  const runParamTitle = runParamPairs.map(([key, value]) => `${key}=${value}`).join('\n');
                   return h(
                     'div',
                     {
@@ -549,11 +697,15 @@
                       'data-kind': node.kind || 'command',
                       'data-direction': direction,
                       'data-group': group,
-                      title: runParamTitle || undefined,
+                      title: [
+                        `id=${node.moduleId}`,
+                        ...nodeInfoPairs(module, node).map(([key, value]) => `${key}=${value}`),
+                      ].join('\n'),
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => {
                         if (event.button !== 0) return;
                         event.stopPropagation();
+                        if (outputMenu && outputMenu.path !== node.path) setOutputMenu(null);
                         setSelectedPath(node.path);
                         const origin = positionsRef.current.get(node.path) || { x: 0, y: 0 };
                         setInteraction({
@@ -579,9 +731,10 @@
                             : runStatusLabel(t, node.status)
                         } · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
                           version: node.moduleVersion || 1,
-                        })}${runParamShort ? ` · ${runParamShort}` : ''}`,
+                        })}`,
                       ),
                     ),
+                    h(NodeInfo, { node, module, rows, direction, height: size.height }),
                     direction === 'vertical'
                       ? h(
                           'div',
@@ -622,7 +775,6 @@
                                     port,
                                     node.outputTypes && node.outputTypes[port],
                                   ),
-                                  onClick: (event) => openOutputMenu(event, node, port),
                                   onPointerDown: (event) => event.stopPropagation(),
                                   onContextMenu: (event) => openOutputMenu(event, node, port),
                                 },
@@ -665,9 +817,6 @@
                                           node.outputTypes && node.outputTypes[ports.outputs[row]],
                                         )
                                       : undefined,
-                                    onClick: ports.outputs[row]
-                                      ? (event) => openOutputMenu(event, node, ports.outputs[row])
-                                      : undefined,
                                     onPointerDown: ports.outputs[row]
                                       ? (event) => event.stopPropagation()
                                       : undefined,
@@ -705,7 +854,6 @@
                           port,
                           node.outputTypes && node.outputTypes[port],
                         ),
-                        onClick: (event) => openOutputMenu(event, node, port),
                         onPointerDown: (event) => event.stopPropagation(),
                         onContextMenu: (event) => openOutputMenu(event, node, port),
                         style:
@@ -714,6 +862,15 @@
                             : { top: portTop(index) - 5 },
                       }),
                     ),
+                    node.path === selectedPath
+                      ? ['nw', 'ne', 'sw', 'se'].map((corner) =>
+                          h('div', {
+                            key: `handle-${corner}`,
+                            className: `ath-resize-handle ath-resize-${corner}`,
+                            onPointerDown: (event) => startNodeResize(event, node, corner),
+                          }),
+                        )
+                      : null,
                   );
                 }),
               )
@@ -740,6 +897,7 @@
                 className: 'ath-btn ath-btn-ghost',
                 onClick: () => {
                   setOverrides({});
+                  setSizeOverrides({});
                   requestAnimationFrame(() => fitTo(basePositions));
                 },
               },
@@ -752,6 +910,7 @@
                 className: 'ath-btn ath-btn-ghost',
                 onClick: () => {
                   setOverrides({});
+                  setSizeOverrides({});
                   setSelectedPath('');
                   requestAnimationFrame(() => fitTo(basePositions));
                 },

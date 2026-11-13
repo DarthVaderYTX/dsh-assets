@@ -13,17 +13,17 @@ import {
   expandGraph,
   graphReferenceErrors,
   hydrateGraphPorts,
+  isUuid,
   normalizeEnvironments,
   normalizeGraph,
   normalizeModule,
-  slugify,
   topoLayers,
   validateGraph,
   validateModule,
 } from './dag.js';
 import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
-import { materializeGraphs, removeGraphFolder, writeGraphFolder } from './graph-store.js';
-import { materializeModules, removeModuleFolder, writeModuleFolder } from './module-store.js';
+import { findGraphFolder, materializeGraphs, removeGraphFolder, writeGraphFolder } from './graph-store.js';
+import { findModuleFolder, materializeModules, removeModuleFolder, writeModuleFolder } from './module-store.js';
 import { zipDirectory } from './zip.js';
 import {
   API_PREFIX,
@@ -37,6 +37,7 @@ import {
 } from './constants.js';
 import { httpError, readBody, sendJson, sendText } from './http.js';
 import { seedState } from './seed.js';
+import { AETHER_SKILL, AETHER_SKILL_DIRECTORY } from './skill.js';
 
 // ------------------------------------------------------------------ 存储
 
@@ -347,8 +348,157 @@ async function readState() {
   return stateLoading;
 }
 
+/** 把旧的可读 id（名称 slug）就地换成 UUID，并同步引用、目录描述与运行记录。 */
+async function migrateEntityIds(state, root) {
+  const modules = state.modules || [];
+  const graphs = state.graphs || [];
+  const legacyModules = modules.filter((module) => !isUuid(module.id));
+  const legacyGraphs = graphs.filter((graph) => !isUuid(graph.id));
+  if (!legacyModules.length && !legacyGraphs.length) return false;
+
+  const backupDir = path.join(root, '.aether-backups');
+  await fsp.mkdir(backupDir, { recursive: true }).catch(() => {});
+  await fsp
+    .copyFile(statePath(), path.join(backupDir, `state.before-uuid-${Date.now()}.json`))
+    .catch(() => {});
+
+  const used = new Set();
+  for (const module of modules) if (isUuid(module.id)) used.add(module.id);
+  for (const graph of graphs) if (isUuid(graph.id)) used.add(graph.id);
+  const fresh = () => {
+    let id = randomUUID();
+    while (used.has(id)) id = randomUUID();
+    used.add(id);
+    return id;
+  };
+  const moduleIds = new Map();
+  const graphIds = new Map();
+  for (const module of legacyModules) {
+    const next = fresh();
+    moduleIds.set(module.id, next);
+    module.id = next;
+  }
+  for (const graph of legacyGraphs) {
+    const next = fresh();
+    graphIds.set(graph.id, next);
+    graph.id = next;
+  }
+  for (const module of modules) {
+    if (module.kind === 'graph' && graphIds.has(module.graphId)) module.graphId = graphIds.get(module.graphId);
+  }
+  for (const graph of graphs) {
+    for (const node of graph.nodes || []) {
+      if (moduleIds.has(node.moduleId)) node.moduleId = moduleIds.get(node.moduleId);
+    }
+  }
+  // 资源目录里的描述文件要一起改，materialize 才能按新 id 找回原来的目录。
+  for (const [oldId, nextId] of moduleIds) {
+    const folder = await findModuleFolder(root, oldId).catch(() => '');
+    if (!folder) continue;
+    const file = path.join(folder, 'resource.json');
+    try {
+      const description = JSON.parse(await fsp.readFile(file, 'utf8'));
+      description.id = nextId;
+      if (description.kind === 'graph' && graphIds.has(description.graphId)) {
+        description.graphId = graphIds.get(description.graphId);
+      }
+      await fsp.writeFile(file, JSON.stringify(description, null, 2), 'utf8');
+    } catch {
+      // 描述文件缺失或损坏时交给 materialize 重新生成。
+    }
+  }
+  for (const [oldId, nextId] of graphIds) {
+    const folder = await findGraphFolder(root, oldId).catch(() => '');
+    if (!folder) continue;
+    for (const name of ['experiment.json', 'subgraph.json']) {
+      const file = path.join(folder, name);
+      try {
+        const description = JSON.parse(await fsp.readFile(file, 'utf8'));
+        description.id = nextId;
+        for (const node of description.nodes || []) {
+          if (moduleIds.has(node.moduleId)) node.moduleId = moduleIds.get(node.moduleId);
+        }
+        await fsp.writeFile(file, JSON.stringify(description, null, 2), 'utf8');
+      } catch {
+        // 另一个文件名的描述不存在时跳过。
+      }
+    }
+  }
+  // 运行记录里也有实验与模块引用，换掉后「重跑」仍能找到它们。
+  const runsRoot = path.join(root, 'runs');
+  const entries = await fsp.readdir(runsRoot, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(runsRoot, entry.name, 'run.json');
+    try {
+      const run = JSON.parse(await fsp.readFile(file, 'utf8'));
+      let changed = false;
+      if (graphIds.has(run.graphId)) {
+        run.graphId = graphIds.get(run.graphId);
+        changed = true;
+      }
+      for (const node of run.nodes || []) {
+        if (moduleIds.has(node.moduleId)) {
+          node.moduleId = moduleIds.get(node.moduleId);
+          changed = true;
+        }
+      }
+      if (changed) await fsp.writeFile(file, JSON.stringify(run, null, 2), 'utf8');
+    } catch {
+      // 损坏的运行记录保持原样，不阻塞启动。
+    }
+  }
+  return true;
+}
+
+async function migrateRunIds() {
+  const root = runsDir();
+  const entries = await fsp.readdir(root, { withFileTypes: true }).catch(() => []);
+  const items = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const folder = path.join(root, entry.name);
+    try {
+      const run = JSON.parse(await fsp.readFile(path.join(folder, 'run.json'), 'utf8'));
+      items.push({ folder, run });
+    } catch {
+      // 跳过损坏的运行目录。
+    }
+  }
+  const used = new Set(items.filter((item) => isUuid(item.run.id)).map((item) => item.run.id));
+  const mapping = new Map();
+  for (const item of items) {
+    if (!item.run.id || isUuid(item.run.id)) continue;
+    let id = randomUUID();
+    while (used.has(id)) id = randomUUID();
+    used.add(id);
+    mapping.set(item.run.id, id);
+    item.nextId = id;
+  }
+  if (!mapping.size) return;
+  for (const item of items) {
+    if (!item.nextId) continue;
+    const nextFolder = path.join(root, item.nextId);
+    await renameWithRetry(item.folder, nextFolder).catch(() => {});
+    item.folder = nextFolder;
+    item.run.id = item.nextId;
+    item.run.dir = nextFolder;
+    await fsp
+      .writeFile(path.join(nextFolder, 'run.json'), JSON.stringify(item.run, null, 2))
+      .catch(() => {});
+  }
+  for (const item of items) {
+    if (!item.run.rerunOf || !mapping.has(item.run.rerunOf)) continue;
+    item.run.rerunOf = mapping.get(item.run.rerunOf);
+    await fsp
+      .writeFile(path.join(item.folder, 'run.json'), JSON.stringify(item.run, null, 2))
+      .catch(() => {});
+  }
+}
+
 async function loadState() {
   await fsp.mkdir(dataDir(), { recursive: true });
+  await migrateRunIds().catch(() => {});
   await ensureWorkspaceManifest(dataDir()).catch(() => {});
   try {
     const text = await fsp.readFile(statePath(), 'utf8');
@@ -363,7 +513,8 @@ async function loadState() {
     // v3 → v4 记录布局方向，旧实验的横向坐标清空后按默认「上下」重新布局；
     // v4 → v5 给模块补版本号与版本历史；v5 → v6 给模块补必填输入端口列表；
     // v6 → v7 将模块/实验/子图迁移到分类目录；v7 → v8 将 modules 重命名为 resources、module.json 重命名为 resource.json；
-    // v8 → v9 给输入/输出/参数补类型，并把命令模板统一为 @@名称@@ 引用。
+    // v8 → v9 给输入/输出/参数补类型，并把命令模板统一为 @@名称@@ 引用；
+    // v9 → v10 把模块 / 数据集 / 子图 / 实验的 id 换成全局唯一的 UUID。
     for (const graph of stateCache.graphs) {
       if (legacyLayout.has(graph.id)) {
         for (const node of graph.nodes) {
@@ -371,9 +522,12 @@ async function loadState() {
           node.y = null;
         }
       }
+    }
+    const idsMigrated = await migrateEntityIds(stateCache, dataDir());
+    for (const graph of stateCache.graphs) {
       hydrateGraphPorts(graph, stateCache.modules);
     }
-    if (Number(parsed.version) !== DATA_VERSION || !Array.isArray(parsed.environments) || legacyLayout.size) {
+    if (Number(parsed.version) !== DATA_VERSION || !Array.isArray(parsed.environments) || legacyLayout.size || idsMigrated) {
       await writeState(stateCache);
     }
   } catch (error) {
@@ -452,6 +606,8 @@ function summarizeRun(run, { detail = false } = {}) {
     })),
     datasetUri: node.datasetUri || '',
     datasetFormat: node.datasetFormat || '',
+    width: node.width || 0,
+    height: node.height || 0,
     status: node.status,
     startedAt: node.startedAt || null,
     endedAt: node.endedAt || null,
@@ -611,16 +767,21 @@ async function placePlan(plan, state) {
 
 async function startExperiment(input = {}) {
   const state = await readState();
-  const graph = state.graphs.find((item) => item.id === input.graphId);
+  // 从实验编辑器直接提交时，input.graph 是当前编辑态：只用于这次运行，
+  // 不写回 state，所以不点保存不会改变实验定义。
+  const draft = input.graph && typeof input.graph === 'object' ? normalizeGraph(input.graph) : null;
+  const graph = draft || state.graphs.find((item) => item.id === input.graphId);
   if (!graph) throw httpError(404, `实验不存在：${input.graphId || '（空）'}`);
-  const referencedBy = graphUsage(state, graph.id);
-  if (referencedBy.length) {
-    throw httpError(
-      400,
-      `「${graph.name}」是子图，不能单独运行；请在引用它的实验里运行（引用方：${referencedBy
-        .map((module) => module.name)
-        .join('、')}）`,
-    );
+  if (graph.id) {
+    const referencedBy = graphUsage(state, graph.id);
+    if (referencedBy.length) {
+      throw httpError(
+        400,
+        `「${graph.name}」是子图，不能单独运行；请在引用它的实验里运行（引用方：${referencedBy
+          .map((module) => module.name)
+          .join('、')}）`,
+      );
+    }
   }
   const graphErrors = validateGraph(graph, state.modules, state.graphs);
   if (graphErrors.length) throw httpError(400, graphErrors.join('；'));
@@ -641,7 +802,7 @@ async function startExperiment(input = {}) {
   }
 
   const now = Date.now();
-  const id = `exp-${now.toString(36)}-${randomUUID().slice(0, 4)}`;
+  const id = randomUUID();
   const concurrency = clampConcurrency(input.concurrency);
   const nodes = plan.nodes.map((node) => {
     const target = placement.placements[node.path] || {
@@ -674,6 +835,8 @@ async function startExperiment(input = {}) {
       artifacts: [],
       datasetUri: node.datasetUri || '',
       datasetFormat: node.datasetFormat || '',
+      width: node.width || 0,
+      height: node.height || 0,
       assetPath: node.assetPath ? path.resolve(dataDir(), node.assetPath) : '',
       assetKind: node.assetKind || '',
       assetName: node.assetName || '',
@@ -727,8 +890,9 @@ async function startExperiment(input = {}) {
   }
   const run = {
     id,
-    graphId: graph.id,
+    graphId: graph.id || '',
     graphName: graph.name,
+    graphSnapshot: draft || undefined,
     name: String(input.name || '').trim().slice(0, 120) || `${graph.name} · ${new Date(now).toLocaleString('zh-CN')}`,
     status: 'running',
     createdAt: now,
@@ -918,49 +1082,15 @@ function planSummary(graph, state) {
 
 // ------------------------------------------------------------------ HTTP
 
-function uniqueId(base, taken, fallback) {
-  const root = base || fallback;
-  if (!taken.has(root)) return root;
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = `${root}-${index}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${root}-${Date.now().toString(36)}`;
+function idInUse(state, id) {
+  return state.modules.some((module) => module.id === id) || state.graphs.some((graph) => graph.id === id);
 }
 
-function moduleContentFields(module) {
-  return {
-    name: module.name,
-    description: module.description,
-    kind: module.kind,
-    command: module.command,
-    cwd: module.cwd,
-    timeoutSec: module.timeoutSec,
-    params: module.params || {},
-    paramTypes: module.paramTypes || {},
-    inputs: module.inputs || [],
-    inputTypes: module.inputTypes || {},
-    requiredInputs: module.requiredInputs || [],
-    outputs: module.outputs || [],
-    outputTypes: module.outputTypes || {},
-    graphId: module.graphId,
-    datasetUri: module.datasetUri,
-    datasetFormat: module.datasetFormat,
-    assetId: module.assetId,
-    assetKind: module.assetKind,
-    assetName: module.assetName,
-    assetPath: module.assetPath,
-    assetFileCount: module.assetFileCount,
-    environmentId: module.environmentId,
-  };
-}
-
-function sameModuleContent(left, right) {
-  return JSON.stringify(moduleContentFields(left)) === JSON.stringify(moduleContentFields(right));
-}
-
-function moduleSnapshot(module) {
-  return { version: module.version || 1, savedAt: Date.now(), ...moduleContentFields(module) };
+/** 资源与实验共用一个 id 命名空间，新 id 一律是随机 UUID。 */
+function generateEntityId(state) {
+  let id = randomUUID();
+  while (idInUse(state, id)) id = randomUUID();
+  return id;
 }
 
 function assetBaseDir() {
@@ -1037,20 +1167,12 @@ async function storeModuleAsset(body) {
 async function saveModule(input, options = {}) {
   const state = await readState();
   const module = normalizeModule(input);
-  const create = Boolean(options.create);
-  const autoId = !module.id;
-  if (create) {
-    if (!module.id) module.id = slugify(module.name, 'module');
-    if (state.modules.some((item) => item.id === module.id)) {
-      if (!autoId) throw httpError(409, `模块 id「${module.id}」已存在，请换一个`);
-      module.id = uniqueId(module.id, new Set(state.modules.map((item) => item.id)), 'module');
-    }
-  } else if (!module.id) {
-    throw httpError(400, '缺少模块 id');
+  if (!options.create) {
+    throw httpError(409, '资源创建后不可修改；如需调整，请删除后重新创建');
   }
-  const existing = state.modules.find((item) => item.id === module.id);
-  if (!create && !existing) throw httpError(404, '模块不存在');
-  if (existing && existing.kind !== module.kind) throw httpError(400, '资源类型创建后不能修改');
+  if (module.id && !isUuid(module.id)) throw httpError(400, '模块 id 必须是 UUID');
+  if (!module.id) module.id = generateEntityId(state);
+  else if (idInUse(state, module.id)) throw httpError(409, `模块 id「${module.id}」已存在，请换一个`);
   const errors = validateModule(module, state.modules, state.graphs, state.environments);
   if (module.assetId) {
     const root = moduleAssetRoot(module);
@@ -1068,36 +1190,21 @@ async function saveModule(input, options = {}) {
         if (!fileStat || !fileStat.isFile()) errors.push('模块文件不存在，请重新提交');
       }
     }
-  } else if (create && module.kind === 'command' && options.requireAsset) {
+  } else if (module.kind === 'command' && options.requireAsset) {
     errors.push('新建命令模块需要提交对应的文件或目录');
   }
   if (errors.length) throw httpError(400, errors.join('；'));
 
-  const overwriteVersion = Boolean(options.overwriteVersion);
-  let version = 1;
-  let versions = [];
-  if (existing) {
-    const existingVersions = Array.isArray(existing.versions) ? existing.versions : [];
-    if (sameModuleContent(existing, module) || overwriteVersion) {
-      version = existing.version || 1;
-      versions = existingVersions;
-    } else {
-      version = (existing.version || 1) + 1;
-      versions = [...existingVersions, moduleSnapshot(existing)].slice(-20);
-    }
-  }
   let savedModule = {
     ...module,
-    version,
-    versions,
-    createdAt: existing?.createdAt || Date.now(),
+    version: 1,
+    versions: [],
+    createdAt: Date.now(),
     updatedAt: Date.now(),
   };
   savedModule = await writeModuleFolder(dataDir(), savedModule);
 
-  const moduleList = existing
-    ? state.modules.map((item) => (item.id === module.id ? savedModule : item))
-    : [...state.modules, savedModule];
+  const moduleList = [...state.modules, savedModule];
   const refErrors = graphReferenceErrors(state.graphs, moduleList);
   if (refErrors.length) throw httpError(400, refErrors.join('；'));
 
@@ -1127,9 +1234,14 @@ async function deleteModule(id) {
 async function saveGraph(input) {
   const state = await readState();
   const graph = normalizeGraph(input);
-  if (!graph.id) graph.id = slugify(graph.name, 'graph');
-  const taken = new Set(state.graphs.filter((item) => item.id !== graph.id).map((item) => item.id));
-  graph.id = uniqueId(graph.id, taken, 'graph');
+  const inputId = graph.id;
+  if (!inputId) {
+    graph.id = generateEntityId(state);
+  } else {
+    if (!isUuid(inputId)) throw httpError(400, '实验 id 必须是 UUID');
+    const clash = idInUse(state, inputId) && !state.graphs.some((item) => item.id === inputId);
+    if (clash) throw httpError(409, `id「${inputId}」已被占用`);
+  }
   const existing = state.graphs.find((item) => item.id === graph.id);
   if (state.graphs.some((item) => item.id !== graph.id && item.name.toLowerCase() === graph.name.toLowerCase())) {
     throw httpError(400, `实验名称「${graph.name}」已被使用`);
@@ -1330,7 +1442,6 @@ async function handleApi(req, res) {
     const body = await readBody(req);
     const module = await saveModule(body.module || body, {
       create: Boolean(body.create),
-      overwriteVersion: Boolean(body.overwriteVersion),
       requireAsset: Boolean(body.requireAsset),
     });
     sendJson(res, 200, { ok: true, module });
@@ -1521,6 +1632,7 @@ async function handleApi(req, res) {
     if (!run) throw httpError(404, '实验不存在');
     const experiment = await startExperiment({
       graphId: run.graphId,
+      graph: run.graphSnapshot || undefined,
       concurrency: run.concurrency,
       rerunOf: run.id,
     });
@@ -1578,9 +1690,28 @@ async function handleApi(req, res) {
   sendJson(res, 404, { ok: false, error: `未知接口 ${method} ${route}` });
 }
 
-export const inject = ['webServer'];
+export const inject = ['webServer', 'skills'];
 
 export function apply(ctx) {
+  const skills = ctx.get('skills');
+  if (skills && typeof skills.register === 'function') {
+    ctx.effect(() => {
+      let dispose = null;
+      try {
+        dispose = skills.register({
+          ...AETHER_SKILL,
+          resourceBase: { kind: 'directory', path: AETHER_SKILL_DIRECTORY },
+          metadata: { plugin: 'aether' },
+        });
+      } catch (error) {
+        ctx.logger?.warn?.(`aether: failed to register agent skill: ${error?.message || error}`);
+      }
+      return () => {
+        if (typeof dispose === 'function') dispose();
+      };
+    }, 'aether: runtime skill');
+  }
+
   ctx.effect(() => {
     const route = ctx.webServer.register({
       kind: 'prefix',

@@ -7,6 +7,8 @@ Aether 分为宿主侧、图核心、执行器、客户端与构建脚本五层�
 ```
 aether/
   index.js                 宿主插件入口：注册、服务编排、HTTP 路由
+  skill.js                 读取并解析 skills/aether/SKILL.md，注册运行时 agent skill
+  skills/aether/SKILL.md   面向 agent 的完整使用指南（UI/API/执行/示例）
   constants.js             数据版本、请求体/资源上限、并发与运行数上限
   seed.js                  首次启动示例模块与实验（纯函数）
   http.js                  统一错误、JSON/文本响应、请求体读取
@@ -26,7 +28,7 @@ aether/
     55-graphs.js              实验列表
     60-canvas.js              画布几何、自动布局、RunDag
     70-experiment-editor.js   实验/子图编辑器（画布、检查器、工具栏）
-    80-modules.js             模块库与模块编辑器
+    80-modules.js             模块库、新建资源表单与只读资源详情
     90-panel.js               主面板、页签、编辑器标签、全局状态
     99-register.js            导出 Cordis 插件对象
   scripts/build-client.mjs  片段拼接与 --check
@@ -73,8 +75,8 @@ npm run build
 
 ## 工作区
 
-`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；资源按类别在 `resources/modules|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行与 `.aether-backups` 也都在该目录。模块输入/输出/参数各带类型，命令模板通过 `@@名称@@` 引用，保存前由 `validateModule` 校验占位符与定义。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录暂不导出，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
+`dataDir()` 从 `$DSH_HOME/storages/aether-workspace.json` 读取工作区路径；未配置时回退到 `$DSH_HOME/storages/aether`。工作区内有自描述的 `aether.workspace.json` 清单；资源按类别在 `resources/modules|subgraphs|datasets` 下，实验与子图分别在 `experiments/`、`subgraphs/` 下，运行与 `.aether-backups` 也都在该目录。资源与实验的 id 是全局唯一 UUID，目录按描述文件里的 id 查找（迁移后目录名可能仍是旧的 slug），所以改名或迁移 id 不影响已有目录。执行节点时把模块 `files/` 复制到 `runs/<run>/nodes/<node>/`，并把输入按端口名放进该目录的 `input/`，命令的 cwd 就是这个执行文件夹。`startExperiment` 除了 `graphId`，还接受编辑器传进来的 `graph` 草稿：只用于本次运行，不写回 state；草稿实例把完整定义存进 `run.graphSnapshot`，重跑时优先使用该快照。模块输入/输出/参数各带类型，命令模板通过 `@@名称@@` 引用，保存前由 `validateModule` 校验占位符与定义。`index.js` 的 `switchWorkspace` 负责校验、迁移（空目标）或直接切换（已有 `state.json`），并重置状态缓存与运行恢复标记。`exportWorkspaceBundle` / `importWorkspaceBundle` 用 JSON 包（文件 base64）导入导出工作区；运行记录暂不导出，清单随包导入，导入前备份到 `<workspace>/.aether-backups`。
 
 ## 数据版本
 
-`const DATA_VERSION = 9`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段。迁移逻辑集中在 `index.js` 的存储加载函数中。
+`const DATA_VERSION = 10`（`constants.js`）。加载旧 `state.json` 时自动补执行环境、端口、布局、模块版本、必填输入与文件资产字段，并把旧的名称 slug id 迁移成全局唯一 UUID（同时改写目录描述与运行记录，迁移前备份到 `.aether-backups`）。迁移逻辑集中在 `index.js` 的存储加载函数中。

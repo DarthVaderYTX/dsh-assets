@@ -12,6 +12,7 @@
   },
   "files": [
     "index.js",
+    "skill.js",
     "constants.js",
     "seed.js",
     "http.js",
@@ -23,6 +24,7 @@
     "client.js",
     "client/src",
     "scripts",
+    "skills/**/*.md",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",

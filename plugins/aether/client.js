@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useCallback, useEffect, useMemo, useRef, useState } = React;
+    const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
 
     const NS = 'aether';
     const API = '/aether-api';
@@ -21,7 +21,7 @@ window.__ModuleLoader__.load({
     const ZH = {
       panel: 'Aether',
       subtitle: '有向无环图任务执行管理器',
-      'tab.runs': '运行',
+      'tab.runs': '实例',
       'tab.experiments': '实验',
       'tab.modules': '资源',
       workspace: '工作区',
@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
       'workspace.change': '更改',
       'workspace.current': '当前目录',
       'workspace.pathLabel': '工作区目录',
-      'workspace.pathHint': '所有模块、数据集、子图、实验与运行都会保存在此目录。目标目录为空时会复制当前数据；已有 state.json 时会直接切换到该工作区。',
+      'workspace.pathHint': '所有模块、数据集、子图、实验与实例都会保存在此目录。目标目录为空时会复制当前数据；已有 state.json 时会直接切换到该工作区。',
       'workspace.apply': '切换工作区',
       'workspace.busy': '切换中…',
       'workspace.copied': '工作区已切换，并迁移了当前数据',
@@ -37,10 +37,10 @@ window.__ModuleLoader__.load({
       'workspace.ioTitle': '导入 / 导出',
       'workspace.export': '导出工作区',
       'workspace.import': '导入工作区',
-      'workspace.ioHint': '默认导出分类模块目录、实验/子图目录与模块文件；暂不包含运行记录。导入会替换当前资源与图，并先自动备份到工作区 .aether-backups。',
+      'workspace.ioHint': '默认导出分类模块目录、实验/子图目录与模块文件；暂不包含实例记录。导入会替换当前资源与图，并先自动备份到工作区 .aether-backups。',
       'workspace.imported': '工作区已导入：{modules} 个模块、{graphs} 个实验',
       'confirm.importWorkspace.title': '导入工作区？',
-      'confirm.importWorkspace.body': '导入会替换当前工作区的模块、数据集、子图、实验与模块文件；运行记录不会导入。当前数据会先备份。',
+      'confirm.importWorkspace.body': '导入会替换当前工作区的模块、数据集、子图、实验与模块文件；实例记录不会导入。当前数据会先备份。',
       'language.title': '插件语言',
       'language.auto': '自动',
       'language.zh': '中文',
@@ -81,7 +81,7 @@ window.__ModuleLoader__.load({
       'runStatus.running': '执行中',
       'runStatus.failed': '失败',
       'runStatus.pending': '未开始',
-      'runs.noNodes': '这次运行没有节点',
+      'runs.noNodes': '这个实例没有节点',
       'runs.outputMenu': '输出端口',
       'runs.viewOutput': '查看输出结果',
       'runs.downloadOutput': '下载输出内容',
@@ -98,13 +98,13 @@ window.__ModuleLoader__.load({
       'experiments.executor': '执行器',
       'experiments.environments': '执行环境',
       'graphs.planEnv': '环境',
-      'experiments.title': '运行记录',
-      'experiments.searchPlaceholder': '搜索运行 / 实验 / 模块 / 状态 / id',
-      'experiments.emptyResult': '没有匹配的运行记录',
-      'experiments.subtitle': '每次运行是一张实验 DAG 的一次提交；这里查看进度、日志与产物。',
-      'experiments.new': '运行实验',
-      'experiments.empty': '还没有运行记录。先在「实验」里搭一张 DAG，再运行它。',
-      'experiments.select': '选择左侧的运行查看详情',
+      'experiments.title': '实例',
+      'experiments.searchPlaceholder': '搜索实例 / 实验 / 模块 / 状态 / id',
+      'experiments.emptyResult': '没有匹配的实例',
+      'experiments.subtitle': '每个实例是实验 DAG 的一次提交；这里查看进度、日志与产物。',
+      'experiments.new': '新建实例',
+      'experiments.empty': '还没有实例。打开实验，在编辑器工具栏里点「提交实验」。',
+      'experiments.select': '选择左侧的实例查看详情',
       'experiments.filter.all': '全部',
       'experiments.filter.running': '运行中',
       'experiments.filter.finished': '已结束',
@@ -118,17 +118,20 @@ window.__ModuleLoader__.load({
       'experiments.stdout': '标准输出',
       'experiments.stderr': '错误输出',
       'experiments.logEmpty': '这个节点还没有输出。',
-      'experiments.cancel': '取消运行',
+      'experiments.cancel': '取消实例',
       'experiments.rerun': '重跑',
       'experiments.copy': '复制',
       'experiments.copyOpened': '已复制为实验草稿，保存后创建新实验',
-      'experiments.delete': '删除记录',
-      'experiments.openDir': '打开运行目录',
-      'experiments.name': '运行名称',
+      'experiments.delete': '删除实例',
+      'experiments.openDir': '打开实例目录',
+      'experiments.name': '实例名称',
       'experiments.namePlaceholder': '留空则自动生成',
       'experiments.concurrency': '并发上限',
       'experiments.graph': '选择实验',
-      'experiments.submit': '运行',
+      'experiments.submit': '提交实验',
+      'experiments.submitDraftTitle': '提交当前编辑',
+      'experiments.draftSubmitHint': '本次实例按当前编辑内容运行；不点保存不会改变实验定义。',
+      'experiments.noNodesToSubmit': '实验里还没有节点，无法提交。',
       'experiments.submitting': '正在提交…',
       'experiments.noGraphs': '还没有可运行的实验，先去「实验」里创建一个。',
       'experiments.noRunnableGraphs': '没有可单独运行的实验；子图需要在引用它的实验里运行。',
@@ -136,9 +139,9 @@ window.__ModuleLoader__.load({
       'experiments.planSummary': '{nodes} 个节点 · {layers} 层',
       'experiments.startedAt': '开始',
       'experiments.endedAt': '结束',
-      'experiments.paramsHint': '提交运行时使用的模块与参数已快照，之后修改实验不会影响这次运行。',
+      'experiments.paramsHint': '提交实例时使用的模块与参数已快照，之后修改实验不会影响这个实例。',
       'experiments.cancelHint': '取消会终止正在运行的节点，未开始的节点标记为已取消。',
-      'experiments.deleteHint': '删除会移除这次运行的目录和日志，不可恢复。',
+      'experiments.deleteHint': '删除会移除这个实例的目录和日志，不可恢复。',
       'experiments.rerunHint': '按当前实验重新运行一次（会使用最新的模块与参数）。',
       'experiments.params': '参数',
       'experiments.subgraphNode': '子图',
@@ -146,13 +149,9 @@ window.__ModuleLoader__.load({
       'graphs.subtitle': '实验是一张有向无环图：添加模块使用、连接输入输出端口，保存后可以运行。',
       'graphs.empty': '还没有实验。新建一个，添加模块并用端口连线。',
       'graphs.new': '新建实验',
-      'graphs.edit': '编辑',
-      'graphs.delete': '删除实验',
+      'graphs.open': '打开实验',
       'graphs.name': '实验名称',
       'graphs.desc': '说明',
-      'graphs.nodeCount': '{n} 个模块',
-      'graphs.edgeCount': '{n} 条连线',
-      'graphs.layerCount': '{n} 层',
       'graphs.addNode': '添加模块',
       'graphs.chooseModule': '选择模块',
       'graphs.noModules': '模块库还是空的，先去「模块」里创建一个。',
@@ -182,7 +181,7 @@ window.__ModuleLoader__.load({
       'confirm.closeTab.body': '「{name}」还有未保存的修改，关闭后会丢失。',
       'graphs.subgraphTip': '这个模块会把实验「{name}」内联进来执行；模块参数会作为内层节点的默认值。',
       'graphs.fixErrors': '请先修正实验上的问题',
-      'graphs.deleteHint': '删除后这个实验不会再出现在运行列表里；历史运行记录仍然保留。',
+      'graphs.deleteHint': '删除后这个实验不会再出现在实例列表里；历史实例仍然保留。',
       'graphs.usedBy': '被子图模块引用',
       'graphs.nodesTitle': '模块与连线',
       'graphs.removeEdge': '删除连线',
@@ -219,13 +218,13 @@ window.__ModuleLoader__.load({
       'canvas.vertical': '上下',
       'canvas.horizontal': '左右',
       'modules.title': '资源',
-      'modules.subtitle': '资源包括命令模块、子图模块与数据集；新建时可选模块或数据集，已有子图资源仍可编辑。',
+      'modules.subtitle': '资源包括命令模块、子图模块与数据集；新建时可选模块或数据集，创建后不可修改。',
       'modules.empty': '还没有资源。创建一个模块或数据集开始。',
       'modules.new': '新建资源',
-      'modules.edit': '编辑资源',
+      'modules.edit': '详情',
+      'modules.id': 'ID',
+      'modules.copyId': '复制 id',
       'modules.delete': '删除资源',
-      'modules.id': '模块 id',
-      'modules.idHint': '小写字母、数字和连字符；留空时按名称生成。',
       'modules.kind': '资源类型',
       'modules.kind.command': '模块',
       'modules.kind.graph': '子图',
@@ -256,8 +255,6 @@ window.__ModuleLoader__.load({
       'modules.commandHint': '可选。留空时尝试执行提交文件/目录的入口；填写时通过 shell 执行。使用 @@输入/输出/参数名@@ 引用已定义名称，保存前会校验占位符。',
       'modules.templateRefs': '可用引用',
       'modules.templateNoRefs': '还没有可引用的输入、输出或参数',
-      'modules.cwd': '工作目录',
-      'modules.cwdHint': '留空使用 DSH 进程的当前目录；支持 ~。',
       'modules.timeout': '超时（秒）',
       'modules.params': '默认参数',
       'modules.paramsHint': '节点会继承这里的默认值，可在节点上覆盖。',
@@ -288,8 +285,8 @@ window.__ModuleLoader__.load({
       'modules.deleteHint': '删除后模块会从模块库移除；被图引用的模块不能直接删除。',
       'modules.version': '版本',
       'modules.versionLabel': 'v{version}',
-      'modules.overwriteVersion': '覆盖当前版本（不新建版本）',
-      'modules.versionHint': '默认保存为新版本（当前 v{version}）；勾选后覆盖当前版本。',
+      'modules.readonlyHint': '资源创建后不可修改；如需调整，请删除后重新创建。',
+      'modules.versionHint': '资源创建后不可修改，版本固定为 v{version}。',
       'modules.versionHistory': '历史版本：{n} 个',
       'modules.searchPlaceholder': '搜索模块、子图、数据集',
       'modules.emptyResult': '没有匹配的模块',
@@ -370,9 +367,9 @@ window.__ModuleLoader__.load({
       'confirm.deleteModule.body': '模块「{name}」将从模块库移除。',
       'confirm.deleteGraph.title': '删除实验？',
       'confirm.deleteGraph.body': '实验「{name}」将从实验列表移除。',
-      'confirm.deleteRun.title': '删除实验记录？',
-      'confirm.deleteRun.body': '实验「{name}」的运行目录与日志会被删除。',
-      'confirm.cancelRun.title': '取消实验？',
+      'confirm.deleteRun.title': '删除实例？',
+      'confirm.deleteRun.body': '实例「{name}」的目录与日志会被删除。',
+      'confirm.cancelRun.title': '取消实例？',
       'confirm.cancelRun.body': '正在运行的节点会被终止，未开始的节点标记为已取消。',
       'log.title': '节点日志',
       'log.refresh': '刷新',
@@ -382,15 +379,16 @@ window.__ModuleLoader__.load({
       'graphEditor.edit': '编辑实验',
       'graphEditor.copy': '副本',
       'graphEditor.copyHint': '这是复制的实验草稿；保存后会创建一个新实验，不会修改原实验。',
+      'graphEditor.unsavedSubmitHint': '有未保存的修改：提交只按当前编辑运行一次，不会写回实验。',
       'graphs.copySuffix': '副本',
       'moduleEditor.new': '新建模块',
-      'moduleEditor.edit': '编辑模块',
+      'moduleEditor.edit': '资源详情',
     };
 
     const EN = {
       panel: 'Aether',
       subtitle: 'Directed-acyclic-graph task execution manager',
-      'tab.runs': 'Runs',
+      'tab.runs': 'Instances',
       'tab.experiments': 'Experiments',
       'tab.modules': 'Resources',
       workspace: 'Workspace',
@@ -398,7 +396,7 @@ window.__ModuleLoader__.load({
       'workspace.change': 'Change',
       'workspace.current': 'Current directory',
       'workspace.pathLabel': 'Workspace directory',
-      'workspace.pathHint': 'Modules, datasets, subgraphs, experiments and runs are stored here. An empty target is copied from the current workspace; a target with state.json is opened as-is.',
+      'workspace.pathHint': 'Modules, datasets, subgraphs, experiments and instances are stored here. An empty target is copied from the current workspace; a target with state.json is opened as-is.',
       'workspace.apply': 'Switch workspace',
       'workspace.busy': 'Switching…',
       'workspace.copied': 'Workspace switched; current data was migrated',
@@ -406,10 +404,10 @@ window.__ModuleLoader__.load({
       'workspace.ioTitle': 'Import / export',
       'workspace.export': 'Export workspace',
       'workspace.import': 'Import workspace',
-      'workspace.ioHint': 'Exports categorized modules, experiment/subgraph folders and module files; runs are not included for now. Import replaces resources and graphs, backing up the current workspace under .aether-backups first.',
+      'workspace.ioHint': 'Exports categorized modules, experiment/subgraph folders and module files; instances are not included for now. Import replaces resources and graphs, backing up the current workspace under .aether-backups first.',
       'workspace.imported': 'Workspace imported: {modules} modules, {graphs} experiments',
       'confirm.importWorkspace.title': 'Import workspace?',
-      'confirm.importWorkspace.body': 'Importing replaces the current modules, datasets, subgraphs, experiments and module files; runs are not imported. Current data is backed up first.',
+      'confirm.importWorkspace.body': 'Importing replaces the current modules, datasets, subgraphs, experiments and module files; instances are not imported. Current data is backed up first.',
       'language.title': 'Plugin language',
       'language.auto': 'Auto',
       'language.zh': '中文',
@@ -450,7 +448,7 @@ window.__ModuleLoader__.load({
       'runStatus.running': 'Running',
       'runStatus.failed': 'Failed',
       'runStatus.pending': 'Not started',
-      'runs.noNodes': 'This run has no nodes',
+      'runs.noNodes': 'This instance has no nodes',
       'runs.outputMenu': 'Output port',
       'runs.viewOutput': 'View output',
       'runs.downloadOutput': 'Download output',
@@ -467,13 +465,13 @@ window.__ModuleLoader__.load({
       'experiments.executor': 'Executor',
       'experiments.environments': 'Environments',
       'graphs.planEnv': 'Environment',
-      'experiments.title': 'Runs',
-      'experiments.searchPlaceholder': 'Search run / experiment / module / status / id',
-      'experiments.emptyResult': 'No runs match',
-      'experiments.subtitle': 'Each run is one submission of an experiment DAG; inspect progress, logs and artifacts here.',
-      'experiments.new': 'Run experiment',
-      'experiments.empty': 'No runs yet. Build a DAG under Experiments, then run it.',
-      'experiments.select': 'Select a run on the left to see details',
+      'experiments.title': 'Instances',
+      'experiments.searchPlaceholder': 'Search instance / experiment / module / status / id',
+      'experiments.emptyResult': 'No instances match',
+      'experiments.subtitle': 'Each instance is one submission of an experiment DAG; inspect progress, logs and artifacts here.',
+      'experiments.new': 'New instance',
+      'experiments.empty': 'No instances yet. Open an experiment and submit it from the editor toolbar.',
+      'experiments.select': 'Select an instance on the left to see details',
       'experiments.filter.all': 'All',
       'experiments.filter.running': 'Running',
       'experiments.filter.finished': 'Finished',
@@ -487,17 +485,20 @@ window.__ModuleLoader__.load({
       'experiments.stdout': 'stdout',
       'experiments.stderr': 'stderr',
       'experiments.logEmpty': 'This node has no output yet.',
-      'experiments.cancel': 'Cancel run',
+      'experiments.cancel': 'Cancel instance',
       'experiments.rerun': 'Run again',
       'experiments.copy': 'Copy',
       'experiments.copyOpened': 'Copied to an experiment draft; saving creates a new experiment',
-      'experiments.delete': 'Delete record',
-      'experiments.openDir': 'Open run folder',
-      'experiments.name': 'Run name',
+      'experiments.delete': 'Delete instance',
+      'experiments.openDir': 'Open instance folder',
+      'experiments.name': 'Instance name',
       'experiments.namePlaceholder': 'Leave blank to generate one',
       'experiments.concurrency': 'Concurrency limit',
       'experiments.graph': 'Experiment',
-      'experiments.submit': 'Run',
+      'experiments.submit': 'Submit',
+      'experiments.submitDraftTitle': 'Submit current edit',
+      'experiments.draftSubmitHint': 'This instance runs the current edit; the experiment changes only when you save it.',
+      'experiments.noNodesToSubmit': 'The experiment has no nodes to submit.',
       'experiments.submitting': 'Submitting…',
       'experiments.noGraphs': 'No experiments to run yet. Create one under Experiments first.',
       'experiments.noRunnableGraphs': 'No standalone experiment to run; subgraphs run through their parent experiment.',
@@ -505,9 +506,9 @@ window.__ModuleLoader__.load({
       'experiments.planSummary': '{nodes} nodes · {layers} layers',
       'experiments.startedAt': 'Started',
       'experiments.endedAt': 'Ended',
-      'experiments.paramsHint': 'Modules and parameters are snapshotted when the run is submitted; later experiment edits do not affect it.',
+      'experiments.paramsHint': 'Modules and parameters are snapshotted when the instance is submitted; later experiment edits do not affect it.',
       'experiments.cancelHint': 'Cancelling stops running nodes and marks pending nodes as cancelled.',
-      'experiments.deleteHint': 'Deleting removes this run folder and its logs permanently.',
+      'experiments.deleteHint': 'Deleting removes this instance folder and its logs permanently.',
       'experiments.rerunHint': 'Run the current experiment again with the latest modules and parameters.',
       'experiments.params': 'Parameters',
       'experiments.subgraphNode': 'Subgraph',
@@ -515,13 +516,9 @@ window.__ModuleLoader__.load({
       'graphs.subtitle': 'An experiment is a DAG: add module usages, connect input and output ports, save, then run it.',
       'graphs.empty': 'No experiments yet. Create one, add modules and connect their ports.',
       'graphs.new': 'New experiment',
-      'graphs.edit': 'Edit',
-      'graphs.delete': 'Delete experiment',
+      'graphs.open': 'Open experiment',
       'graphs.name': 'Experiment name',
       'graphs.desc': 'Description',
-      'graphs.nodeCount': '{n} modules',
-      'graphs.edgeCount': '{n} edges',
-      'graphs.layerCount': '{n} layers',
       'graphs.addNode': 'Add module',
       'graphs.chooseModule': 'Choose a module',
       'graphs.noModules': 'The module library is empty. Create a module first.',
@@ -588,13 +585,13 @@ window.__ModuleLoader__.load({
       'canvas.vertical': 'Vertical',
       'canvas.horizontal': 'Horizontal',
       'modules.title': 'Resources',
-      'modules.subtitle': 'Resources include command modules, subgraph modules and datasets; new resources can be modules or datasets, existing subgraph resources remain editable.',
+      'modules.subtitle': 'Resources include command modules, subgraph modules and datasets; new resources can be modules or datasets, and cannot be changed after creation.',
       'modules.empty': 'No resources yet. Create a module or dataset to start.',
       'modules.new': 'New resource',
-      'modules.edit': 'Edit resource',
+      'modules.edit': 'Details',
+      'modules.id': 'ID',
+      'modules.copyId': 'Copy id',
       'modules.delete': 'Delete resource',
-      'modules.id': 'Module id',
-      'modules.idHint': 'Lowercase letters, digits and hyphens; generated from the name when blank.',
       'modules.kind': 'Resource type',
       'modules.kind.command': 'Module',
       'modules.kind.graph': 'Subgraph',
@@ -625,8 +622,6 @@ window.__ModuleLoader__.load({
       'modules.commandHint': 'Optional. Leave blank to run the submitted file/directory entrypoint; otherwise it runs through the shell. Reference defined names as @@input/output/param@@; placeholders are validated before save.',
       'modules.templateRefs': 'Available references',
       'modules.templateNoRefs': 'No inputs, outputs or parameters defined yet',
-      'modules.cwd': 'Working directory',
-      'modules.cwdHint': 'Blank uses the DSH process working directory; ~ is supported.',
       'modules.timeout': 'Timeout (seconds)',
       'modules.params': 'Default parameters',
       'modules.paramsHint': 'Nodes inherit these defaults and can override them.',
@@ -657,8 +652,8 @@ window.__ModuleLoader__.load({
       'modules.deleteHint': 'Deleting removes the module from the library; modules used by graphs cannot be deleted.',
       'modules.version': 'Version',
       'modules.versionLabel': 'v{version}',
-      'modules.overwriteVersion': 'Overwrite the current version',
-      'modules.versionHint': 'Saving creates a new version by default (currently v{version}); check this to overwrite it.',
+      'modules.readonlyHint': 'Resources cannot be changed after creation. Delete and recreate to adjust.',
+      'modules.versionHint': 'Resources cannot be changed after creation; the version stays at v{version}.',
       'modules.versionHistory': 'History: {n} versions',
       'modules.searchPlaceholder': 'Search modules, subgraphs, datasets',
       'modules.emptyResult': 'No modules match',
@@ -739,9 +734,9 @@ window.__ModuleLoader__.load({
       'confirm.deleteModule.body': 'Module “{name}” will be removed from the library.',
       'confirm.deleteGraph.title': 'Delete experiment?',
       'confirm.deleteGraph.body': 'Experiment “{name}” will be removed from the experiment list.',
-      'confirm.deleteRun.title': 'Delete experiment record?',
-      'confirm.deleteRun.body': 'The run folder and logs of “{name}” will be deleted.',
-      'confirm.cancelRun.title': 'Cancel experiment?',
+      'confirm.deleteRun.title': 'Delete instance?',
+      'confirm.deleteRun.body': 'The folder and logs of instance “{name}” will be deleted.',
+      'confirm.cancelRun.title': 'Cancel instance?',
       'confirm.cancelRun.body': 'Running nodes are stopped and pending nodes are marked cancelled.',
       'log.title': 'Node log',
       'log.refresh': 'Refresh',
@@ -751,9 +746,10 @@ window.__ModuleLoader__.load({
       'graphEditor.edit': 'Edit experiment',
       'graphEditor.copy': 'Copy',
       'graphEditor.copyHint': 'This is a copied experiment draft; saving creates a new experiment and leaves the original untouched.',
+      'graphEditor.unsavedSubmitHint': 'Unsaved changes: submitting runs this edit once without saving it to the experiment.',
       'graphs.copySuffix': 'copy',
       'moduleEditor.new': 'New module',
-      'moduleEditor.edit': 'Edit module',
+      'moduleEditor.edit': 'Resource details',
     };
 
 // ---- client/src/20-styles.js ----
@@ -776,9 +772,9 @@ window.__ModuleLoader__.load({
   --ath-yellow-ink: #a16207;
   --ath-red-ink: #b91c1c;
   --ath-gray-ink: #4b5563;
-  --ath-dataset-ink: #3f5366;
-  --ath-dataset: #5b7185;
-  --ath-dataset-40: rgba(91, 113, 133, 0.4);
+  --ath-dataset-ink: #1e3a8a;
+  --ath-dataset: #1d4ed8;
+  --ath-dataset-40: rgba(29, 78, 216, 0.4);
   --ath-edge: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   --ath-border-soft: color-mix(in srgb, var(--dsw-alias-border-l1) 82%, transparent);
   --ath-shadow-soft: 0 2px 10px rgba(32, 43, 61, .05);
@@ -808,9 +804,10 @@ window.__ModuleLoader__.load({
 .ath-brand-mark {
   width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
   display: grid; place-items: center;
-  background: var(--dsw-alias-bg-layer-2);
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
 }
+.ath-logo-svg { display: block; border-radius: 9px; }
 .ath-brand-copy { display: flex; flex-direction: column; min-width: 0; }
 .ath-brand-title { font-size: 15px; font-weight: 650; letter-spacing: .01em; }
 .ath-brand-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -975,6 +972,18 @@ window.__ModuleLoader__.load({
   padding: 13px 14px;
   box-shadow: var(--ath-shadow-soft);
 }
+.ath-card.ath-form { margin: 0; min-width: 0; }
+.ath-form[disabled] button { display: none; }
+.ath-form[disabled] input:not([type="checkbox"]):not([type="file"]),
+.ath-form[disabled] textarea,
+.ath-form[disabled] select {
+  color: var(--dsw-alias-label-primary);
+  -webkit-text-fill-color: var(--dsw-alias-label-primary);
+  opacity: 1;
+  background: var(--dsw-alias-bg-layer-2);
+  cursor: default;
+}
+.ath-form[disabled] input[type="checkbox"] { cursor: default; }
 .ath-field { display: flex; flex-direction: column; gap: 5px; }
 .ath-field + .ath-field { margin-top: 12px; }
 .ath-label { font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); letter-spacing: .01em; }
@@ -1042,7 +1051,18 @@ window.__ModuleLoader__.load({
 .ath-node-name strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-node-name code { font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .ath-node-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10.5px; overflow-wrap: anywhere; }
-.ath-node-params { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.ath-node-info { position: absolute; display: flex; flex-direction: column; overflow: hidden; pointer-events: none; }
+.ath-node-id { font-size: 8.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-node-kv { font-size: 8.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-resize-handle {
+  position: absolute; z-index: 4; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--dsw-alias-bg-overlay); border: 1px solid #64748b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
+}
+.ath-resize-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.ath-resize-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.ath-resize-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.ath-resize-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .ath-param-chip { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 5px; }
 .ath-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .ath-module-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; }
@@ -1068,6 +1088,10 @@ window.__ModuleLoader__.load({
 .ath-module-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-module-version { margin-left: auto; flex: 0 0 auto; }
 .ath-module-desc { font-size: 11.5px; color: var(--dsw-alias-label-secondary); min-height: 34px; overflow-wrap: anywhere; }
+.ath-graph-card { width: 100%; text-align: left; color: inherit; cursor: pointer; appearance: none; }
+.ath-graph-card:hover { background: var(--dsw-alias-bg-layer-2); }
+.ath-graph-card:focus-visible { outline: 2px solid rgba(100, 116, 139, .28); outline-offset: 1px; }
+.ath-graph-id, .ath-module-id { font-size: 10px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .ath-module-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 3px; }
 .ath-module-foot .ath-actions { margin-left: auto; }
 .ath-editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: stretch; }
@@ -1096,7 +1120,7 @@ window.__ModuleLoader__.load({
 .ath-canvas-node:hover { border-color: #64748b; }
 .ath-canvas-node[data-kind="dataset"] {
   border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
-  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--ath-dataset) 38%, var(--dsw-alias-bg-layer-1));
 }
 .ath-canvas-node[data-selected="true"] { border-color: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, .18); }
 .ath-canvas-node[data-kind="graph"] { border-style: dashed; }
@@ -1152,11 +1176,7 @@ window.__ModuleLoader__.load({
 .ath-node-card:active { cursor: grabbing; }
 .ath-node-card[data-kind="dataset"] {
   border-color: color-mix(in srgb, var(--ath-dataset) 55%, #64748b);
-  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
-}
-.ath-node-card[data-kind="dataset"]::before {
-  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--ath-dataset);
+  background: color-mix(in srgb, var(--ath-dataset) 38%, var(--dsw-alias-bg-layer-1));
 }
 .ath-node-card[data-kind="dataset"] .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-dataset) 45%, #64748b); }
 .ath-node-card[data-kind="dataset"] .ath-node-tag { color: var(--ath-dataset); }
@@ -1165,7 +1185,7 @@ window.__ModuleLoader__.load({
   box-shadow: 0 0 0 2px rgba(100, 116, 139, .18);
 }
 .ath-node-head {
-  height: 38px; padding: 5px 10px;
+  height: 38px; padding: 2px 10px;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto;
   column-gap: 5px; align-content: center;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
@@ -1176,7 +1196,7 @@ window.__ModuleLoader__.load({
   font-size: 8.5px; line-height: 1.5; color: var(--ath-yellow-ink);
   border: 1px solid currentColor; border-radius: 3px; padding: 0 3px;
 }
-.ath-node-sub { grid-column: 1 / -1; grid-row: 2; font-size: 9.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-node-sub { grid-column: 1 / -1; grid-row: 2; font-size: 9.5px; line-height: 1.3; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-node-ports { padding: 0; }
 .ath-port-row { height: 22px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; }
 .ath-port-name { font-size: 9.5px; color: var(--dsw-alias-label-secondary); max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1345,21 +1365,20 @@ window.__ModuleLoader__.load({
 .ath-run-node {
   border-color: color-mix(in srgb, var(--ath-status) 62%, #64748b);
   background: var(--ath-status-40);
-  box-shadow: inset 0 3px 0 var(--ath-status), 0 1px 2px rgba(32, 43, 61, .05);
+  box-shadow: 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] {
-  background: color-mix(in srgb, var(--ath-dataset) 30%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--ath-dataset) 38%, var(--dsw-alias-bg-layer-1));
   border-color: color-mix(in srgb, var(--ath-dataset) 60%, #64748b);
-  box-shadow: inset 4px 0 0 var(--ath-dataset), 0 1px 2px rgba(32, 43, 61, .05);
 }
 .ath-run-node[data-kind="dataset"] .ath-node-sub { color: var(--ath-dataset-ink); }
 .ath-run-node[data-kind="dataset"][data-selected="true"] {
   border-color: var(--ath-dataset);
-  box-shadow: 0 0 0 2px var(--ath-dataset-40), inset 4px 0 0 var(--ath-dataset);
+  box-shadow: 0 0 0 2px var(--ath-dataset-40);
 }
 .ath-run-node[data-selected="true"] {
   border-color: #64748b;
-  box-shadow: 0 0 0 2px rgba(100, 116, 139, .18), inset 0 3px 0 var(--ath-status);
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, .18);
 }
 .ath-run-node .ath-node-sub { color: var(--ath-status-ink); font-weight: 600; }
 .ath-run-node .ath-node-head { border-bottom-color: color-mix(in srgb, var(--ath-status) 55%, #64748b); }
@@ -1373,7 +1392,7 @@ window.__ModuleLoader__.load({
   border-color: var(--ath-status); background: var(--dsw-alias-bg-base);
   pointer-events: none;
 }
-.ath-run-port-output { pointer-events: auto; cursor: pointer; }
+.ath-run-port-output { pointer-events: auto; cursor: context-menu; }
 .ath-run-port-output::after {
   content: ''; position: absolute; inset: -6px; border-radius: 50%;
 }
@@ -1608,6 +1627,13 @@ window.__ModuleLoader__.load({
       return t(`status.${status}`);
     }
 
+    // 实例的状态由它的执行单元决定：任一单元失败即算失败，其余沿用实例自身的状态。
+    function instanceStatus(run) {
+      if (!run) return 'pending';
+      if ((run.nodes || []).some((node) => node.status === 'failed')) return 'failed';
+      return run.status;
+    }
+
     function statusClass(status) {
       return status;
     }
@@ -1753,29 +1779,85 @@ window.__ModuleLoader__.load({
 // ---- client/src/40-widgets.js ----
     // ---------------------------------------------------------- 小部件
 
-    function NavIcon({ size = 20, active = false }) {
-      const color = active ? 'var(--ath-accent, var(--dsw-alias-brand-primary))' : 'currentColor';
-      const fill = active ? 'color-mix(in srgb, var(--ath-accent, var(--dsw-alias-brand-primary)) 16%, transparent)' : 'none';
+    function NavIcon({ size = 20 }) {
       return h(
         'svg',
         {
           width: size,
           height: size,
           viewBox: '0 0 24 24',
-          fill: 'none',
           'aria-hidden': 'true',
           focusable: 'false',
           className: 'ath-nav-icon',
         },
-        h('path', {
-          d: 'M6 6.5 12 17.5M18 7.5 12 17.5M6 6.5 18 7.5',
-          stroke: color,
+        h('rect', {
+          x: 1,
+          y: 1,
+          width: 22,
+          height: 22,
+          rx: 5.5,
+          fill: '#fff',
+          stroke: '#000',
           strokeWidth: 1.6,
-          strokeLinecap: 'round',
         }),
-        h('circle', { cx: 6, cy: 6.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
-        h('circle', { cx: 18, cy: 7.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
-        h('circle', { cx: 12, cy: 17.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
+        h(
+          'g',
+          { fill: 'none', stroke: '#000', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' },
+          h('path', { d: 'M6.8 7.5h10.4' }),
+          h('path', { d: 'M17.2 7.5 12 16.9' }),
+          h('path', { d: 'M6.8 7.5 12 16.9' }),
+        ),
+        h(
+          'g',
+          { fill: '#fff', stroke: '#000', strokeWidth: 1.2 },
+          h('circle', { cx: 6.8, cy: 7.5, r: 2.1 }),
+          h('circle', { cx: 17.2, cy: 7.5, r: 2.1 }),
+          h('circle', { cx: 12, cy: 16.9, r: 2.1 }),
+        ),
+        h(
+          'g',
+          { fill: '#000' },
+          h('circle', { cx: 6.8, cy: 7.5, r: 0.55 }),
+          h('circle', { cx: 17.2, cy: 7.5, r: 0.55 }),
+          h('circle', { cx: 12, cy: 16.9, r: 0.55 }),
+        ),
+      );
+    }
+
+    // 和插件 icon.svg 完全同源的品牌图标：黑边白底 + 黑色 DAG。
+    function AetherLogo({ size = 28 }) {
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 64 64',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          className: 'ath-logo-svg',
+        },
+        h('rect', { x: 2, y: 2, width: 60, height: 60, rx: 16, fill: '#fff', stroke: '#000', strokeWidth: 3 }),
+        h(
+          'g',
+          { fill: 'none', stroke: '#000', strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round' },
+          h('path', { d: 'M18 20h28' }),
+          h('path', { d: 'M46 20 32 45' }),
+          h('path', { d: 'M18 20 32 45' }),
+        ),
+        h(
+          'g',
+          { fill: '#fff', stroke: '#000', strokeWidth: 2.4 },
+          h('circle', { cx: 18, cy: 20, r: 5.2 }),
+          h('circle', { cx: 46, cy: 20, r: 5.2 }),
+          h('circle', { cx: 32, cy: 45, r: 5.2 }),
+        ),
+        h(
+          'g',
+          { fill: '#000' },
+          h('circle', { cx: 18, cy: 20, r: 1.5 }),
+          h('circle', { cx: 46, cy: 20, r: 1.5 }),
+          h('circle', { cx: 32, cy: 45, r: 1.5 }),
+        ),
       );
     }
 
@@ -2450,16 +2532,32 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       );
     }
 
-    function SubmitDialog({ t, graphs, executors, onClose, onSubmit, busy }) {
+    function SubmitDialog({ t, graphs, draftGraph, executors, onClose, onSubmit, busy }) {
       const [graphId, setGraphId] = useState(() => (graphs[0] ? graphs[0].id : ''));
       const [name, setName] = useState('');
       const [concurrency, setConcurrency] = useState(3);
-      const graph = graphs.find((item) => item.id === graphId) || null;
+      const draftSummary = draftGraph
+        ? {
+            id: draftGraph.id || '',
+            name: String(draftGraph.name || '').trim() || t('graphEditor.new'),
+            nodeCount: (draftGraph.nodes || []).length,
+            layerCount: (
+              localLayers({
+                nodes: draftGraph.nodes || [],
+                edges: draftGraph.edges || [],
+              }) || []
+            ).length,
+          }
+        : null;
+      const graph = draftSummary || graphs.find((item) => item.id === graphId) || null;
+      const canSubmit = draftGraph
+        ? Boolean(String(draftGraph.name || '').trim() && draftSummary.nodeCount)
+        : Boolean(graphId);
       return h(
         Modal,
         {
           t,
-          title: t('experiments.new'),
+          title: draftGraph ? t('experiments.submitDraftTitle') : t('experiments.new'),
           onClose: busy ? () => {} : onClose,
           footer: [
             h('button', { key: 'cancel', type: 'button', className: 'ath-btn', onClick: onClose, disabled: busy }, t('action.cancel')),
@@ -2469,32 +2567,45 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 key: 'submit',
                 type: 'button',
                 className: 'ath-btn ath-btn-primary',
-                disabled: busy || !graphId,
-                onClick: () => onSubmit({ graphId, name, concurrency }),
+                disabled: busy || !canSubmit,
+                onClick: () =>
+                  onSubmit(
+                    draftGraph
+                      ? { graph: draftGraph, name, concurrency }
+                      : { graphId, name, concurrency },
+                  ),
               },
               busy ? t('experiments.submitting') : t('experiments.submit'),
             ),
           ],
         },
-        graphs.length === 0
+        graphs.length === 0 && !draftGraph
           ? h('div', { className: 'ath-hint' }, t('experiments.noGraphs'))
           : h(
               'div',
               null,
-              h(
-                'div',
-                { className: 'ath-field' },
-                h('label', { className: 'ath-label' }, t('experiments.graph')),
-                h(
-                  'select',
-                  {
-                    className: 'ath-select',
-                    value: graphId,
-                    onChange: (event) => setGraphId(event.target.value),
-                  },
-                  graphs.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
-                ),
-              ),
+              draftGraph
+                ? h(
+                    'div',
+                    { className: 'ath-field' },
+                    h('label', { className: 'ath-label' }, t('experiments.graph')),
+                    h('div', { className: 'ath-input ath-mono' }, draftSummary.name),
+                    h('div', { className: 'ath-hint' }, t('experiments.draftSubmitHint')),
+                  )
+                : h(
+                    'div',
+                    { className: 'ath-field' },
+                    h('label', { className: 'ath-label' }, t('experiments.graph')),
+                    h(
+                      'select',
+                      {
+                        className: 'ath-select',
+                        value: graphId,
+                        onChange: (event) => setGraphId(event.target.value),
+                      },
+                      graphs.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
+                    ),
+                  ),
               h(
                 'div',
                 { className: 'ath-field' },
@@ -3120,7 +3231,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       filter,
       setFilter,
       onOpenRun,
-      onNew,
       onCancelRun,
       onCopyRun,
       onRerun,
@@ -3132,21 +3242,23 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [query, setQuery] = useState('');
       const keyword = query.trim().toLowerCase();
       const runs = (data.experiments || []).filter((run) => {
-        if (filter === 'running' && run.status !== 'running') return false;
-        if (filter === 'failed' && run.status !== 'failed') return false;
-        if (filter === 'finished' && run.status === 'running') return false;
+        const state = instanceStatus(run);
+        if (filter === 'running' && state !== 'running') return false;
+        if (filter === 'failed' && state !== 'failed') return false;
+        if (filter === 'finished' && state === 'running') return false;
         if (!keyword) return true;
         const nodeText = (run.nodes || [])
           .flatMap((node) => [node.label, node.moduleName, node.path])
           .filter(Boolean)
           .join(' ');
-        return [run.name, run.id, run.graphName, run.graphId, run.message, statusText(t, run.status), nodeText]
+        return [run.name, run.id, run.graphName, run.graphId, run.message, statusText(t, state), nodeText]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(keyword);
       });
       const current = runDetail;
+      const currentStatus = current ? instanceStatus(current) : 'pending';
 
       return h(
         'div',
@@ -3159,15 +3271,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             null,
             h('h2', { className: 'ath-page-title' }, t('experiments.title')),
             h('p', { className: 'ath-page-sub' }, t('experiments.subtitle')),
-          ),
-          h(
-            'div',
-            { className: 'ath-actions' },
-            h(
-              'button',
-              { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onNew, disabled: (data.graphs || []).length === 0 },
-              t('experiments.new'),
-            ),
           ),
         ),
         h(
@@ -3208,8 +3311,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   { className: 'ath-run-list' },
                   runs.length === 0
                     ? h('div', { className: 'ath-hint', style: { padding: '14px' } }, t('experiments.emptyResult'))
-                    : runs.map((run) =>
-                        h(
+                    : runs.map((run) => {
+                        const state = instanceStatus(run);
+                        return h(
                           'button',
                           {
                             key: run.id,
@@ -3222,7 +3326,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                             'div',
                             { className: 'ath-run-title' },
                             h('span', null, run.name),
-                            h('span', { className: 'ath-status', 'data-status': statusClass(run.status), style: { marginLeft: 'auto' } }, statusText(t, run.status)),
+                            h('span', { className: 'ath-status', 'data-status': statusClass(state), style: { marginLeft: 'auto' } }, statusText(t, state)),
                           ),
                           h(
                             'div',
@@ -3235,13 +3339,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                           ),
                           h(
                             'div',
-                            { className: 'ath-progress', 'data-status': statusClass(run.status) },
+                            { className: 'ath-progress', 'data-status': statusClass(state) },
                             h('i', {
                               style: { width: `${run.counts.total ? Math.round((run.counts.done / run.counts.total) * 100) : 0}%` },
                             }),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                 ),
           ),
           current
@@ -3261,8 +3365,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       h(
                         'div',
                         { className: 'ath-detail-meta' },
-                        h('span', { className: 'ath-status', 'data-status': statusClass(current.status) }, statusText(t, current.status)),
+                        h('span', { className: 'ath-status', 'data-status': statusClass(currentStatus) }, statusText(t, currentStatus)),
                         h('span', null, current.graphName),
+                        h('code', { className: 'ath-mono', title: current.id }, `id=${current.id}`),
                         h('span', null, `${t('experiments.startedAt')} ${formatDateTime(current.startedAt)}`),
                         h('span', null, `${t('experiments.endedAt')} ${formatDateTime(current.endedAt)}`),
                         h('span', null, `${t('experiments.concurrency')} ${current.concurrency}`),
@@ -3295,7 +3400,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   ),
                   h(
                     'div',
-                    { className: 'ath-progress', 'data-status': statusClass(current.status), style: { marginTop: 8 } },
+                    { className: 'ath-progress', 'data-status': statusClass(currentStatus), style: { marginTop: 8 } },
                     h('i', {
                       style: { width: `${current.counts.total ? Math.round((current.counts.done / current.counts.total) * 100) : 0}%` },
                     }),
@@ -3316,7 +3421,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     // ---------------------------------------------------------- 图列表
 
 // ---- client/src/55-graphs.js ----
-    function GraphsView({ t, data, onNew, onEdit, onDelete }) {
+    function GraphsView({ t, data, onNew, onEdit }) {
       return h(
         'div',
         { className: 'ath-page' },
@@ -3342,41 +3447,20 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               { className: 'ath-card-grid' },
               data.graphs.map((graph) =>
                 h(
-                  'div',
-                  { className: 'ath-module-card', key: graph.id },
+                  'button',
+                  {
+                    type: 'button',
+                    key: graph.id,
+                    className: 'ath-module-card ath-graph-card',
+                    title: t('graphs.open'),
+                    onClick: () => onEdit(graph.id),
+                  },
                   h(
                     'div',
                     { className: 'ath-module-head' },
                     h('span', { className: 'ath-module-name' }, graph.name),
-                    h('span', { className: 'ath-badge' }, `DAG`),
-                    graph.isSubgraph ? h('span', { className: 'ath-badge' }, t('graphs.subgraph')) : null,
                   ),
-                  h('div', { className: 'ath-module-desc' }, graph.description || ''),
-                  h(
-                    'div',
-                    { className: 'ath-stat-row' },
-                    h('span', null, tr(t, 'graphs.nodeCount', { n: graph.nodeCount })),
-                    h('span', null, tr(t, 'graphs.edgeCount', { n: graph.edgeCount })),
-                    h('span', null, tr(t, 'graphs.layerCount', { n: graph.layerCount || 0 })),
-                  ),
-                  h(
-                    'div',
-                    { className: 'ath-module-foot' },
-                    h('span', { className: 'ath-hint' }, `${t('common.updatedAt')} ${formatDateTime(graph.updatedAt)}`),
-                    h(
-                      'div',
-                      { className: 'ath-actions' },
-                      h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onEdit(graph.id) }, t('graphs.edit')),
-                      h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => onDelete(graph) }, t('action.delete')),
-                    ),
-                  ),
-                  (graph.usedBy || []).length
-                    ? h(
-                        'div',
-                        { className: 'ath-chips' },
-                        graph.usedBy.map((module) => h('span', { className: 'ath-badge', key: module.id }, `${t('graphs.usedBy')} ${module.name}`)),
-                      )
-                    : null,
+                  h('div', { className: 'ath-graph-id ath-mono' }, graph.id),
                 ),
               ),
             ),
@@ -3401,17 +3485,68 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       };
     }
 
-    function nodeSizeFor(module, direction) {
+    function nodeSizeFor(module, direction, node) {
       const ports = modulePorts(module);
+      let width = NODE_WIDTH;
+      let height;
       if (direction === 'vertical') {
         const columns = Math.max(1, ports.inputs.length, ports.outputs.length);
-        return {
-          width: Math.min(360, Math.max(NODE_WIDTH, 56 + columns * 64)),
-          height: VERTICAL_HEIGHT,
-        };
+        width = Math.min(360, Math.max(NODE_WIDTH, 56 + columns * 64));
+        height = VERTICAL_HEIGHT;
+      } else {
+        const rows = Math.max(1, ports.inputs.length, ports.outputs.length);
+        height = NODE_HEADER + rows * PORT_ROW + NODE_BOTTOM + 2;
       }
-      const rows = Math.max(1, ports.inputs.length, ports.outputs.length);
-      return { width: NODE_WIDTH, height: NODE_HEADER + rows * PORT_ROW + NODE_BOTTOM + 2 };
+      const customWidth = node && Number(node.width) > 0 ? Number(node.width) : 0;
+      const customHeight = node && Number(node.height) > 0 ? Number(node.height) : 0;
+      return {
+        width: Math.min(2400, Math.max(160, customWidth || width)),
+        height: Math.min(2400, Math.max(80, customHeight || height)),
+      };
+    }
+
+    function nodeInfoPairs(module, node) {
+      const params = { ...((module && module.params) || {}), ...((node && node.params) || {}) };
+      return Object.entries(params).map(([key, value]) => [
+        key,
+        String(value == null ? '' : value).replace(/\s+/g, ' '),
+      ]);
+    }
+
+    function NodeInfo({ node, module, rows, direction, height }) {
+      const pairs = nodeInfoPairs(module, node);
+      const lineHeight = 11;
+      const infoTop = direction === 'vertical' ? 53 : NODE_HEADER + rows * PORT_ROW + 2;
+      const available = height - infoTop - (direction === 'vertical' ? 14 : 4);
+      const lines = [];
+      if (available >= lineHeight) lines.push({ key: 'id', text: `id=${node.moduleId}` });
+      const slots = Math.max(0, Math.floor((available - lineHeight) / lineHeight));
+      for (const [key, value] of pairs.slice(0, slots)) lines.push({ key: `param-${key}`, text: `${key}=${value}` });
+      if (!lines.length) return null;
+      return h(
+        'div',
+        {
+          className: 'ath-node-info',
+          style: {
+            top: infoTop,
+            left: direction === 'vertical' ? 8 : 10,
+            right: direction === 'vertical' ? 8 : 10,
+            height: lines.length * lineHeight,
+          },
+          title: [`id=${node.moduleId}`, ...pairs.map(([key, value]) => `${key}=${value}`)].join('\n'),
+        },
+        lines.map((line) =>
+          h(
+            'div',
+            {
+              key: line.key,
+              className: `ath-node-kv ath-mono${line.key === 'id' ? ' ath-node-id' : ''}`,
+              style: { height: lineHeight, lineHeight: `${lineHeight}px` },
+            },
+            line.text,
+          ),
+        ),
+      );
     }
 
     function portTop(index) {
@@ -3605,13 +3740,35 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         }),
         [nodes, edgesData],
       );
-      const sizes = useMemo(
-        () => new Map(nodes.map((node) => [node.path, nodeSizeFor(modules.get(node.path), direction)])),
+      const [sizeOverrides, setSizeOverrides] = useState({});
+      const baseSizes = useMemo(
+        () =>
+          new Map(
+            nodes.map((node) => [
+              node.path,
+              nodeSizeFor(modules.get(node.path), direction, node),
+            ]),
+          ),
         [nodes, modules, direction],
       );
+      const sizes = useMemo(
+        () =>
+          new Map(
+            [...baseSizes].map(([path, base]) => {
+              const override = sizeOverrides[path];
+              return [
+                path,
+                override
+                  ? { width: Math.max(160, override.width), height: Math.max(80, override.height) }
+                  : base,
+              ];
+            }),
+          ),
+        [baseSizes, sizeOverrides],
+      );
       const basePositions = useMemo(
-        () => layoutNodes(graphForLayout, modules, direction, sizes),
-        [graphForLayout, modules, direction, sizes],
+        () => layoutNodes(graphForLayout, modules, direction, baseSizes),
+        [graphForLayout, modules, direction, baseSizes],
       );
 
       const [overrides, setOverrides] = useState({});
@@ -3620,22 +3777,32 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [interaction, setInteraction] = useState(null);
       const [outputMenu, setOutputMenu] = useState(null);
       const canvasRef = useRef(null);
+      const movedRef = useRef(false);
 
       useEffect(() => {
         setOutputMenu(null);
+        setSizeOverrides({});
       }, [experiment.id]);
 
       useEffect(() => {
         if (!outputMenu) return undefined;
         const close = () => setOutputMenu(null);
+        const onPointerDown = (event) => {
+          // 画布里的按下可能是拖动节点或平移画布，菜单要跟着端口走，是否关闭交给 pointerup 判断。
+          const target = event.target;
+          if (target && typeof target.closest === 'function' && target.closest('.ath-run-viewport')) return;
+          close();
+        };
         const onKey = (event) => {
           if (event.key === 'Escape') close();
         };
-        window.addEventListener('pointerdown', close);
+        window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('keydown', onKey);
+        window.addEventListener('resize', close);
         return () => {
-          window.removeEventListener('pointerdown', close);
+          window.removeEventListener('pointerdown', onPointerDown);
           window.removeEventListener('keydown', onKey);
+          window.removeEventListener('resize', close);
         };
       }, [outputMenu]);
 
@@ -3647,6 +3814,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         setOutputMenu({
           path: node.path,
           port,
+          anchor: event.currentTarget,
           x: Math.min(event.clientX, Math.max(12, window.innerWidth - 210)),
           y: Math.min(event.clientY, Math.max(12, window.innerHeight - 120)),
         });
@@ -3674,6 +3842,34 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         return map;
       }, [nodes, basePositions, overrides]);
 
+      // 菜单锚定在触发它的输出端口上：拖动节点、平移或缩放画布后重新测量，菜单跟着端口走。
+      useLayoutEffect(() => {
+        if (!outputMenu) return;
+        const anchor = outputMenu.anchor;
+        if (!anchor || !anchor.isConnected) {
+          setOutputMenu(null);
+          return;
+        }
+        const rect = anchor.getBoundingClientRect();
+        const menuWidth = 210;
+        const menuHeight = 128;
+        const margin = 8;
+        let x;
+        let y;
+        if (direction === 'vertical') {
+          x = rect.left;
+          y = rect.bottom + 8;
+          if (y + menuHeight > window.innerHeight - margin) y = rect.top - menuHeight - 8;
+        } else {
+          x = rect.right + 8;
+          y = rect.top - 4;
+          if (x + menuWidth > window.innerWidth - margin) x = rect.left - menuWidth - 8;
+        }
+        x = Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin));
+        y = Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin));
+        if (x !== outputMenu.x || y !== outputMenu.y) setOutputMenu({ ...outputMenu, x, y });
+      }, [outputMenu, view, positions, direction]);
+
       const viewRef = useRef(view);
       viewRef.current = view;
       const positionsRef = useRef(positions);
@@ -3690,6 +3886,23 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       nodeByPathRef.current = nodeByPath;
       const selectedRef = useRef(selectedPath);
       selectedRef.current = selectedPath;
+
+      const startNodeResize = (event, node, corner) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const position = positionsRef.current.get(node.path) || { x: 0, y: 0 };
+        const size = sizesRef.current.get(node.path);
+        if (!size) return;
+        setInteraction({
+          type: 'resize',
+          path: node.path,
+          corner,
+          startX: event.clientX,
+          startY: event.clientY,
+          origin: { ...position, width: size.width, height: size.height },
+        });
+      };
 
       const fitTo = useCallback((positionMap) => {
         const element = canvasRef.current;
@@ -3716,6 +3929,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 
       useEffect(() => {
         setOverrides({});
+        setSizeOverrides({});
         setSelectedPath('');
         setInteraction(null);
         const frame = requestAnimationFrame(() => fitTo(positionsRef.current));
@@ -3771,7 +3985,11 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 
       useEffect(() => {
         if (!interaction) return undefined;
+        movedRef.current = false;
         const onMove = (event) => {
+          if (!movedRef.current && (Math.abs(event.clientX - interaction.startX) > 3 || Math.abs(event.clientY - interaction.startY) > 3)) {
+            movedRef.current = true;
+          }
           if (interaction.type === 'pan') {
             setView({
               ...interaction.origin,
@@ -3785,9 +4003,30 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             const x = interaction.origin.x + (event.clientX - interaction.startX) / zoom;
             const y = interaction.origin.y + (event.clientY - interaction.startY) / zoom;
             setOverrides((previous) => ({ ...previous, [interaction.path]: { x, y } }));
+            return;
+          }
+          if (interaction.type === 'resize') {
+            const zoom = viewRef.current.zoom;
+            const dx = (event.clientX - interaction.startX) / zoom;
+            const dy = (event.clientY - interaction.startY) / zoom;
+            const origin = interaction.origin;
+            const east = interaction.corner.includes('e');
+            const south = interaction.corner.includes('s');
+            let width = origin.width + (east ? dx : -dx);
+            let height = origin.height + (south ? dy : -dy);
+            width = Math.max(160, Math.min(2400, width));
+            height = Math.max(80, Math.min(2400, height));
+            const x = east ? origin.x : origin.x + origin.width - width;
+            const y = south ? origin.y : origin.y + origin.height - height;
+            setSizeOverrides((previous) => ({ ...previous, [interaction.path]: { width, height } }));
+            setOverrides((previous) => ({ ...previous, [interaction.path]: { x, y } }));
           }
         };
-        const onUp = () => setInteraction(null);
+        const onUp = () => {
+          setInteraction(null);
+          // 只是单击（没有拖动）时关闭输出菜单；拖动时菜单保持打开并跟随端口。
+          if (!movedRef.current) setOutputMenu(null);
+        };
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('pointercancel', onUp);
@@ -3863,7 +4102,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 origin: { ...viewRef.current },
               });
             },
-            onContextMenu: (event) => event.preventDefault(),
+            onContextMenu: (event) => {
+              event.preventDefault();
+              if (outputMenu) setOutputMenu(null);
+            },
           },
           nodes.length
             ? h(
@@ -3912,20 +4154,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   const module = modules.get(node.path);
                   const ports = modulePorts(module);
                   const position = positions.get(node.path) || { x: 0, y: 0 };
-                  const size = sizes.get(node.path) || nodeSizeFor(module, direction);
+                  const size = sizes.get(node.path) || nodeSizeFor(module, direction, node);
                   const group = node.kind === 'dataset' ? 'dataset' : RUN_STATUS_GROUP[node.status] || 'pending';
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
                   const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
-                  const runParams = node.params || {};
-                  const runParamPairs = Object.entries(runParams).map(([key, value]) => [
-                    key,
-                    String(value == null ? '' : value).replace(/\s+/g, ' '),
-                  ]);
-                  const runParamShort = runParamPairs
-                    .slice(0, 1)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(' · ');
-                  const runParamTitle = runParamPairs.map(([key, value]) => `${key}=${value}`).join('\n');
                   return h(
                     'div',
                     {
@@ -3935,11 +4167,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       'data-kind': node.kind || 'command',
                       'data-direction': direction,
                       'data-group': group,
-                      title: runParamTitle || undefined,
+                      title: [
+                        `id=${node.moduleId}`,
+                        ...nodeInfoPairs(module, node).map(([key, value]) => `${key}=${value}`),
+                      ].join('\n'),
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => {
                         if (event.button !== 0) return;
                         event.stopPropagation();
+                        if (outputMenu && outputMenu.path !== node.path) setOutputMenu(null);
                         setSelectedPath(node.path);
                         const origin = positionsRef.current.get(node.path) || { x: 0, y: 0 };
                         setInteraction({
@@ -3965,9 +4201,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                             : runStatusLabel(t, node.status)
                         } · ${node.moduleName || node.moduleId} · ${tr(t, 'modules.versionLabel', {
                           version: node.moduleVersion || 1,
-                        })}${runParamShort ? ` · ${runParamShort}` : ''}`,
+                        })}`,
                       ),
                     ),
+                    h(NodeInfo, { node, module, rows, direction, height: size.height }),
                     direction === 'vertical'
                       ? h(
                           'div',
@@ -4008,7 +4245,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                     port,
                                     node.outputTypes && node.outputTypes[port],
                                   ),
-                                  onClick: (event) => openOutputMenu(event, node, port),
                                   onPointerDown: (event) => event.stopPropagation(),
                                   onContextMenu: (event) => openOutputMenu(event, node, port),
                                 },
@@ -4051,9 +4287,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                                           node.outputTypes && node.outputTypes[ports.outputs[row]],
                                         )
                                       : undefined,
-                                    onClick: ports.outputs[row]
-                                      ? (event) => openOutputMenu(event, node, ports.outputs[row])
-                                      : undefined,
                                     onPointerDown: ports.outputs[row]
                                       ? (event) => event.stopPropagation()
                                       : undefined,
@@ -4091,7 +4324,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                           port,
                           node.outputTypes && node.outputTypes[port],
                         ),
-                        onClick: (event) => openOutputMenu(event, node, port),
                         onPointerDown: (event) => event.stopPropagation(),
                         onContextMenu: (event) => openOutputMenu(event, node, port),
                         style:
@@ -4100,6 +4332,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                             : { top: portTop(index) - 5 },
                       }),
                     ),
+                    node.path === selectedPath
+                      ? ['nw', 'ne', 'sw', 'se'].map((corner) =>
+                          h('div', {
+                            key: `handle-${corner}`,
+                            className: `ath-resize-handle ath-resize-${corner}`,
+                            onPointerDown: (event) => startNodeResize(event, node, corner),
+                          }),
+                        )
+                      : null,
                   );
                 }),
               )
@@ -4126,6 +4367,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 className: 'ath-btn ath-btn-ghost',
                 onClick: () => {
                   setOverrides({});
+                  setSizeOverrides({});
                   requestAnimationFrame(() => fitTo(basePositions));
                 },
               },
@@ -4138,6 +4380,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 className: 'ath-btn ath-btn-ghost',
                 onClick: () => {
                   setOverrides({});
+                  setSizeOverrides({});
                   setSelectedPath('');
                   requestAnimationFrame(() => fitTo(basePositions));
                 },
@@ -4247,7 +4490,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       environments,
       draft,
       onDraftChange,
+      onPersistState,
       onSave,
+      onSubmit,
+      dirty,
       onBack,
       onOpenSubgraph,
       onDelete,
@@ -4262,7 +4508,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const sizes = useMemo(
         () =>
           new Map(
-            graph.nodes.map((node) => [node.id, nodeSizeFor(moduleById.get(node.moduleId), direction)]),
+            graph.nodes.map((node) => [
+              node.id,
+              nodeSizeFor(moduleById.get(node.moduleId), direction, node),
+            ]),
           ),
         [graph.nodes, moduleById, direction],
       );
@@ -4282,8 +4531,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         return map;
       }, [graph, layoutPositions]);
 
-      const [view, setView] = useState({ x: 30, y: 24, zoom: 1 });
-      const [selection, setSelection] = useState({ nodes: [], edges: [] });
+      const [view, setView] = useState(() => draft.view || { x: 30, y: 24, zoom: 1 });
+      const [selection, setSelection] = useState(() => draft.selection || { nodes: [], edges: [] });
       const [interaction, setInteraction] = useState(null);
       const [marquee, setMarquee] = useState(null);
       const [connecting, setConnecting] = useState(null);
@@ -4332,6 +4581,19 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       selectionRef.current = selection;
       const draftRef = useRef(draft);
       draftRef.current = draft;
+      const persistRef = useRef(onPersistState);
+      persistRef.current = onPersistState;
+
+      // 离开编辑器（切 tab、切编辑标签）时把视口与选中项写回这个草稿，
+      // 再次打开同一个编辑标签时恢复离开时的状态。
+      useEffect(
+        () => () => {
+          if (persistRef.current) {
+            persistRef.current({ view: viewRef.current, selection: selectionRef.current });
+          }
+        },
+        [],
+      );
 
       const paletteItems = useMemo(() => {
         const query = paletteQuery.trim().toLowerCase();
@@ -4691,6 +4953,31 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             });
             return;
           }
+          if (interaction.type === 'resize-node') {
+            const zoom = viewRef.current.zoom;
+            const dx = (event.clientX - interaction.startX) / zoom;
+            const dy = (event.clientY - interaction.startY) / zoom;
+            const origin = interaction.origin;
+            const east = interaction.corner.includes('e');
+            const south = interaction.corner.includes('s');
+            let width = origin.width + (east ? dx : -dx);
+            let height = origin.height + (south ? dy : -dy);
+            width = Math.max(160, Math.min(2400, width));
+            height = Math.max(80, Math.min(2400, height));
+            const x = east ? origin.x : origin.x + origin.width - width;
+            const y = south ? origin.y : origin.y + origin.height - height;
+            const current = draftRef.current;
+            onDraftChange({
+              ...current,
+              graph: {
+                ...current.graph,
+                nodes: current.graph.nodes.map((node) =>
+                  node.id === interaction.nodeId ? { ...node, x, y, width, height } : node,
+                ),
+              },
+            });
+            return;
+          }
           if (interaction.type === 'marquee') {
             const rect = interaction.rect;
             setMarquee({
@@ -4909,6 +5196,24 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         setInteraction({ type: 'node', startX: event.clientX, startY: event.clientY, origins });
       };
 
+      const onResizePointerDown = (event, node, corner) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const position = positionsRef.current.get(node.id) || { x: 0, y: 0 };
+        const size =
+          sizesRef.current.get(node.id) ||
+          nodeSizeFor(moduleByIdRef.current.get(node.moduleId), directionRef.current, node);
+        setInteraction({
+          type: 'resize-node',
+          nodeId: node.id,
+          corner,
+          startX: event.clientX,
+          startY: event.clientY,
+          origin: { x: position.x, y: position.y, width: size.width, height: size.height },
+        });
+      };
+
       const onPortPointerDown = (event, nodeId, kind, portName) => {
         if (event.button !== 0) return;
         event.stopPropagation();
@@ -5014,6 +5319,17 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               'button',
               {
                 type: 'button',
+                className: 'ath-btn',
+                onClick: onSubmit,
+                disabled: saving || modules.length === 0 || broken || subgraph || !graph.name.trim() || !graph.nodes.length,
+                title: subgraph ? t('graphs.subgraphRunHint') : broken ? t('graphs.cycle') : undefined,
+              },
+              t('experiments.submit'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
                 className: 'ath-btn ath-btn-primary',
                 onClick: onSave,
                 disabled: saving || modules.length === 0 || broken,
@@ -5023,6 +5339,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             ),
           ),
         ),
+        dirty
+          ? h(
+              'div',
+              { className: 'ath-hint', style: { marginBottom: 8 } },
+              t('graphEditor.unsavedSubmitHint'),
+            )
+          : null,
         errors.length
           ? h(
               'div',
@@ -5160,24 +5483,17 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   const module = moduleById.get(node.moduleId);
                   const ports = modulePorts(module);
                   const position = positions.get(node.id) || { x: 0, y: 0 };
-                  const size = sizes.get(node.id) || nodeSizeFor(module, direction);
+                  const size = sizes.get(node.id) || nodeSizeFor(module, direction, node);
                   const selected = selection.nodes.includes(node.id);
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
                   const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
-                  const effectiveParams = module ? { ...(module.params || {}), ...(node.params || {}) } : {};
-                  const paramPairs = Object.entries(effectiveParams).map(([key, value]) => [
-                    key,
-                    String(value == null ? '' : value).replace(/\s+/g, ' '),
-                  ]);
-                  const paramShort = paramPairs
-                    .slice(0, 2)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(' · ');
-                  const paramFull = paramPairs.map(([key, value]) => `${key}=${value}`).join('\n');
                   const moduleName = module ? module.name : node.moduleId;
-                  const nodeSub = `${moduleName}${paramShort ? ` · ${paramShort}` : ''}${
-                    paramPairs.length > 2 ? ` +${paramPairs.length - 2}` : ''
-                  }`;
+                  const nodeSub = moduleName;
+                  const infoTitle = [
+                    `id=${node.moduleId}`,
+                    ...nodeInfoPairs(module, node).map(([key, value]) => `${key}=${value}`),
+                  ].join('\n');
+                  const showHandles = selected && selection.nodes.length === 1;
                   return h(
                     'div',
                     {
@@ -5186,6 +5502,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       'data-selected': selected ? 'true' : 'false',
                       'data-kind': module ? module.kind : 'command',
                       'data-direction': direction,
+                      title: infoTitle,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => onNodePointerDown(event, node),
                     },
@@ -5194,12 +5511,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       { className: 'ath-node-head' },
                       h('span', { className: 'ath-node-title' }, node.label || (module ? module.name : node.moduleId)),
                       module && module.kind !== 'command' ? h('span', { className: 'ath-node-tag' }, t(`modules.kind.${module.kind}`)) : null,
-                      h(
-                        'span',
-                        { className: 'ath-node-sub', title: paramFull || undefined },
-                        nodeSub,
-                      ),
+                      h('span', { className: 'ath-node-sub' }, nodeSub),
                     ),
+                    h(NodeInfo, { node, module, rows, direction, height: size.height }),
                     direction === 'vertical'
                       ? h(
                           'div',
@@ -5327,6 +5641,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
                       }),
                     ),
+                    showHandles
+                      ? ['nw', 'ne', 'sw', 'se'].map((corner) =>
+                          h('div', {
+                            key: `handle-${corner}`,
+                            className: `ath-resize-handle ath-resize-${corner}`,
+                            onPointerDown: (event) => onResizePointerDown(event, node, corner),
+                          }),
+                        )
+                      : null,
                   );
                 }),
                 connecting
@@ -5755,7 +6078,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 // ---- client/src/80-modules.js ----
     // ---------------------------------------------------------- 模块
 
-    function ModulesView({ t, data, onNew, onEdit, onDelete }) {
+    function ModulesView({ t, data, onNew, onEdit, onCopy, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
       const [menu, setMenu] = useState(null);
@@ -5872,6 +6195,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       ),
                     ),
                     h('div', { className: 'ath-module-desc' }, module.description || ''),
+                    h('div', { className: 'ath-module-id ath-mono' }, module.id),
                   ),
                 ),
               ),
@@ -5881,6 +6205,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 x: menu.x,
                 y: menu.y,
                 items: [
+                  { key: 'copy', label: t('modules.copyId'), onSelect: () => onCopy(menu.module) },
                   { key: 'edit', label: t('modules.edit'), onSelect: () => onEdit(menu.module) },
                   {
                     key: 'delete',
@@ -5903,6 +6228,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
+      const readOnly = !isNew;
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -5967,23 +6293,25 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         h(
           'div',
           { className: 'ath-editor-head' },
-          h('h2', { className: 'ath-editor-title' }, module.id && !draft.isNew ? t('moduleEditor.edit') : t('moduleEditor.new')),
+          h('h2', { className: 'ath-editor-title' }, readOnly ? t('moduleEditor.edit') : t('moduleEditor.new')),
           h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
           h(
             'div',
             { className: 'ath-actions' },
             h('button', { type: 'button', className: 'ath-btn', onClick: onBack, disabled: saving }, t('action.back')),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'ath-btn ath-btn-primary',
-                onClick: onSave,
-                disabled: saving || assetBusy || needsAsset,
-                title: needsAsset ? t('modules.assetRequired') : undefined,
-              },
-              saving ? t('modules.saving') : t('modules.save'),
-            ),
+            readOnly
+              ? null
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-primary',
+                    onClick: onSave,
+                    disabled: saving || assetBusy || needsAsset,
+                    title: needsAsset ? t('modules.assetRequired') : undefined,
+                  },
+                  saving ? t('modules.saving') : t('modules.save'),
+                ),
           ),
         ),
         errors.length
@@ -5993,23 +6321,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               errors.map((error, index) => h('div', { className: 'ath-error', key: index }, `· ${error}`)),
             )
           : null,
-        !draft.isNew
-          ? h(
-              'div',
-              { className: 'ath-card ath-version-bar' },
-              h(
-                'label',
-                { className: 'ath-check' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: Boolean(draft.overwriteVersion),
-                  onChange: (event) => setDraft({ ...draft, overwriteVersion: event.target.checked }),
-                }),
-                h('span', null, t('modules.overwriteVersion')),
-              ),
-              h('span', { className: 'ath-hint' }, tr(t, 'modules.versionHint', { version: module.version || 1 })),
-            )
-          : null,
         h(
           'div',
           { className: 'ath-editor' },
@@ -6017,39 +6328,31 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             'div',
             { className: 'ath-editor-main' },
             h(
-              'div',
-              { className: 'ath-card' },
+              'fieldset',
+              { className: 'ath-card ath-form', disabled: readOnly },
+              readOnly
+                ? h('div', { className: 'ath-hint', style: { marginBottom: 12 } }, t('modules.readonlyHint'))
+                : null,
+              module.id
+                ? h(
+                    'div',
+                    { className: 'ath-field', style: { marginBottom: 12 } },
+                    h('label', { className: 'ath-label' }, t('modules.id')),
+                    h('div', { className: 'ath-readonly-value' }, h('code', { className: 'ath-mono' }, module.id)),
+                  )
+                : null,
               h(
                 'div',
-                { className: 'ath-grid-2' },
-                h(
-                  'div',
-                  { className: 'ath-field' },
-                  h('label', { className: 'ath-label' }, t('common.name')),
-                  h('input', {
-                    className: 'ath-input',
-                    type: 'text',
-                    value: module.name,
-                    placeholder: t('modules.placeholder.name'),
-                    maxLength: 120,
-                    onChange: (event) => patch({ name: event.target.value }),
-                  }),
-                ),
-                h(
-                  'div',
-                  { className: 'ath-field' },
-                  h('label', { className: 'ath-label' }, t('modules.id')),
-                  h('input', {
-                    className: 'ath-input ath-mono',
-                    type: 'text',
-                    value: module.id,
-                    placeholder: 'train-model',
-                    spellCheck: false,
-                    disabled: !isNew,
-                    onChange: (event) => patch({ id: event.target.value }),
-                  }),
-                  h('div', { className: 'ath-hint' }, t('modules.idHint')),
-                ),
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('common.name')),
+                h('input', {
+                  className: 'ath-input',
+                  type: 'text',
+                  value: module.name,
+                  placeholder: t('modules.placeholder.name'),
+                  maxLength: 120,
+                  onChange: (event) => patch({ name: event.target.value }),
+                }),
               ),
               h(
                 'div',
@@ -6306,56 +6609,46 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     ),
                     h(
                       'div',
-                      { className: 'ath-grid-2', style: { marginTop: 12 } },
-                      h(
-                        'div',
-                        { className: 'ath-field' },
-                        h('label', { className: 'ath-label' }, t('modules.cwd')),
-                        h('input', {
-                          className: 'ath-input ath-mono',
-                          type: 'text',
-                          value: module.cwd,
-                          placeholder: '~/work',
-                          onChange: (event) => patch({ cwd: event.target.value }),
-                        }),
-                        h('div', { className: 'ath-hint' }, t('modules.cwdHint')),
-                      ),
-                      h(
-                        'div',
-                        { className: 'ath-field' },
-                        h('label', { className: 'ath-label' }, t('modules.timeout')),
-                        h('input', {
-                          className: 'ath-input',
-                          type: 'number',
-                          min: 1,
-                          max: 86400,
-                          value: module.timeoutSec,
-                          onChange: (event) => patch({ timeoutSec: Number(event.target.value) || 1 }),
-                        }),
-                      ),
+                      { className: 'ath-field', style: { marginTop: 12 } },
+                      h('label', { className: 'ath-label' }, t('modules.timeout')),
+                      h('input', {
+                        className: 'ath-input',
+                        type: 'number',
+                        min: 1,
+                        max: 86400,
+                        value: module.timeoutSec,
+                        onChange: (event) => patch({ timeoutSec: Number(event.target.value) || 1 }),
+                      }),
                     ),
                   ),
-            ),
-            module.kind === 'dataset'
-              ? null
-              : h(
-                  'div',
-                  { className: 'ath-card' },
-                  h(
+              module.kind === 'dataset'
+                ? null
+                : h(
                     'div',
-                    { className: 'ath-row' },
-                    h('h4', { className: 'ath-section-title' }, t('modules.params')),
-                    h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
+                    {
+                      className: 'ath-field',
+                      style: {
+                        marginTop: 16,
+                        paddingTop: 12,
+                        borderTop: '1px solid var(--dsw-alias-border-l1)',
+                      },
+                    },
+                    h(
+                      'div',
+                      { className: 'ath-row' },
+                      h('label', { className: 'ath-label' }, t('modules.params')),
+                      h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
+                    ),
+                    h(ParamsEditor, {
+                      key: module.id || 'new',
+                      t,
+                      value: module.params,
+                      types: module.paramTypes || {},
+                      onChange: (params, paramTypes) => patch({ params, paramTypes }),
+                    }),
+                    h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
                   ),
-                  h(ParamsEditor, {
-                    key: module.id || 'new',
-                    t,
-                    value: module.params,
-                    types: module.paramTypes || {},
-                    onChange: (params, paramTypes) => patch({ params, paramTypes }),
-                  }),
-                  h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
-                ),
+            ),
           ),
           h(
             'div',
@@ -6439,6 +6732,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const [runId, setRunId] = useState('');
       const [runDetail, setRunDetail] = useState(null);
       const [submitOpen, setSubmitOpen] = useState(false);
+      const [submitDraft, setSubmitDraft] = useState(null);
       const [submitting, setSubmitting] = useState(false);
       const [logView, setLogView] = useState(null);
       const [outputView, setOutputView] = useState(null);
@@ -6605,24 +6899,23 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         return () => window.clearInterval(timer);
       }, [hasRunning, refresh]);
 
-      const openSubmit = () => {
-        if (!data || !(data.graphs || []).filter((graph) => !graph.isSubgraph).length) {
-          pushToast(t('experiments.noRunnableGraphs'), 'error');
+      const openSubmitDraft = () => {
+        if (!graphDraft || !graphDraft.graph || !graphDraft.graph.nodes.length) {
+          pushToast(t('experiments.noNodesToSubmit'), 'error');
           return;
         }
+        setSubmitDraft(clone(graphDraft.graph));
         setSubmitOpen(true);
       };
 
       const submitExperiment = async (values) => {
         setSubmitting(true);
         try {
-          const payload = await request('/experiments', { method: 'POST', body: values });
+          await request('/experiments', { method: 'POST', body: values });
           setSubmitOpen(false);
+          setSubmitDraft(null);
           pushToast(t('toast.submitted'));
           await loadState(true);
-          setTab('runs');
-          setRunId(payload.experiment.id);
-          setRunDetail(payload.experiment);
         } catch (error) {
           fail(error);
         } finally {
@@ -6653,6 +6946,14 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             entry.key === activeEditorKey
               ? { ...entry, draft: typeof next === 'function' ? next(entry.draft) : next }
               : entry,
+          ),
+        );
+      };
+
+      const persistEditorState = (key, patch) => {
+        setEditorTabs((tabs) =>
+          tabs.map((entry) =>
+            entry.key === key ? { ...entry, draft: { ...entry.draft, ...patch } } : entry,
           ),
         );
       };
@@ -6965,7 +7266,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const startModule = (module, kind = 'command') => {
         setModuleErrors([]);
         if (module) {
-          setModuleDraft({ module: clone(module), isNew: false, overwriteVersion: false });
+          setModuleDraft({ module: clone(module), isNew: false });
         } else {
           const nextKind = kind === 'graph' ? 'graph' : kind === 'dataset' ? 'dataset' : 'command';
           setModuleDraft({
@@ -6991,7 +7292,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               versions: [],
             },
             isNew: true,
-            overwriteVersion: false,
           });
         }
         setTab('modules');
@@ -7059,7 +7359,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             body: {
               module: moduleDraft.module,
               create: Boolean(moduleDraft.isNew),
-              overwriteVersion: Boolean(moduleDraft.overwriteVersion),
               requireAsset: Boolean(
                 moduleDraft.isNew && moduleDraft.module.kind === 'command' && !moduleDraft.module.assetId,
               ),
@@ -7073,6 +7372,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           setModuleErrors(message.split('；').filter(Boolean));
         } finally {
           setModuleSaving(false);
+        }
+      };
+
+      const copyModuleId = async (module) => {
+        try {
+          await navigator.clipboard.writeText(module.id);
+          pushToast(t('toast.copied'));
+        } catch {
+          // 剪贴板不可用时静默失败，id 仍然在卡片上可见。
         }
       };
 
@@ -7128,7 +7436,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             data,
             onNew: () => void startGraph(''),
             onEdit: (id) => void startGraph(id),
-            onDelete: deleteGraph,
           });
         }
         if (tab === 'modules') {
@@ -7140,6 +7447,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               setNewModuleOpen(true);
             },
             onEdit: (module) => startModule(module),
+            onCopy: copyModuleId,
             onDelete: deleteModule,
           });
         }
@@ -7151,7 +7459,6 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           filter,
           setFilter,
           onOpenRun: (id) => void openRun(id),
-          onNew: openSubmit,
           onCancelRun: cancelRun,
           onCopyRun: (run) => void copyRun(run),
           onRerun: (run) => void rerun(run),
@@ -7186,6 +7493,9 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           environments: data ? data.environments : [],
           draft: graphDraft,
           onDraftChange: updateActiveDraft,
+          onPersistState: (patch) => persistEditorState(activeEditorKey, patch),
+          onSubmit: () => openSubmitDraft(),
+          dirty: activeEditor ? JSON.stringify(activeEditor.draft.graph) !== activeEditor.baseline : false,
           onSave: () => void saveGraph(),
           onBack: () => {
             setActiveEditorKey('');
@@ -7217,7 +7527,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           h(
             'div',
             { className: 'ath-brand' },
-            h('div', { className: 'ath-brand-mark' }, h(NavIcon, { size: 20, active: true })),
+            h('div', { className: 'ath-brand-mark' }, h(AetherLogo, { size: 28 })),
             h(
               'div',
               { className: 'ath-brand-copy' },
@@ -7275,8 +7585,10 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     className: 'ath-tab',
                     'data-active': tab === key ? 'true' : 'false',
                     onClick: () => {
+                      // 从其它 tab 切回实验时保留正在编辑的草稿；已经在实验页时
+                      // 再点一次实验 tab 才回到实验列表。
+                      if (key === 'experiments' && tab === 'experiments') setActiveEditorKey('');
                       setTab(key);
-                      if (key === 'experiments') setActiveEditorKey('');
                     },
                   },
                   t(`tab.${key}`),
@@ -7374,9 +7686,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           ? h(SubmitDialog, {
               t,
               graphs: data ? data.graphs.filter((graph) => !graph.isSubgraph) : [],
+              draftGraph: submitDraft,
               executors: data ? data.executors : [],
               busy: submitting,
-              onClose: () => setSubmitOpen(false),
+              onClose: () => {
+                setSubmitOpen(false);
+                setSubmitDraft(null);
+              },
               onSubmit: (values) => void submitExperiment(values),
             })
           : null,
@@ -7421,7 +7737,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             {
               name: 'sidebar.panellist',
               id: 'aether',
-              order: 40,
+              order: 25,
               label: () => t('panel'),
             },
             (props) => h(NavIcon, { ...props }),

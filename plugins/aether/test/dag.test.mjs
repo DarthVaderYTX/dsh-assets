@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -10,24 +11,22 @@ import {
   normalizeEnvironments,
   normalizeGraph,
   normalizeModule,
-  slugify,
   topoLayers,
   topoOrderOf,
   validateGraph,
   validateModule,
 } from '../dag.js';
 
+const uid = (label) => {
+  const hex = createHash('sha1').update(String(label)).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+
 const command = (id, extra = {}) =>
   normalizeModule({ id, name: id.toUpperCase(), kind: 'command', command: 'echo hi', ...extra });
 
 const node = (id, moduleId, extra = {}) => ({ id, moduleId, label: '', params: {}, ...extra });
 const edge = (from, to) => ({ id: `${from}->${to}`, from, to });
-
-test('slugify produces stable ids', () => {
-  assert.equal(slugify('Nightly Training Run'), 'nightly-training-run');
-  assert.equal(slugify('  中文  '), 'item');
-  assert.equal(slugify('a_b.c'), 'a-b-c');
-});
 
 test('topoOrderOf and topoLayers follow the DAG', () => {
   const nodes = [node('a', 'm'), node('b', 'm'), node('c', 'm'), node('d', 'm')];
@@ -118,15 +117,15 @@ test('graph validation rejects unknown or missing ports', () => {
 });
 
 test('dataset modules require a URI and graphs default to vertical layout', () => {
-  const empty = normalizeModule({ id: 'ds', name: 'Dataset', kind: 'dataset' });
+  const empty = normalizeModule({ id: uid('ds'), name: 'Dataset', kind: 'dataset' });
   assert.match(validateModule(empty, [], []).join('\n'), /URI/);
   assert.deepEqual(
-    validateModule(normalizeModule({ id: 'ds', name: 'Dataset', kind: 'dataset', datasetUri: 'data/x.jsonl' }), [], []),
+    validateModule(normalizeModule({ id: uid('ds'), name: 'Dataset', kind: 'dataset', datasetUri: 'data/x.jsonl' }), [], []),
     [],
   );
 
   const noInputs = normalizeModule({
-    id: 'ds2',
+    id: uid('ds2'),
     name: 'Dataset 2',
     kind: 'dataset',
     datasetUri: 'data/x.jsonl',
@@ -144,8 +143,8 @@ test('nodes keep canvas coordinates through normalization', () => {
   const graph = normalizeGraph({
     name: 'Positioned',
     nodes: [
-      { id: 'a', moduleId: 'm', x: 12.5, y: 30 },
-      { id: 'b', moduleId: 'm', x: 'bad', y: null },
+      { id: 'a', moduleid: uid('m'), x: 12.5, y: 30 },
+      { id: 'b', moduleid: uid('m'), x: 'bad', y: null },
     ],
     edges: [],
   });
@@ -157,26 +156,26 @@ test('nodes keep canvas coordinates through normalization', () => {
 
 test('validateModule validates subgraph requirements and allows an empty command', () => {
   const graphs = [{ id: 'g1', name: 'G1', nodes: [], edges: [] }];
-  const empty = normalizeModule({ id: 'x', name: 'X', kind: 'command', command: '' });
+  const empty = normalizeModule({ id: uid('x'), name: 'X', kind: 'command', command: '' });
   assert.deepEqual(validateModule(empty, [], graphs), []);
 
-  const sub = normalizeModule({ id: 'sub', name: 'Sub', kind: 'graph', graphId: 'nope' });
+  const sub = normalizeModule({ id: uid('sub'), name: 'Sub', kind: 'graph', graphId: 'nope' });
   assert.match(validateModule(sub, [], graphs).join('\n'), /不存在/);
   assert.deepEqual(validateModule(normalizeModule({ ...sub, graphId: 'g1' }), [], graphs), []);
 });
 
 test('validateGraph enforces required input ports', () => {
   const source = normalizeModule({
-    id: 'source', name: 'Source', kind: 'command', command: 'echo', inputs: [], outputs: ['result'],
+    id: uid('source'), name: 'Source', kind: 'command', command: 'echo', inputs: [], outputs: ['result'],
   });
   const target = normalizeModule({
-    id: 'target', name: 'Target', kind: 'command', command: 'echo', inputs: ['a', 'b'], outputs: [],
+    id: uid('target'), name: 'Target', kind: 'command', command: 'echo', inputs: ['a', 'b'], outputs: [],
     requiredInputs: ['a'],
   });
   const graph = normalizeGraph({
-    id: 'required-graph',
+    id: uid('required-graph'),
     name: 'Required graph',
-    nodes: [node('s', 'source'), node('t', 'target')],
+    nodes: [node('s', uid('source')), node('t', uid('target'))],
     edges: [],
   });
   assert.match(
@@ -189,7 +188,7 @@ test('validateGraph enforces required input ports', () => {
 
 test('normalizeModule only keeps required inputs that exist', () => {
   const module = normalizeModule({
-    id: 'm',
+    id: uid('m'),
     name: 'M',
     kind: 'command',
     command: 'echo',
@@ -200,7 +199,7 @@ test('normalizeModule only keeps required inputs that exist', () => {
 });
 
 test('modules default to the local environment and reject unknown ones', () => {
-  const module = normalizeModule({ id: 'm', name: 'M', kind: 'command', command: 'echo' });
+  const module = normalizeModule({ id: uid('m'), name: 'M', kind: 'command', command: 'echo' });
   assert.equal(module.environmentId, 'local');
   assert.deepEqual(validateModule(module, [], [], []), []);
 
@@ -219,7 +218,7 @@ test('expandGraph inlines subgraphs and rewires dependencies', () => {
   const modules = [
     command('a'),
     command('b'),
-    normalizeModule({ id: 'sub', name: 'Sub', kind: 'graph', graphId: 'g2', params: { y: 2 } }),
+    normalizeModule({ id: uid('sub'), name: 'Sub', kind: 'graph', graphId: 'g2', params: { y: 2 } }),
   ];
   const graphs = [
     normalizeGraph({
@@ -231,7 +230,7 @@ test('expandGraph inlines subgraphs and rewires dependencies', () => {
     normalizeGraph({
       id: 'g1',
       name: 'Outer',
-      nodes: [node('n1', 'a'), node('n2', 'sub', { params: { x: 1 } }), node('n3', 'b')],
+      nodes: [node('n1', 'a'), node('n2', uid('sub'), { params: { x: 1 } }), node('n3', 'b')],
       edges: [edge('n1', 'n2'), edge('n2', 'n3')],
     }),
   ];

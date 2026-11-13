@@ -23,7 +23,6 @@
 import { existsSync, promises as fsp, createWriteStream } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import os from 'node:os';
 
 const NODE_TAIL_LIMIT = 20000;
 const LOG_TAIL_LIMIT = 400000;
@@ -35,6 +34,16 @@ export function safeSegment(value) {
       .replace(/[\\/]+/g, '__')
       .replace(/[^A-Za-z0-9_.-]+/g, '_')
       .slice(0, 120) || 'node'
+  );
+}
+
+/** 输入文件名尽量保持模块里定义的端口名，只去掉不能用作文件名的字符。 */
+function inputFileName(value) {
+  return (
+    String(value || 'input')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')
+      .replace(/^\.+$/, '_')
+      .slice(0, 120) || 'input'
   );
 }
 
@@ -79,27 +88,15 @@ function renderTemplate(text, values) {
     .replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g, replace);
 }
 
-function buildTemplateValues(run, node, directory, inputs, inputFile) {
+function buildTemplateValues(run, node, directory, inputValues, inputTargets, inputFile, inputDirectory) {
   const values = { ...(node.params || {}) };
-  const runEdges = Array.isArray(run.edges) ? run.edges : [];
-  const sourceNodes = run.nodes || [];
-  for (const name of node.inputs || []) {
-    const edge = runEdges.find((item) => item.to === node.path && item.toPort === name);
-    const record = edge ? inputs[edge.from] : null;
-    const type = node.inputTypes && node.inputTypes[name] ? node.inputTypes[name] : 'string';
-    if (!record) {
-      values[name] = '';
-    } else if (type === 'file' || type === 'directory') {
-      const source = sourceNodes.find((item) => item.path === edge.from);
-      const artifact = (source && source.artifacts ? source.artifacts : []).find(
-        (item) => item.port === edge.fromPort,
-      );
-      values[name] = artifact
-        ? path.join(run.dir, 'nodes', safeSegment(source.path), artifact.path)
-        : record.stdoutFile || '';
-    } else {
-      values[name] = record.text == null ? '' : record.text;
-    }
+  for (const [name, value] of Object.entries(inputValues)) {
+    values[name] =
+      value.type === 'file' || value.type === 'directory'
+        ? inputTargets[name] || ''
+        : value.text == null
+          ? ''
+          : value.text;
   }
   for (const name of node.outputs || []) {
     values[name] = path.join(directory, `${safeSegment(name)}.out`);
@@ -112,32 +109,81 @@ function buildTemplateValues(run, node, directory, inputs, inputFile) {
     node_dir: directory,
     graph_id: run.graphId,
     input_file: inputFile,
+    input_dir: inputDirectory,
   });
   return values;
 }
 
-function resolveCwd(raw, node = {}) {
-  const text = String(raw || '').trim();
-  if (!text) return node.assetPath ? path.resolve(node.assetPath) : process.cwd();
-  let expanded = text;
-  if (expanded === '~') expanded = os.homedir();
-  else if (expanded.startsWith('~/') || expanded.startsWith('~\\')) expanded = path.join(os.homedir(), expanded.slice(2));
-  return path.resolve(expanded);
+async function copyModuleFiles(node, directory) {
+  const source = node.assetPath ? path.resolve(node.assetPath) : '';
+  if (!source) return;
+  const stat = await fsp.stat(source).catch(() => null);
+  if (!stat || !stat.isDirectory()) return;
+  const entries = await fsp.readdir(source, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    await fsp.cp(path.join(source, entry.name), path.join(directory, entry.name), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+async function resolveInputArtifact(run, sourceNode, fromPort) {
+  if (!sourceNode) return null;
+  const artifact = (sourceNode.artifacts || []).find((item) => item.port === fromPort);
+  if (artifact) {
+    const absolute = path.join(run.dir, 'nodes', safeSegment(sourceNode.path), artifact.path);
+    const stat = await fsp.stat(absolute).catch(() => null);
+    if (stat && (stat.isFile() || stat.isDirectory())) {
+      return { path: absolute, kind: stat.isDirectory() ? 'directory' : 'file' };
+    }
+  }
+  // 数据集节点没有执行产物，把 datasets 里的实际数据文件当成输出来源。
+  if (sourceNode.kind === 'dataset' && sourceNode.datasetUri) {
+    const workspaceRoot = path.dirname(path.dirname(run.dir));
+    const absolute = path.resolve(workspaceRoot, sourceNode.datasetUri);
+    const stat = await fsp.stat(absolute).catch(() => null);
+    if (stat && (stat.isFile() || stat.isDirectory())) {
+      return { path: absolute, kind: stat.isDirectory() ? 'directory' : 'file' };
+    }
+  }
+  return null;
+}
+
+async function materializeInputs(directory, inputValues) {
+  const inputDirectory = path.join(directory, 'input');
+  await fsp.rm(inputDirectory, { recursive: true, force: true }).catch(() => {});
+  await fsp.mkdir(inputDirectory, { recursive: true });
+  const targets = {};
+  for (const [name, value] of Object.entries(inputValues)) {
+    const target = path.join(inputDirectory, inputFileName(name));
+    if ((value.type === 'file' || value.type === 'directory') && value.artifact) {
+      if (value.artifact.kind === 'directory') {
+        await fsp.cp(value.artifact.path, target, { recursive: true, force: true });
+      } else {
+        await fsp.copyFile(value.artifact.path, target);
+      }
+    } else {
+      await fsp.writeFile(target, value.text == null ? '' : value.text, 'utf8');
+    }
+    targets[name] = target;
+  }
+  return { inputDirectory, targets };
 }
 
 function quoteShellArg(value) {
   return `"${String(value || '').replace(/"/g, '\\"')}"`;
 }
 
-function assetEntrypoint(node) {
-  if (!node.assetPath) return '';
+function assetEntrypoint(node, directory) {
+  if (!directory) return '';
   if (node.assetKind === 'file') {
-    const file = path.join(node.assetPath, path.basename(node.assetName || ''));
+    const file = path.join(directory, path.basename(node.assetName || ''));
     return existsSync(file) ? file : '';
   }
   if (node.assetKind !== 'directory') return '';
   for (const candidate of ['run.sh', 'run.ps1', 'main.py', 'index.js', 'main.js', 'run.js']) {
-    const file = path.join(node.assetPath, candidate);
+    const file = path.join(directory, candidate);
     if (existsSync(file)) return file;
   }
   return '';
@@ -173,8 +219,8 @@ async function readNodeArtifacts(directory, ports) {
   return artifacts;
 }
 
-function defaultAssetCommand(node) {
-  const file = assetEntrypoint(node);
+function defaultAssetCommand(node, directory) {
+  const file = assetEntrypoint(node, directory);
   if (!file) return '';
   const ext = path.extname(file).toLowerCase();
   const quoted = quoteShellArg(file);
@@ -189,7 +235,7 @@ function paramEnvKey(key) {
   return `AETHER_PARAM_${String(key).toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`;
 }
 
-function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
+function buildEnv(run, node, nodeDirectory, inputFile, inputValues, inputTargets) {
   const env = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
@@ -199,6 +245,7 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_NODE_ID = node.nodeId;
   env.AETHER_NODE_PATH = node.path;
   env.AETHER_NODE_DIR = nodeDirectory;
+  env.AETHER_EXEC_DIR = nodeDirectory;
   env.AETHER_GRAPH_ID = run.graphId;
   env.AETHER_GRAPH_NAME = run.graphName;
   env.AETHER_ENVIRONMENT_ID = node.environmentId || 'local';
@@ -210,6 +257,7 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_MODULE_ASSET_NAME = node.assetName || '';
   env.AETHER_MODULE_FILE =
     node.assetPath && node.assetKind === 'file' ? path.join(node.assetPath, path.basename(node.assetName || '')) : '';
+  env.AETHER_INPUT_DIR = path.join(nodeDirectory, 'input');
   if (node.kind === 'dataset') {
     env.AETHER_DATASET_URI = node.datasetUri || '';
     env.AETHER_DATASET_FORMAT = node.datasetFormat || '';
@@ -218,9 +266,13 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputs) {
   env.AETHER_PARAMS = JSON.stringify(node.params || {});
   env.AETHER_INPUTS = JSON.stringify(
     Object.fromEntries(
-      Object.entries(inputs).map(([key, value]) => [
-        key,
-        { label: value.label, exitCode: value.exitCode, stdoutFile: value.stdoutFile, text: value.text },
+      Object.entries(inputValues).map(([name, value]) => [
+        name,
+        {
+          type: value.type,
+          path: inputTargets[name] || '',
+          text: value.type === 'file' || value.type === 'directory' ? '' : value.text || '',
+        },
       ]),
     ),
   );
@@ -479,11 +531,6 @@ export class LocalExecutor {
         text,
       };
     }
-    const inputFile = path.join(directory, 'inputs.json');
-    await fsp
-      .writeFile(inputFile, JSON.stringify({ run: run.id, node: node.path, params: node.params, inputs }, null, 2), 'utf8')
-      .catch(() => {});
-
     if (node.kind === 'dataset') {
       // 数据集节点不启动命令：把数据集指针写成 stdout，交给下游读取。
       const text = `${JSON.stringify({
@@ -510,8 +557,48 @@ export class LocalExecutor {
       return;
     }
 
-    const rawCommand = node.command && node.command.trim() ? node.command : defaultAssetCommand(node);
-    const command = renderTemplate(rawCommand, buildTemplateValues(run, node, directory, inputs, inputFile));
+    await copyModuleFiles(node, directory);
+    for (const reserved of ['aether-outputs.json', 'stdout.log', 'stderr.log', 'inputs.json']) {
+      await fsp.rm(path.join(directory, reserved), { force: true }).catch(() => {});
+    }
+
+    const inputEdges = Array.isArray(run.edges) ? run.edges : [];
+    const inputValues = {};
+    for (const name of node.inputs || []) {
+      const type = node.inputTypes && node.inputTypes[name] ? node.inputTypes[name] : 'string';
+      const edge = inputEdges.find((item) => item.to === node.path && item.toPort === name);
+      if (!edge) {
+        inputValues[name] = { type, text: '', artifact: null };
+        continue;
+      }
+      const record = inputs[edge.from] || null;
+      const source = byPath.get(edge.from);
+      const artifact = await resolveInputArtifact(run, source, edge.fromPort);
+      inputValues[name] = {
+        type,
+        text: record && record.text != null ? record.text : '',
+        artifact,
+      };
+    }
+    const { inputDirectory, targets: inputTargets } = await materializeInputs(directory, inputValues);
+    const inputFile = path.join(directory, 'inputs.json');
+    await fsp
+      .writeFile(
+        inputFile,
+        JSON.stringify(
+          { run: run.id, node: node.path, params: node.params, inputDir: inputDirectory, inputs, ports: inputValues },
+          null,
+          2,
+        ),
+        'utf8',
+      )
+      .catch(() => {});
+
+    const rawCommand = node.command && node.command.trim() ? node.command : defaultAssetCommand(node, directory);
+    const command = renderTemplate(
+      rawCommand,
+      buildTemplateValues(run, node, directory, inputValues, inputTargets, inputFile, inputDirectory),
+    );
     const outLog = path.join(directory, 'stdout.log');
     const errLog = path.join(directory, 'stderr.log');
     const outStream = createWriteStream(outLog);
@@ -532,8 +619,9 @@ export class LocalExecutor {
       } else {
         child = spawn(command, {
           shell: true,
-          cwd: resolveCwd(node.cwd, node),
-          env: buildEnv(run, node, directory, inputFile, inputs),
+          // 模拟 cmd：先进入执行文件夹，再执行渲染好的命令模板。
+          cwd: directory,
+          env: buildEnv(run, node, directory, inputFile, inputValues, inputTargets),
           windowsHide: true,
         });
       }

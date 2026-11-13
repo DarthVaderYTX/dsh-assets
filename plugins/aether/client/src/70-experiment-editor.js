@@ -4,7 +4,10 @@
       environments,
       draft,
       onDraftChange,
+      onPersistState,
       onSave,
+      onSubmit,
+      dirty,
       onBack,
       onOpenSubgraph,
       onDelete,
@@ -19,7 +22,10 @@
       const sizes = useMemo(
         () =>
           new Map(
-            graph.nodes.map((node) => [node.id, nodeSizeFor(moduleById.get(node.moduleId), direction)]),
+            graph.nodes.map((node) => [
+              node.id,
+              nodeSizeFor(moduleById.get(node.moduleId), direction, node),
+            ]),
           ),
         [graph.nodes, moduleById, direction],
       );
@@ -39,8 +45,8 @@
         return map;
       }, [graph, layoutPositions]);
 
-      const [view, setView] = useState({ x: 30, y: 24, zoom: 1 });
-      const [selection, setSelection] = useState({ nodes: [], edges: [] });
+      const [view, setView] = useState(() => draft.view || { x: 30, y: 24, zoom: 1 });
+      const [selection, setSelection] = useState(() => draft.selection || { nodes: [], edges: [] });
       const [interaction, setInteraction] = useState(null);
       const [marquee, setMarquee] = useState(null);
       const [connecting, setConnecting] = useState(null);
@@ -89,6 +95,19 @@
       selectionRef.current = selection;
       const draftRef = useRef(draft);
       draftRef.current = draft;
+      const persistRef = useRef(onPersistState);
+      persistRef.current = onPersistState;
+
+      // 离开编辑器（切 tab、切编辑标签）时把视口与选中项写回这个草稿，
+      // 再次打开同一个编辑标签时恢复离开时的状态。
+      useEffect(
+        () => () => {
+          if (persistRef.current) {
+            persistRef.current({ view: viewRef.current, selection: selectionRef.current });
+          }
+        },
+        [],
+      );
 
       const paletteItems = useMemo(() => {
         const query = paletteQuery.trim().toLowerCase();
@@ -448,6 +467,31 @@
             });
             return;
           }
+          if (interaction.type === 'resize-node') {
+            const zoom = viewRef.current.zoom;
+            const dx = (event.clientX - interaction.startX) / zoom;
+            const dy = (event.clientY - interaction.startY) / zoom;
+            const origin = interaction.origin;
+            const east = interaction.corner.includes('e');
+            const south = interaction.corner.includes('s');
+            let width = origin.width + (east ? dx : -dx);
+            let height = origin.height + (south ? dy : -dy);
+            width = Math.max(160, Math.min(2400, width));
+            height = Math.max(80, Math.min(2400, height));
+            const x = east ? origin.x : origin.x + origin.width - width;
+            const y = south ? origin.y : origin.y + origin.height - height;
+            const current = draftRef.current;
+            onDraftChange({
+              ...current,
+              graph: {
+                ...current.graph,
+                nodes: current.graph.nodes.map((node) =>
+                  node.id === interaction.nodeId ? { ...node, x, y, width, height } : node,
+                ),
+              },
+            });
+            return;
+          }
           if (interaction.type === 'marquee') {
             const rect = interaction.rect;
             setMarquee({
@@ -666,6 +710,24 @@
         setInteraction({ type: 'node', startX: event.clientX, startY: event.clientY, origins });
       };
 
+      const onResizePointerDown = (event, node, corner) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const position = positionsRef.current.get(node.id) || { x: 0, y: 0 };
+        const size =
+          sizesRef.current.get(node.id) ||
+          nodeSizeFor(moduleByIdRef.current.get(node.moduleId), directionRef.current, node);
+        setInteraction({
+          type: 'resize-node',
+          nodeId: node.id,
+          corner,
+          startX: event.clientX,
+          startY: event.clientY,
+          origin: { x: position.x, y: position.y, width: size.width, height: size.height },
+        });
+      };
+
       const onPortPointerDown = (event, nodeId, kind, portName) => {
         if (event.button !== 0) return;
         event.stopPropagation();
@@ -771,6 +833,17 @@
               'button',
               {
                 type: 'button',
+                className: 'ath-btn',
+                onClick: onSubmit,
+                disabled: saving || modules.length === 0 || broken || subgraph || !graph.name.trim() || !graph.nodes.length,
+                title: subgraph ? t('graphs.subgraphRunHint') : broken ? t('graphs.cycle') : undefined,
+              },
+              t('experiments.submit'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
                 className: 'ath-btn ath-btn-primary',
                 onClick: onSave,
                 disabled: saving || modules.length === 0 || broken,
@@ -780,6 +853,13 @@
             ),
           ),
         ),
+        dirty
+          ? h(
+              'div',
+              { className: 'ath-hint', style: { marginBottom: 8 } },
+              t('graphEditor.unsavedSubmitHint'),
+            )
+          : null,
         errors.length
           ? h(
               'div',
@@ -917,24 +997,17 @@
                   const module = moduleById.get(node.moduleId);
                   const ports = modulePorts(module);
                   const position = positions.get(node.id) || { x: 0, y: 0 };
-                  const size = sizes.get(node.id) || nodeSizeFor(module, direction);
+                  const size = sizes.get(node.id) || nodeSizeFor(module, direction, node);
                   const selected = selection.nodes.includes(node.id);
                   const rows = Math.max(ports.inputs.length, ports.outputs.length);
                   const requiredInputs = new Set(module && Array.isArray(module.requiredInputs) ? module.requiredInputs : []);
-                  const effectiveParams = module ? { ...(module.params || {}), ...(node.params || {}) } : {};
-                  const paramPairs = Object.entries(effectiveParams).map(([key, value]) => [
-                    key,
-                    String(value == null ? '' : value).replace(/\s+/g, ' '),
-                  ]);
-                  const paramShort = paramPairs
-                    .slice(0, 2)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(' · ');
-                  const paramFull = paramPairs.map(([key, value]) => `${key}=${value}`).join('\n');
                   const moduleName = module ? module.name : node.moduleId;
-                  const nodeSub = `${moduleName}${paramShort ? ` · ${paramShort}` : ''}${
-                    paramPairs.length > 2 ? ` +${paramPairs.length - 2}` : ''
-                  }`;
+                  const nodeSub = moduleName;
+                  const infoTitle = [
+                    `id=${node.moduleId}`,
+                    ...nodeInfoPairs(module, node).map(([key, value]) => `${key}=${value}`),
+                  ].join('\n');
+                  const showHandles = selected && selection.nodes.length === 1;
                   return h(
                     'div',
                     {
@@ -943,6 +1016,7 @@
                       'data-selected': selected ? 'true' : 'false',
                       'data-kind': module ? module.kind : 'command',
                       'data-direction': direction,
+                      title: infoTitle,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => onNodePointerDown(event, node),
                     },
@@ -951,12 +1025,9 @@
                       { className: 'ath-node-head' },
                       h('span', { className: 'ath-node-title' }, node.label || (module ? module.name : node.moduleId)),
                       module && module.kind !== 'command' ? h('span', { className: 'ath-node-tag' }, t(`modules.kind.${module.kind}`)) : null,
-                      h(
-                        'span',
-                        { className: 'ath-node-sub', title: paramFull || undefined },
-                        nodeSub,
-                      ),
+                      h('span', { className: 'ath-node-sub' }, nodeSub),
                     ),
+                    h(NodeInfo, { node, module, rows, direction, height: size.height }),
                     direction === 'vertical'
                       ? h(
                           'div',
@@ -1084,6 +1155,15 @@
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
                       }),
                     ),
+                    showHandles
+                      ? ['nw', 'ne', 'sw', 'se'].map((corner) =>
+                          h('div', {
+                            key: `handle-${corner}`,
+                            className: `ath-resize-handle ath-resize-${corner}`,
+                            onPointerDown: (event) => onResizePointerDown(event, node, corner),
+                          }),
+                        )
+                      : null,
                   );
                 }),
                 connecting

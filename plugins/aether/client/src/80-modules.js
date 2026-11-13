@@ -1,6 +1,6 @@
     // ---------------------------------------------------------- 模块
 
-    function ModulesView({ t, data, onNew, onEdit, onDelete }) {
+    function ModulesView({ t, data, onNew, onEdit, onCopy, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
       const [menu, setMenu] = useState(null);
@@ -117,6 +117,7 @@
                       ),
                     ),
                     h('div', { className: 'ath-module-desc' }, module.description || ''),
+                    h('div', { className: 'ath-module-id ath-mono' }, module.id),
                   ),
                 ),
               ),
@@ -126,6 +127,7 @@
                 x: menu.x,
                 y: menu.y,
                 items: [
+                  { key: 'copy', label: t('modules.copyId'), onSelect: () => onCopy(menu.module) },
                   { key: 'edit', label: t('modules.edit'), onSelect: () => onEdit(menu.module) },
                   {
                     key: 'delete',
@@ -148,6 +150,7 @@
         environments.find((item) => item.id === (module.environmentId || 'local')) || environments[0];
       const patch = (values) => setDraft({ ...draft, module: { ...module, ...values } });
       const isNew = !module.id || !!draft.isNew;
+      const readOnly = !isNew;
       const fileInputRef = useRef(null);
       const dirInputRef = useRef(null);
       const [assetBusy, setAssetBusy] = useState(false);
@@ -212,23 +215,25 @@
         h(
           'div',
           { className: 'ath-editor-head' },
-          h('h2', { className: 'ath-editor-title' }, module.id && !draft.isNew ? t('moduleEditor.edit') : t('moduleEditor.new')),
+          h('h2', { className: 'ath-editor-title' }, readOnly ? t('moduleEditor.edit') : t('moduleEditor.new')),
           h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
           h(
             'div',
             { className: 'ath-actions' },
             h('button', { type: 'button', className: 'ath-btn', onClick: onBack, disabled: saving }, t('action.back')),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'ath-btn ath-btn-primary',
-                onClick: onSave,
-                disabled: saving || assetBusy || needsAsset,
-                title: needsAsset ? t('modules.assetRequired') : undefined,
-              },
-              saving ? t('modules.saving') : t('modules.save'),
-            ),
+            readOnly
+              ? null
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-primary',
+                    onClick: onSave,
+                    disabled: saving || assetBusy || needsAsset,
+                    title: needsAsset ? t('modules.assetRequired') : undefined,
+                  },
+                  saving ? t('modules.saving') : t('modules.save'),
+                ),
           ),
         ),
         errors.length
@@ -238,23 +243,6 @@
               errors.map((error, index) => h('div', { className: 'ath-error', key: index }, `· ${error}`)),
             )
           : null,
-        !draft.isNew
-          ? h(
-              'div',
-              { className: 'ath-card ath-version-bar' },
-              h(
-                'label',
-                { className: 'ath-check' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: Boolean(draft.overwriteVersion),
-                  onChange: (event) => setDraft({ ...draft, overwriteVersion: event.target.checked }),
-                }),
-                h('span', null, t('modules.overwriteVersion')),
-              ),
-              h('span', { className: 'ath-hint' }, tr(t, 'modules.versionHint', { version: module.version || 1 })),
-            )
-          : null,
         h(
           'div',
           { className: 'ath-editor' },
@@ -262,39 +250,31 @@
             'div',
             { className: 'ath-editor-main' },
             h(
-              'div',
-              { className: 'ath-card' },
+              'fieldset',
+              { className: 'ath-card ath-form', disabled: readOnly },
+              readOnly
+                ? h('div', { className: 'ath-hint', style: { marginBottom: 12 } }, t('modules.readonlyHint'))
+                : null,
+              module.id
+                ? h(
+                    'div',
+                    { className: 'ath-field', style: { marginBottom: 12 } },
+                    h('label', { className: 'ath-label' }, t('modules.id')),
+                    h('div', { className: 'ath-readonly-value' }, h('code', { className: 'ath-mono' }, module.id)),
+                  )
+                : null,
               h(
                 'div',
-                { className: 'ath-grid-2' },
-                h(
-                  'div',
-                  { className: 'ath-field' },
-                  h('label', { className: 'ath-label' }, t('common.name')),
-                  h('input', {
-                    className: 'ath-input',
-                    type: 'text',
-                    value: module.name,
-                    placeholder: t('modules.placeholder.name'),
-                    maxLength: 120,
-                    onChange: (event) => patch({ name: event.target.value }),
-                  }),
-                ),
-                h(
-                  'div',
-                  { className: 'ath-field' },
-                  h('label', { className: 'ath-label' }, t('modules.id')),
-                  h('input', {
-                    className: 'ath-input ath-mono',
-                    type: 'text',
-                    value: module.id,
-                    placeholder: 'train-model',
-                    spellCheck: false,
-                    disabled: !isNew,
-                    onChange: (event) => patch({ id: event.target.value }),
-                  }),
-                  h('div', { className: 'ath-hint' }, t('modules.idHint')),
-                ),
+                { className: 'ath-field' },
+                h('label', { className: 'ath-label' }, t('common.name')),
+                h('input', {
+                  className: 'ath-input',
+                  type: 'text',
+                  value: module.name,
+                  placeholder: t('modules.placeholder.name'),
+                  maxLength: 120,
+                  onChange: (event) => patch({ name: event.target.value }),
+                }),
               ),
               h(
                 'div',
@@ -551,56 +531,46 @@
                     ),
                     h(
                       'div',
-                      { className: 'ath-grid-2', style: { marginTop: 12 } },
-                      h(
-                        'div',
-                        { className: 'ath-field' },
-                        h('label', { className: 'ath-label' }, t('modules.cwd')),
-                        h('input', {
-                          className: 'ath-input ath-mono',
-                          type: 'text',
-                          value: module.cwd,
-                          placeholder: '~/work',
-                          onChange: (event) => patch({ cwd: event.target.value }),
-                        }),
-                        h('div', { className: 'ath-hint' }, t('modules.cwdHint')),
-                      ),
-                      h(
-                        'div',
-                        { className: 'ath-field' },
-                        h('label', { className: 'ath-label' }, t('modules.timeout')),
-                        h('input', {
-                          className: 'ath-input',
-                          type: 'number',
-                          min: 1,
-                          max: 86400,
-                          value: module.timeoutSec,
-                          onChange: (event) => patch({ timeoutSec: Number(event.target.value) || 1 }),
-                        }),
-                      ),
+                      { className: 'ath-field', style: { marginTop: 12 } },
+                      h('label', { className: 'ath-label' }, t('modules.timeout')),
+                      h('input', {
+                        className: 'ath-input',
+                        type: 'number',
+                        min: 1,
+                        max: 86400,
+                        value: module.timeoutSec,
+                        onChange: (event) => patch({ timeoutSec: Number(event.target.value) || 1 }),
+                      }),
                     ),
                   ),
-            ),
-            module.kind === 'dataset'
-              ? null
-              : h(
-                  'div',
-                  { className: 'ath-card' },
-                  h(
+              module.kind === 'dataset'
+                ? null
+                : h(
                     'div',
-                    { className: 'ath-row' },
-                    h('h4', { className: 'ath-section-title' }, t('modules.params')),
-                    h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
+                    {
+                      className: 'ath-field',
+                      style: {
+                        marginTop: 16,
+                        paddingTop: 12,
+                        borderTop: '1px solid var(--dsw-alias-border-l1)',
+                      },
+                    },
+                    h(
+                      'div',
+                      { className: 'ath-row' },
+                      h('label', { className: 'ath-label' }, t('modules.params')),
+                      h('span', { className: 'ath-hint', style: { marginLeft: 'auto' } }, t('modules.paramsHint')),
+                    ),
+                    h(ParamsEditor, {
+                      key: module.id || 'new',
+                      t,
+                      value: module.params,
+                      types: module.paramTypes || {},
+                      onChange: (params, paramTypes) => patch({ params, paramTypes }),
+                    }),
+                    h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
                   ),
-                  h(ParamsEditor, {
-                    key: module.id || 'new',
-                    t,
-                    value: module.params,
-                    types: module.paramTypes || {},
-                    onChange: (params, paramTypes) => patch({ params, paramTypes }),
-                  }),
-                  h('div', { className: 'ath-hint', style: { marginTop: 4 } }, t('modules.paramsDefaultHint')),
-                ),
+            ),
           ),
           h(
             'div',

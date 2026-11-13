@@ -10,7 +10,7 @@
             {
               name: 'sidebar.panellist',
               id: 'aether',
-              order: 40,
+              order: 25,
               label: () => t('panel'),
             },
             (props) => h(NavIcon, { ...props }),

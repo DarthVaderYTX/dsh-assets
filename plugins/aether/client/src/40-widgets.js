@@ -1,28 +1,84 @@
     // ---------------------------------------------------------- 小部件
 
-    function NavIcon({ size = 20, active = false }) {
-      const color = active ? 'var(--ath-accent, var(--dsw-alias-brand-primary))' : 'currentColor';
-      const fill = active ? 'color-mix(in srgb, var(--ath-accent, var(--dsw-alias-brand-primary)) 16%, transparent)' : 'none';
+    function NavIcon({ size = 20 }) {
       return h(
         'svg',
         {
           width: size,
           height: size,
           viewBox: '0 0 24 24',
-          fill: 'none',
           'aria-hidden': 'true',
           focusable: 'false',
           className: 'ath-nav-icon',
         },
-        h('path', {
-          d: 'M6 6.5 12 17.5M18 7.5 12 17.5M6 6.5 18 7.5',
-          stroke: color,
+        h('rect', {
+          x: 1,
+          y: 1,
+          width: 22,
+          height: 22,
+          rx: 5.5,
+          fill: '#fff',
+          stroke: '#000',
           strokeWidth: 1.6,
-          strokeLinecap: 'round',
         }),
-        h('circle', { cx: 6, cy: 6.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
-        h('circle', { cx: 18, cy: 7.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
-        h('circle', { cx: 12, cy: 17.5, r: 2.6, fill, stroke: color, strokeWidth: 1.6 }),
+        h(
+          'g',
+          { fill: 'none', stroke: '#000', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' },
+          h('path', { d: 'M6.8 7.5h10.4' }),
+          h('path', { d: 'M17.2 7.5 12 16.9' }),
+          h('path', { d: 'M6.8 7.5 12 16.9' }),
+        ),
+        h(
+          'g',
+          { fill: '#fff', stroke: '#000', strokeWidth: 1.2 },
+          h('circle', { cx: 6.8, cy: 7.5, r: 2.1 }),
+          h('circle', { cx: 17.2, cy: 7.5, r: 2.1 }),
+          h('circle', { cx: 12, cy: 16.9, r: 2.1 }),
+        ),
+        h(
+          'g',
+          { fill: '#000' },
+          h('circle', { cx: 6.8, cy: 7.5, r: 0.55 }),
+          h('circle', { cx: 17.2, cy: 7.5, r: 0.55 }),
+          h('circle', { cx: 12, cy: 16.9, r: 0.55 }),
+        ),
+      );
+    }
+
+    // 和插件 icon.svg 完全同源的品牌图标：黑边白底 + 黑色 DAG。
+    function AetherLogo({ size = 28 }) {
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 64 64',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          className: 'ath-logo-svg',
+        },
+        h('rect', { x: 2, y: 2, width: 60, height: 60, rx: 16, fill: '#fff', stroke: '#000', strokeWidth: 3 }),
+        h(
+          'g',
+          { fill: 'none', stroke: '#000', strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round' },
+          h('path', { d: 'M18 20h28' }),
+          h('path', { d: 'M46 20 32 45' }),
+          h('path', { d: 'M18 20 32 45' }),
+        ),
+        h(
+          'g',
+          { fill: '#fff', stroke: '#000', strokeWidth: 2.4 },
+          h('circle', { cx: 18, cy: 20, r: 5.2 }),
+          h('circle', { cx: 46, cy: 20, r: 5.2 }),
+          h('circle', { cx: 32, cy: 45, r: 5.2 }),
+        ),
+        h(
+          'g',
+          { fill: '#000' },
+          h('circle', { cx: 18, cy: 20, r: 1.5 }),
+          h('circle', { cx: 46, cy: 20, r: 1.5 }),
+          h('circle', { cx: 32, cy: 45, r: 1.5 }),
+        ),
       );
     }
 

@@ -217,16 +217,32 @@
       );
     }
 
-    function SubmitDialog({ t, graphs, executors, onClose, onSubmit, busy }) {
+    function SubmitDialog({ t, graphs, draftGraph, executors, onClose, onSubmit, busy }) {
       const [graphId, setGraphId] = useState(() => (graphs[0] ? graphs[0].id : ''));
       const [name, setName] = useState('');
       const [concurrency, setConcurrency] = useState(3);
-      const graph = graphs.find((item) => item.id === graphId) || null;
+      const draftSummary = draftGraph
+        ? {
+            id: draftGraph.id || '',
+            name: String(draftGraph.name || '').trim() || t('graphEditor.new'),
+            nodeCount: (draftGraph.nodes || []).length,
+            layerCount: (
+              localLayers({
+                nodes: draftGraph.nodes || [],
+                edges: draftGraph.edges || [],
+              }) || []
+            ).length,
+          }
+        : null;
+      const graph = draftSummary || graphs.find((item) => item.id === graphId) || null;
+      const canSubmit = draftGraph
+        ? Boolean(String(draftGraph.name || '').trim() && draftSummary.nodeCount)
+        : Boolean(graphId);
       return h(
         Modal,
         {
           t,
-          title: t('experiments.new'),
+          title: draftGraph ? t('experiments.submitDraftTitle') : t('experiments.new'),
           onClose: busy ? () => {} : onClose,
           footer: [
             h('button', { key: 'cancel', type: 'button', className: 'ath-btn', onClick: onClose, disabled: busy }, t('action.cancel')),
@@ -236,32 +252,45 @@
                 key: 'submit',
                 type: 'button',
                 className: 'ath-btn ath-btn-primary',
-                disabled: busy || !graphId,
-                onClick: () => onSubmit({ graphId, name, concurrency }),
+                disabled: busy || !canSubmit,
+                onClick: () =>
+                  onSubmit(
+                    draftGraph
+                      ? { graph: draftGraph, name, concurrency }
+                      : { graphId, name, concurrency },
+                  ),
               },
               busy ? t('experiments.submitting') : t('experiments.submit'),
             ),
           ],
         },
-        graphs.length === 0
+        graphs.length === 0 && !draftGraph
           ? h('div', { className: 'ath-hint' }, t('experiments.noGraphs'))
           : h(
               'div',
               null,
-              h(
-                'div',
-                { className: 'ath-field' },
-                h('label', { className: 'ath-label' }, t('experiments.graph')),
-                h(
-                  'select',
-                  {
-                    className: 'ath-select',
-                    value: graphId,
-                    onChange: (event) => setGraphId(event.target.value),
-                  },
-                  graphs.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
-                ),
-              ),
+              draftGraph
+                ? h(
+                    'div',
+                    { className: 'ath-field' },
+                    h('label', { className: 'ath-label' }, t('experiments.graph')),
+                    h('div', { className: 'ath-input ath-mono' }, draftSummary.name),
+                    h('div', { className: 'ath-hint' }, t('experiments.draftSubmitHint')),
+                  )
+                : h(
+                    'div',
+                    { className: 'ath-field' },
+                    h('label', { className: 'ath-label' }, t('experiments.graph')),
+                    h(
+                      'select',
+                      {
+                        className: 'ath-select',
+                        value: graphId,
+                        onChange: (event) => setGraphId(event.target.value),
+                      },
+                      graphs.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
+                    ),
+                  ),
               h(
                 'div',
                 { className: 'ath-field' },
@@ -887,7 +916,6 @@
       filter,
       setFilter,
       onOpenRun,
-      onNew,
       onCancelRun,
       onCopyRun,
       onRerun,
@@ -899,21 +927,23 @@
       const [query, setQuery] = useState('');
       const keyword = query.trim().toLowerCase();
       const runs = (data.experiments || []).filter((run) => {
-        if (filter === 'running' && run.status !== 'running') return false;
-        if (filter === 'failed' && run.status !== 'failed') return false;
-        if (filter === 'finished' && run.status === 'running') return false;
+        const state = instanceStatus(run);
+        if (filter === 'running' && state !== 'running') return false;
+        if (filter === 'failed' && state !== 'failed') return false;
+        if (filter === 'finished' && state === 'running') return false;
         if (!keyword) return true;
         const nodeText = (run.nodes || [])
           .flatMap((node) => [node.label, node.moduleName, node.path])
           .filter(Boolean)
           .join(' ');
-        return [run.name, run.id, run.graphName, run.graphId, run.message, statusText(t, run.status), nodeText]
+        return [run.name, run.id, run.graphName, run.graphId, run.message, statusText(t, state), nodeText]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(keyword);
       });
       const current = runDetail;
+      const currentStatus = current ? instanceStatus(current) : 'pending';
 
       return h(
         'div',
@@ -926,15 +956,6 @@
             null,
             h('h2', { className: 'ath-page-title' }, t('experiments.title')),
             h('p', { className: 'ath-page-sub' }, t('experiments.subtitle')),
-          ),
-          h(
-            'div',
-            { className: 'ath-actions' },
-            h(
-              'button',
-              { type: 'button', className: 'ath-btn ath-btn-primary', onClick: onNew, disabled: (data.graphs || []).length === 0 },
-              t('experiments.new'),
-            ),
           ),
         ),
         h(
@@ -975,8 +996,9 @@
                   { className: 'ath-run-list' },
                   runs.length === 0
                     ? h('div', { className: 'ath-hint', style: { padding: '14px' } }, t('experiments.emptyResult'))
-                    : runs.map((run) =>
-                        h(
+                    : runs.map((run) => {
+                        const state = instanceStatus(run);
+                        return h(
                           'button',
                           {
                             key: run.id,
@@ -989,7 +1011,7 @@
                             'div',
                             { className: 'ath-run-title' },
                             h('span', null, run.name),
-                            h('span', { className: 'ath-status', 'data-status': statusClass(run.status), style: { marginLeft: 'auto' } }, statusText(t, run.status)),
+                            h('span', { className: 'ath-status', 'data-status': statusClass(state), style: { marginLeft: 'auto' } }, statusText(t, state)),
                           ),
                           h(
                             'div',
@@ -1002,13 +1024,13 @@
                           ),
                           h(
                             'div',
-                            { className: 'ath-progress', 'data-status': statusClass(run.status) },
+                            { className: 'ath-progress', 'data-status': statusClass(state) },
                             h('i', {
                               style: { width: `${run.counts.total ? Math.round((run.counts.done / run.counts.total) * 100) : 0}%` },
                             }),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                 ),
           ),
           current
@@ -1028,8 +1050,9 @@
                       h(
                         'div',
                         { className: 'ath-detail-meta' },
-                        h('span', { className: 'ath-status', 'data-status': statusClass(current.status) }, statusText(t, current.status)),
+                        h('span', { className: 'ath-status', 'data-status': statusClass(currentStatus) }, statusText(t, currentStatus)),
                         h('span', null, current.graphName),
+                        h('code', { className: 'ath-mono', title: current.id }, `id=${current.id}`),
                         h('span', null, `${t('experiments.startedAt')} ${formatDateTime(current.startedAt)}`),
                         h('span', null, `${t('experiments.endedAt')} ${formatDateTime(current.endedAt)}`),
                         h('span', null, `${t('experiments.concurrency')} ${current.concurrency}`),
@@ -1062,7 +1085,7 @@
                   ),
                   h(
                     'div',
-                    { className: 'ath-progress', 'data-status': statusClass(current.status), style: { marginTop: 8 } },
+                    { className: 'ath-progress', 'data-status': statusClass(currentStatus), style: { marginTop: 8 } },
                     h('i', {
                       style: { width: `${current.counts.total ? Math.round((current.counts.done / current.counts.total) * 100) : 0}%` },
                     }),
