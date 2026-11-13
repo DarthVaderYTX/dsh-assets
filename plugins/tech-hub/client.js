@@ -909,7 +909,7 @@ window.__ModuleLoader__.load({
             'linearGradient',
             { id: 'th-header-bg', x1: '0', y1: '0', x2: '64', y2: '64', gradientUnits: 'userSpaceOnUse' },
             h('stop', { offset: '0', 'stop-color': '#4f46e5' }),
-            h('stop', { offset: '1', 'stop-color': '#0d9488' }),
+            h('stop', { offset: '1', 'stop-color': '#ea580c' }),
           ),
           h(
             'clipPath',
