@@ -906,18 +906,21 @@ window.__ModuleLoader__.load({
           'defs',
           null,
           h(
-            'linearGradient',
-            { id: 'th-header-bg', x1: '0', y1: '0', x2: '64', y2: '64', gradientUnits: 'userSpaceOnUse' },
-            h('stop', { offset: '0', 'stop-color': '#4f46e5' }),
-            h('stop', { offset: '1', 'stop-color': '#ea580c' }),
-          ),
-          h(
             'clipPath',
             { id: 'th-header-flask-clip' },
             h('path', { d: 'M26 12h12v12l15 24c2 3.2-.3 7-4 7H15c-3.7 0-6-3.8-4-7l15-24V12Z' }),
           ),
         ),
-        h('rect', { x: 4, y: 4, width: 56, height: 56, rx: 16, fill: 'url(#th-header-bg)' }),
+        h('rect', {
+          x: 4,
+          y: 4,
+          width: 56,
+          height: 56,
+          rx: 16,
+          fill: '#ffffff',
+          stroke: '#111827',
+          strokeWidth: 2.5,
+        }),
         h('rect', {
           x: 12,
           y: 36,
@@ -929,19 +932,19 @@ window.__ModuleLoader__.load({
         h('path', {
           d: 'M26 12h12v12l15 24c2 3.2-.3 7-4 7H15c-3.7 0-6-3.8-4-7l15-24V12Z',
           fill: 'none',
-          stroke: '#fff',
+          stroke: '#111827',
           strokeWidth: 3.2,
           strokeLinejoin: 'round',
         }),
         h('path', {
           d: 'M24 12h16',
           fill: 'none',
-          stroke: '#fff',
+          stroke: '#111827',
           strokeWidth: 3.2,
           strokeLinecap: 'round',
         }),
-        h('circle', { cx: 29.5, cy: 29, r: 1.9, fill: '#fff' }),
-        h('circle', { cx: 35, cy: 33, r: 1.1, fill: '#fff' }),
+        h('circle', { cx: 29.5, cy: 29, r: 1.9, fill: '#111827' }),
+        h('circle', { cx: 35, cy: 33, r: 1.1, fill: '#111827' }),
       );
     }
 
