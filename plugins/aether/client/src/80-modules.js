@@ -3,6 +3,19 @@
     function ModulesView({ t, data, onNew, onEdit, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
+      const [menu, setMenu] = useState(null);
+      const showMenu = (module, x, y) => {
+        setMenu({
+          module,
+          x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 100)),
+        });
+      };
+      const openMenu = (event, module) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showMenu(module, event.clientX, event.clientY);
+      };
       const modules = data.modules || [];
       const keyword = query.trim().toLowerCase();
       const filtered = modules
@@ -56,7 +69,7 @@
           h(
             'div',
             { className: 'ath-chips' },
-            ['all', 'command', 'graph', 'dataset'].map((key) =>
+            ['all', 'command', 'dataset'].map((key) =>
               h(
                 'button',
                 {
@@ -81,69 +94,50 @@
                 filtered.map((module) =>
                   h(
                     'div',
-                    { className: 'ath-module-card', key: module.id },
+                    {
+                      className: 'ath-module-card',
+                      key: module.id,
+                      tabIndex: 0,
+                      onContextMenu: (event) => openMenu(event, module),
+                      onKeyDown: (event) => {
+                        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                        event.preventDefault();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        showMenu(module, rect.left + 28, rect.top + 30);
+                      },
+                    },
                     h(
                       'div',
                       { className: 'ath-module-head' },
                       h('span', { className: 'ath-module-name' }, module.name),
-                      h('span', { className: 'ath-badge', 'data-kind': module.kind }, t(`modules.kind.${module.kind}`)),
-                      h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
                       h(
                         'span',
-                        { className: 'ath-badge' },
-                        environmentName(t, data.environments, module.environmentId, module.environmentName),
+                        { className: 'ath-badge ath-module-version' },
+                        tr(t, 'modules.versionLabel', { version: module.version || 1 }),
                       ),
                     ),
                     h('div', { className: 'ath-module-desc' }, module.description || ''),
-                    module.kind === 'graph'
-                      ? h('div', { className: 'ath-module-code' }, `${t('modules.graphRef')}: ${module.subgraphName || module.graphId}`)
-                      : module.kind === 'dataset'
-                        ? h('div', { className: 'ath-module-code' }, `${module.datasetUri || ''}${module.datasetFormat ? ` · ${module.datasetFormat}` : ''}`)
-                        : h('pre', { className: 'ath-module-code' }, module.command || ''),
-                    h(
-                      'div',
-                      { className: 'ath-stat-row' },
-                      module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
-                      module.kind === 'command'
-                        ? h(
-                            'span',
-                            null,
-                            module.assetName
-                              ? `${t(`modules.assetKind.${module.assetKind || 'file'}`)}: ${module.assetName}`
-                              : t('modules.noAsset'),
-                          )
-                        : null,
-                      h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
-                      h(
-                        'span',
-                        null,
-                        `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${
-                          (module.outputs || []).length
-                        }${
-                          (module.requiredInputs || []).length
-                            ? ` · ${tr(t, 'modules.requiredCount', { n: module.requiredInputs.length })}`
-                            : ''
-                        }`,
-                      ),
-                      module.versionCount
-                        ? h('span', null, tr(t, 'modules.versionHistory', { n: module.versionCount }))
-                        : null,
-                      h('span', null, module.usedBy && module.usedBy.length ? tr(t, 'modules.usedByCount', { n: module.usedBy.length }) : t('modules.notUsed')),
-                    ),
-                    h(
-                      'div',
-                      { className: 'ath-module-foot' },
-                      h('span', { className: 'ath-hint ath-mono' }, module.id),
-                      h(
-                        'div',
-                        { className: 'ath-actions' },
-                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onEdit(module) }, t('modules.edit')),
-                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => onDelete(module) }, t('modules.delete')),
-                      ),
-                    ),
                   ),
                 ),
               ),
+        menu
+          ? h(ContextMenu, {
+              menu: {
+                x: menu.x,
+                y: menu.y,
+                items: [
+                  { key: 'edit', label: t('modules.edit'), onSelect: () => onEdit(menu.module) },
+                  {
+                    key: 'delete',
+                    label: t('modules.delete'),
+                    danger: true,
+                    onSelect: () => onDelete(menu.module),
+                  },
+                ],
+              },
+              onClose: () => setMenu(null),
+            })
+          : null,
       );
     }
 

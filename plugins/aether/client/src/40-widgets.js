@@ -295,6 +295,62 @@
       );
     }
 
+    function ContextMenu({ menu, onClose }) {
+      const closeRef = useRef(onClose);
+      const menuRef = useRef(null);
+      closeRef.current = onClose;
+      useEffect(() => {
+        if (!menu) return undefined;
+        const first = menuRef.current && menuRef.current.querySelector('button');
+        if (first) first.focus({ preventScroll: true });
+        const close = () => closeRef.current();
+        const onKey = (event) => {
+          if (event.key === 'Escape') close();
+        };
+        window.addEventListener('pointerdown', close);
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('resize', close);
+        window.addEventListener('wheel', close, { passive: true });
+        return () => {
+          window.removeEventListener('pointerdown', close);
+          window.removeEventListener('keydown', onKey);
+          window.removeEventListener('resize', close);
+          window.removeEventListener('wheel', close);
+        };
+      }, [menu]);
+      if (!menu) return null;
+      return h(
+        'div',
+        {
+          ref: menuRef,
+          className: 'ath-context-menu',
+          role: 'menu',
+          style: { left: menu.x, top: menu.y },
+          onPointerDown: (event) => event.stopPropagation(),
+          onContextMenu: (event) => event.preventDefault(),
+        },
+        menu.items
+          .filter(Boolean)
+          .map((item, index) =>
+            h(
+              'button',
+              {
+                key: item.key || String(index),
+                type: 'button',
+                role: 'menuitem',
+                'data-danger': item.danger ? 'true' : 'false',
+                disabled: item.disabled,
+                onClick: () => {
+                  closeRef.current();
+                  item.onSelect();
+                },
+              },
+              item.label,
+            ),
+          ),
+      );
+    }
+
     function Toasts({ toasts }) {
       return h(
         'div',

@@ -306,9 +306,9 @@
 .ath-module-card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 11px; background: var(--dsw-alias-bg-layer-1); padding: 13px 14px; }
 .ath-module-card:hover { border-color: var(--dsw-alias-border-l2); }
 .ath-module-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.ath-module-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-module-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-module-version { margin-left: auto; flex: 0 0 auto; }
 .ath-module-desc { font-size: 11.5px; color: var(--dsw-alias-label-secondary); min-height: 34px; overflow-wrap: anywhere; }
-.ath-module-code { margin: 0; padding: 7px 9px; border-radius: 7px; background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l1); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; line-height: 1.55; color: var(--dsw-alias-label-secondary); max-height: 56px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ath-module-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 3px; }
 .ath-module-foot .ath-actions { margin-left: auto; }
 .ath-editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: stretch; }
@@ -651,7 +651,7 @@
 }
 .ath-run-nodebar-meta { color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .ath-run-nodebar-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10px; overflow-wrap: anywhere; }
-.ath-output-menu {
+.ath-output-menu, .ath-context-menu {
   position: fixed; z-index: 60; min-width: 180px; max-width: 260px;
   display: flex; flex-direction: column; gap: 2px; padding: 5px;
   border: 1px solid var(--ath-border-soft); border-radius: 9px;
@@ -663,11 +663,13 @@
   font-size: 10px; color: var(--dsw-alias-label-secondary);
 }
 .ath-output-menu-head code { font-size: 10px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
-.ath-output-menu button {
+.ath-output-menu button, .ath-context-menu button {
   appearance: none; border: 0; background: transparent; text-align: left; cursor: pointer;
   padding: 7px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary);
 }
-.ath-output-menu button:hover { background: var(--dsw-alias-bg-layer-2); }
+.ath-output-menu button:hover, .ath-context-menu button:hover { background: var(--dsw-alias-bg-layer-2); }
+.ath-context-menu button[data-danger="true"] { color: var(--ath-red); }
+.ath-context-menu button[data-danger="true"]:hover { background: color-mix(in srgb, var(--ath-red) 10%, transparent); }
 .ath-artifact-list {
   display: flex; flex-direction: column; gap: 5px;
   max-height: 52vh; overflow: auto; padding-right: 4px;

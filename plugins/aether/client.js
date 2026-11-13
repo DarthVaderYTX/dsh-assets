@@ -1065,9 +1065,9 @@ window.__ModuleLoader__.load({
 .ath-module-card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 11px; background: var(--dsw-alias-bg-layer-1); padding: 13px 14px; }
 .ath-module-card:hover { border-color: var(--dsw-alias-border-l2); }
 .ath-module-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.ath-module-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-module-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ath-module-version { margin-left: auto; flex: 0 0 auto; }
 .ath-module-desc { font-size: 11.5px; color: var(--dsw-alias-label-secondary); min-height: 34px; overflow-wrap: anywhere; }
-.ath-module-code { margin: 0; padding: 7px 9px; border-radius: 7px; background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l1); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; line-height: 1.55; color: var(--dsw-alias-label-secondary); max-height: 56px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ath-module-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 3px; }
 .ath-module-foot .ath-actions { margin-left: auto; }
 .ath-editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: stretch; }
@@ -1410,7 +1410,7 @@ window.__ModuleLoader__.load({
 }
 .ath-run-nodebar-meta { color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .ath-run-nodebar-error { grid-column: 1 / -1; color: var(--ath-red); font-size: 10px; overflow-wrap: anywhere; }
-.ath-output-menu {
+.ath-output-menu, .ath-context-menu {
   position: fixed; z-index: 60; min-width: 180px; max-width: 260px;
   display: flex; flex-direction: column; gap: 2px; padding: 5px;
   border: 1px solid var(--ath-border-soft); border-radius: 9px;
@@ -1422,11 +1422,13 @@ window.__ModuleLoader__.load({
   font-size: 10px; color: var(--dsw-alias-label-secondary);
 }
 .ath-output-menu-head code { font-size: 10px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
-.ath-output-menu button {
+.ath-output-menu button, .ath-context-menu button {
   appearance: none; border: 0; background: transparent; text-align: left; cursor: pointer;
   padding: 7px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary);
 }
-.ath-output-menu button:hover { background: var(--dsw-alias-bg-layer-2); }
+.ath-output-menu button:hover, .ath-context-menu button:hover { background: var(--dsw-alias-bg-layer-2); }
+.ath-context-menu button[data-danger="true"] { color: var(--ath-red); }
+.ath-context-menu button[data-danger="true"]:hover { background: color-mix(in srgb, var(--ath-red) 10%, transparent); }
 .ath-artifact-list {
   display: flex; flex-direction: column; gap: 5px;
   max-height: 52vh; overflow: auto; padding-right: 4px;
@@ -2043,6 +2045,62 @@ window.__ModuleLoader__.load({
           ],
         },
         h('div', { style: { fontSize: 12.5, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'pre-wrap' } }, dialog.body),
+      );
+    }
+
+    function ContextMenu({ menu, onClose }) {
+      const closeRef = useRef(onClose);
+      const menuRef = useRef(null);
+      closeRef.current = onClose;
+      useEffect(() => {
+        if (!menu) return undefined;
+        const first = menuRef.current && menuRef.current.querySelector('button');
+        if (first) first.focus({ preventScroll: true });
+        const close = () => closeRef.current();
+        const onKey = (event) => {
+          if (event.key === 'Escape') close();
+        };
+        window.addEventListener('pointerdown', close);
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('resize', close);
+        window.addEventListener('wheel', close, { passive: true });
+        return () => {
+          window.removeEventListener('pointerdown', close);
+          window.removeEventListener('keydown', onKey);
+          window.removeEventListener('resize', close);
+          window.removeEventListener('wheel', close);
+        };
+      }, [menu]);
+      if (!menu) return null;
+      return h(
+        'div',
+        {
+          ref: menuRef,
+          className: 'ath-context-menu',
+          role: 'menu',
+          style: { left: menu.x, top: menu.y },
+          onPointerDown: (event) => event.stopPropagation(),
+          onContextMenu: (event) => event.preventDefault(),
+        },
+        menu.items
+          .filter(Boolean)
+          .map((item, index) =>
+            h(
+              'button',
+              {
+                key: item.key || String(index),
+                type: 'button',
+                role: 'menuitem',
+                'data-danger': item.danger ? 'true' : 'false',
+                disabled: item.disabled,
+                onClick: () => {
+                  closeRef.current();
+                  item.onSelect();
+                },
+              },
+              item.label,
+            ),
+          ),
       );
     }
 
@@ -5700,6 +5758,19 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     function ModulesView({ t, data, onNew, onEdit, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
+      const [menu, setMenu] = useState(null);
+      const showMenu = (module, x, y) => {
+        setMenu({
+          module,
+          x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 100)),
+        });
+      };
+      const openMenu = (event, module) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showMenu(module, event.clientX, event.clientY);
+      };
       const modules = data.modules || [];
       const keyword = query.trim().toLowerCase();
       const filtered = modules
@@ -5753,7 +5824,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           h(
             'div',
             { className: 'ath-chips' },
-            ['all', 'command', 'graph', 'dataset'].map((key) =>
+            ['all', 'command', 'dataset'].map((key) =>
               h(
                 'button',
                 {
@@ -5778,69 +5849,50 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 filtered.map((module) =>
                   h(
                     'div',
-                    { className: 'ath-module-card', key: module.id },
+                    {
+                      className: 'ath-module-card',
+                      key: module.id,
+                      tabIndex: 0,
+                      onContextMenu: (event) => openMenu(event, module),
+                      onKeyDown: (event) => {
+                        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                        event.preventDefault();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        showMenu(module, rect.left + 28, rect.top + 30);
+                      },
+                    },
                     h(
                       'div',
                       { className: 'ath-module-head' },
                       h('span', { className: 'ath-module-name' }, module.name),
-                      h('span', { className: 'ath-badge', 'data-kind': module.kind }, t(`modules.kind.${module.kind}`)),
-                      h('span', { className: 'ath-badge' }, tr(t, 'modules.versionLabel', { version: module.version || 1 })),
                       h(
                         'span',
-                        { className: 'ath-badge' },
-                        environmentName(t, data.environments, module.environmentId, module.environmentName),
+                        { className: 'ath-badge ath-module-version' },
+                        tr(t, 'modules.versionLabel', { version: module.version || 1 }),
                       ),
                     ),
                     h('div', { className: 'ath-module-desc' }, module.description || ''),
-                    module.kind === 'graph'
-                      ? h('div', { className: 'ath-module-code' }, `${t('modules.graphRef')}: ${module.subgraphName || module.graphId}`)
-                      : module.kind === 'dataset'
-                        ? h('div', { className: 'ath-module-code' }, `${module.datasetUri || ''}${module.datasetFormat ? ` · ${module.datasetFormat}` : ''}`)
-                        : h('pre', { className: 'ath-module-code' }, module.command || ''),
-                    h(
-                      'div',
-                      { className: 'ath-stat-row' },
-                      module.kind === 'command' ? h('span', null, `${module.timeoutSec}s`) : null,
-                      module.kind === 'command'
-                        ? h(
-                            'span',
-                            null,
-                            module.assetName
-                              ? `${t(`modules.assetKind.${module.assetKind || 'file'}`)}: ${module.assetName}`
-                              : t('modules.noAsset'),
-                          )
-                        : null,
-                      h('span', null, `${t('common.params')} ${Object.keys(module.params || {}).length}`),
-                      h(
-                        'span',
-                        null,
-                        `${t('modules.inputs')} ${(module.inputs || []).length} · ${t('modules.outputs')} ${
-                          (module.outputs || []).length
-                        }${
-                          (module.requiredInputs || []).length
-                            ? ` · ${tr(t, 'modules.requiredCount', { n: module.requiredInputs.length })}`
-                            : ''
-                        }`,
-                      ),
-                      module.versionCount
-                        ? h('span', null, tr(t, 'modules.versionHistory', { n: module.versionCount }))
-                        : null,
-                      h('span', null, module.usedBy && module.usedBy.length ? tr(t, 'modules.usedByCount', { n: module.usedBy.length }) : t('modules.notUsed')),
-                    ),
-                    h(
-                      'div',
-                      { className: 'ath-module-foot' },
-                      h('span', { className: 'ath-hint ath-mono' }, module.id),
-                      h(
-                        'div',
-                        { className: 'ath-actions' },
-                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost', onClick: () => onEdit(module) }, t('modules.edit')),
-                        h('button', { type: 'button', className: 'ath-btn ath-btn-ghost ath-btn-danger', onClick: () => onDelete(module) }, t('modules.delete')),
-                      ),
-                    ),
                   ),
                 ),
               ),
+        menu
+          ? h(ContextMenu, {
+              menu: {
+                x: menu.x,
+                y: menu.y,
+                items: [
+                  { key: 'edit', label: t('modules.edit'), onSelect: () => onEdit(menu.module) },
+                  {
+                    key: 'delete',
+                    label: t('modules.delete'),
+                    danger: true,
+                    onSelect: () => onDelete(menu.module),
+                  },
+                ],
+              },
+              onClose: () => setMenu(null),
+            })
+          : null,
       );
     }
 
