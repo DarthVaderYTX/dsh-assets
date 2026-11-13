@@ -32,24 +32,13 @@ function HumanIntelligenceLogo(props) {
   return h(
     'svg',
     { width: size, height: size, viewBox: '0 0 64 64', 'aria-hidden': 'true', className: 'hi-logo-svg' },
-    h(
-      'defs',
-      null,
-      h(
-        'linearGradient',
-        { id: 'hi-logo-bg', x1: 0, y1: 0, x2: 64, y2: 64, gradientUnits: 'userSpaceOnUse' },
-        h('stop', { offset: 0, stopColor: '#4f46e5' }),
-        h('stop', { offset: 1, stopColor: '#0d9488' }),
-      ),
-    ),
-    h('rect', { x: 2, y: 2, width: 60, height: 60, rx: 16, fill: 'url(#hi-logo-bg)' }),
-    h('path', { d: 'M14 24v-6a4 4 0 0 1 4-4h6', fill: 'none', stroke: '#fff', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.9 }),
-    h('path', { d: 'M40 14h6a4 4 0 0 1 4 4v6', fill: 'none', stroke: '#fff', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.9 }),
-    h('path', { d: 'M14 40v6a4 4 0 0 0 4 4h6', fill: 'none', stroke: '#fff', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.9 }),
-    h('path', { d: 'M40 50h6a4 4 0 0 0 4-4v-6', fill: 'none', stroke: '#fff', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.9 }),
-    h('circle', { cx: 32, cy: 27, r: 7.2, fill: '#fff', opacity: 0.97 }),
-    h('path', { d: 'M20.5 47c0-6.6 5.2-10.4 11.5-10.4S43.5 40.4 43.5 47', fill: 'none', stroke: '#fff', strokeWidth: 4, strokeLinecap: 'round', opacity: 0.97 }),
-    h('circle', { cx: 49.5, cy: 14.5, r: 3.2, fill: '#a7f3d0' }),
+    h('rect', { x: 3, y: 3, width: 58, height: 58, rx: 15, fill: '#ffffff', stroke: '#111111', strokeWidth: 4 }),
+    h('path', { d: 'M14 24v-6a4 4 0 0 1 4-4h6', fill: 'none', stroke: '#111111', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.92 }),
+    h('path', { d: 'M40 14h6a4 4 0 0 1 4 4v6', fill: 'none', stroke: '#111111', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.92 }),
+    h('path', { d: 'M14 40v6a4 4 0 0 0 4 4h6', fill: 'none', stroke: '#111111', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.92 }),
+    h('path', { d: 'M40 50h6a4 4 0 0 0 4-4v-6', fill: 'none', stroke: '#111111', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.92 }),
+    h('circle', { cx: 32, cy: 27, r: 7.2, fill: '#ffffff', stroke: '#111111', strokeWidth: 3.5 }),
+    h('path', { d: 'M20.5 47c0-6.6 5.2-10.4 11.5-10.4S43.5 40.4 43.5 47', fill: 'none', stroke: '#111111', strokeWidth: 4, strokeLinecap: 'round' }),
   );
 }
 
