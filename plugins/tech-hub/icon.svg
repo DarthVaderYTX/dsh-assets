@@ -9,7 +9,7 @@
     </clipPath>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="15" fill="url(#th-bg)"/>
-  <rect x="12" y="36" width="40" height="24" fill="#a7f3d0" clip-path="url(#th-flask-clip)"/>
+  <rect x="12" y="36" width="40" height="24" fill="#1565c0" clip-path="url(#th-flask-clip)"/>
   <path d="M26 12h12v12l15 24c2 3.2-.3 7-4 7H15c-3.7 0-6-3.8-4-7l15-24V12Z" fill="none" stroke="#fff" stroke-width="3.2" stroke-linejoin="round"/>
   <path d="M24 12h16" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
   <circle cx="29.5" cy="29" r="1.9" fill="#fff"/>

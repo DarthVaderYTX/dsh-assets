@@ -923,7 +923,7 @@ window.__ModuleLoader__.load({
           y: 36,
           width: 40,
           height: 24,
-          fill: '#a7f3d0',
+          fill: '#1565c0',
           clipPath: 'url(#th-header-flask-clip)',
         }),
         h('path', {
