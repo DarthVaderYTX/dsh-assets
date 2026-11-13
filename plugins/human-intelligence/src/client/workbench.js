@@ -75,7 +75,6 @@ function HumanIntelligenceIcon(props) {
     h('path', { d: 'M9 19H6.5A1.5 1.5 0 0 1 5 17.5V15' }),
     h('circle', { cx: 12, cy: 10, r: 2.5 }),
     h('path', { d: 'M7.8 18.5c0-2.4 1.9-4 4.2-4s4.2 1.6 4.2 4' }),
-    h('circle', { cx: 19, cy: 5, r: 1.2, fill: 'currentColor', stroke: 'none' }),
   );
 }
 
