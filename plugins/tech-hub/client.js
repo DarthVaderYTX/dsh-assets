@@ -906,18 +906,24 @@ window.__ModuleLoader__.load({
           'defs',
           null,
           h(
+            'linearGradient',
+            { id: 'th-header-bg', x1: '0', y1: '0', x2: '64', y2: '64', gradientUnits: 'userSpaceOnUse' },
+            h('stop', { offset: '0', 'stop-color': '#4f46e5' }),
+            h('stop', { offset: '1', 'stop-color': '#0d9488' }),
+          ),
+          h(
             'clipPath',
             { id: 'th-header-flask-clip' },
             h('path', { d: 'M26 12h12v12l15 24c2 3.2-.3 7-4 7H15c-3.7 0-6-3.8-4-7l15-24V12Z' }),
           ),
         ),
-        h('rect', { x: 4, y: 4, width: 56, height: 56, rx: 16, fill: 'var(--dsw-alias-brand-primary)' }),
+        h('rect', { x: 4, y: 4, width: 56, height: 56, rx: 16, fill: 'url(#th-header-bg)' }),
         h('rect', {
           x: 12,
           y: 36,
           width: 40,
           height: 24,
-          fill: '#bfdbfe',
+          fill: '#a7f3d0',
           clipPath: 'url(#th-header-flask-clip)',
         }),
         h('path', {
