@@ -135,6 +135,30 @@
       });
     }
 
+    /** 在已有对象里找一个不重复的名称；重名时追加序号。 */
+    function uniqueName(base, items) {
+      const taken = new Set((items || []).map((item) => String(item.name || '').toLowerCase()));
+      const stem = String(base || '').trim() || 'item';
+      if (!taken.has(stem.toLowerCase())) return stem;
+      for (let index = 2; index < 1000; index += 1) {
+        const candidate = `${stem} ${index}`;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return `${stem} ${Date.now().toString(36)}`;
+    }
+
+    function uniquePortName(base, names) {
+      const taken = new Set((names || []).map((name) => String(name || '').toLowerCase()));
+      const stem = String(base || '').trim().slice(0, 40) || 'port';
+      if (!taken.has(stem.toLowerCase())) return stem;
+      for (let index = 2; index < 1000; index += 1) {
+        const suffix = `_${index}`;
+        const candidate = `${stem.slice(0, 40 - suffix.length)}${suffix}`;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return `${stem.slice(0, 30)}_${Date.now().toString(36)}`;
+    }
+
     function uniqueExperimentName(base, graphs, suffix) {
       const taken = new Set((graphs || []).map((graph) => String(graph.name || '').toLowerCase()));
       const stem = `${String(base || 'experiment').trim()} · ${suffix}`.slice(0, 110);
@@ -144,6 +168,29 @@
         if (!taken.has(candidate.toLowerCase())) return candidate;
       }
       return `${stem} ${Date.now().toString(36)}`;
+    }
+
+    function graphReferencePath(graphs, startId, targetId) {
+      if (!startId || !targetId) return null;
+      const refs = new Map(
+        (graphs || []).map((graph) => [
+          graph.id,
+          Array.isArray(graph.references) ? graph.references : [],
+        ]),
+      );
+      const queue = [[startId]];
+      const seen = new Set();
+      while (queue.length) {
+        const path = queue.shift();
+        const id = path[path.length - 1];
+        if (id === targetId) return path;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        for (const child of refs.get(id) || []) {
+          if (!seen.has(child)) queue.push([...path, child]);
+        }
+      }
+      return null;
     }
 
     /** 本地分层；有环时返回 null，画布退回单列布局。 */

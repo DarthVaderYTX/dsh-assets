@@ -1,6 +1,6 @@
     // ---------------------------------------------------------- 模块
 
-    function ModulesView({ t, data, onNew, onEdit, onCopy, onDelete }) {
+    function ModulesView({ t, data, revision, onNew, onEdit, onCopy, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
       const [menu, setMenu] = useState(null);
@@ -18,26 +18,30 @@
       };
       const modules = data.modules || [];
       const keyword = query.trim().toLowerCase();
-      const filtered = modules
-        .filter((module) => filter === 'all' || module.kind === filter)
-        .filter((module) => {
-          if (!keyword) return true;
-          const haystack = [
-            module.name,
-            module.id,
-            module.description,
-            module.kind,
-            t(`modules.kind.${module.kind}`),
-            module.datasetUri || '',
-            module.subgraphName || '',
-            module.graphId || '',
-            ...(module.inputs || []),
-            ...(module.outputs || []),
-          ]
-            .join(' ')
-            .toLowerCase();
-          return haystack.includes(keyword);
-        });
+      const filtered = useMemo(
+        () =>
+          modules
+            .filter((module) => filter === 'all' || module.kind === filter)
+            .filter((module) => {
+              if (!keyword) return true;
+              const haystack = [
+                module.name,
+                module.id,
+                module.description,
+                module.kind,
+                t(`modules.kind.${module.kind}`),
+                module.datasetUri || '',
+                module.subgraphName || '',
+                module.graphId || '',
+                ...(module.inputs || []),
+                ...(module.outputs || []),
+              ]
+                .join(' ')
+                .toLowerCase();
+              return haystack.includes(keyword);
+            }),
+        [modules, filter, keyword, t, revision],
+      );
       return h(
         'div',
         { className: 'ath-page' },

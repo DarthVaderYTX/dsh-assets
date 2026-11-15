@@ -37,6 +37,11 @@ export function safeSegment(value) {
   );
 }
 
+/** 新运行会写入去重后的 dirName；旧运行记录没有该字段时回退到旧目录名。 */
+export function nodeDirName(node) {
+  return (node && node.dirName) || safeSegment(node && node.path);
+}
+
 /** 输入文件名尽量保持模块里定义的端口名，只去掉不能用作文件名的字符。 */
 function inputFileName(value) {
   return (
@@ -132,7 +137,7 @@ async function resolveInputArtifact(run, sourceNode, fromPort) {
   if (!sourceNode) return null;
   const artifact = (sourceNode.artifacts || []).find((item) => item.port === fromPort);
   if (artifact) {
-    const absolute = path.join(run.dir, 'nodes', safeSegment(sourceNode.path), artifact.path);
+    const absolute = path.join(run.dir, 'nodes', nodeDirName(sourceNode), artifact.path);
     const stat = await fsp.stat(absolute).catch(() => null);
     if (stat && (stat.isFile() || stat.isDirectory())) {
       return { path: absolute, kind: stat.isDirectory() ? 'directory' : 'file' };
@@ -252,11 +257,13 @@ function buildEnv(run, node, nodeDirectory, inputFile, inputValues, inputTargets
   env.AETHER_ENVIRONMENT_NAME = node.environmentName || '';
   env.AETHER_EXECUTOR = node.executor || 'local';
   env.AETHER_PORTS = JSON.stringify({ inputs: node.inputs || [], outputs: node.outputs || [] });
-  env.AETHER_MODULE_ASSET = node.assetPath || '';
+  env.AETHER_MODULE_ASSET = node.assetPath ? nodeDirectory : '';
   env.AETHER_MODULE_ASSET_KIND = node.assetKind || '';
   env.AETHER_MODULE_ASSET_NAME = node.assetName || '';
   env.AETHER_MODULE_FILE =
-    node.assetPath && node.assetKind === 'file' ? path.join(node.assetPath, path.basename(node.assetName || '')) : '';
+    node.assetPath && node.assetKind === 'file'
+      ? path.join(nodeDirectory, path.basename(node.assetName || ''))
+      : '';
   env.AETHER_INPUT_DIR = path.join(nodeDirectory, 'input');
   if (node.kind === 'dataset') {
     env.AETHER_DATASET_URI = node.datasetUri || '';
@@ -492,7 +499,13 @@ export class LocalExecutor {
   }
 
   async readLog(run, nodePath, stream) {
-    const file = path.join(run.dir, 'nodes', safeSegment(nodePath), stream === 'err' ? 'stderr.log' : 'stdout.log');
+    const node = (run.nodes || []).find((item) => item.path === nodePath);
+    const file = path.join(
+      run.dir,
+      'nodes',
+      node ? nodeDirName(node) : safeSegment(nodePath),
+      stream === 'err' ? 'stderr.log' : 'stdout.log',
+    );
     let text = '';
     try {
       text = await fsp.readFile(file, 'utf8');
@@ -516,12 +529,12 @@ export class LocalExecutor {
     node.error = '';
     await this.persist(run).catch(() => {});
 
-    const directory = path.join(run.dir, 'nodes', safeSegment(node.path));
+    const directory = path.join(run.dir, 'nodes', nodeDirName(node));
     await fsp.mkdir(directory, { recursive: true });
     const inputs = {};
     for (const depPath of node.deps || []) {
       const dep = byPath.get(depPath);
-      const stdoutFile = path.join(run.dir, 'outputs', `${safeSegment(depPath)}.out`);
+      const stdoutFile = path.join(run.dir, 'outputs', `${dep ? nodeDirName(dep) : safeSegment(depPath)}.out`);
       const text = await readTextHead(stdoutFile);
       inputs[depPath] = {
         label: dep?.label || depPath,
@@ -551,7 +564,7 @@ export class LocalExecutor {
       node.status = handle.cancelRequested ? 'cancelled' : 'succeeded';
       node.error = handle.cancelRequested ? '已取消' : '';
       await fsp
-        .copyFile(outLog, path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`))
+        .copyFile(outLog, path.join(run.dir, 'outputs', `${nodeDirName(node)}.out`))
         .catch(() => {});
       await this.persist(run).catch(() => {});
       return;
@@ -690,7 +703,7 @@ export class LocalExecutor {
     }
 
     await fsp
-      .copyFile(outLog, path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`))
+      .copyFile(outLog, path.join(run.dir, 'outputs', `${nodeDirName(node)}.out`))
       .catch(() => {});
     node.artifacts = await readNodeArtifacts(directory, node.outputs || []);
     await this.persist(run).catch(() => {});

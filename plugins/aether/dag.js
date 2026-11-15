@@ -221,6 +221,18 @@ function normalizeNodeSize(value) {
   return Math.min(2400, Math.round(number));
 }
 
+function normalizeExposedPorts(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({
+      name: String(item.name == null ? '' : item.name).trim().slice(0, MAX_PORT_LABEL),
+      nodeId: String(item.nodeId == null ? '' : item.nodeId).trim().slice(0, 64),
+      port: String(item.port == null ? '' : item.port).trim().slice(0, MAX_PORT_LABEL),
+      type: VALUE_TYPES.includes(item.type) ? item.type : 'string',
+      required: Boolean(item.required),
+    }));
+}
+
 export function normalizeGraph(raw) {
   const source = isPlainObject(raw) ? raw : {};
   const nodes = (Array.isArray(source.nodes) ? source.nodes : [])
@@ -244,6 +256,8 @@ export function normalizeGraph(raw) {
       fromPort: String(edge.fromPort == null ? '' : edge.fromPort).trim().slice(0, MAX_PORT_LABEL),
       toPort: String(edge.toPort == null ? '' : edge.toPort).trim().slice(0, MAX_PORT_LABEL),
     }));
+  const exposedInputs = normalizeExposedPorts(source.exposedInputs);
+  const exposedOutputs = normalizeExposedPorts(source.exposedOutputs);
   return {
     id: String(source.id == null ? '' : source.id).trim(),
     name: String(source.name == null ? '' : source.name).trim(),
@@ -251,8 +265,47 @@ export function normalizeGraph(raw) {
     nodes,
     edges,
     layout: source.layout === 'horizontal' ? 'horizontal' : 'vertical',
+    exposedInputs,
+    exposedOutputs,
+    interfaceExplicit: Boolean(source.interfaceExplicit) || exposedInputs.length > 0 || exposedOutputs.length > 0,
     createdAt: Number(source.createdAt) || 0,
     updatedAt: Number(source.updatedAt) || 0,
+  };
+}
+
+export function graphInterfacePorts(graph, modules = []) {
+  if (!graph || !graph.interfaceExplicit) return null;
+  const moduleById = new Map(modules.map((module) => [module.id, module]));
+  const nodeById = new Map((graph.nodes || []).map((node) => [node.id, node]));
+  const build = (list, side) => {
+    const ports = [];
+    const types = {};
+    const required = [];
+    for (const exposure of list || []) {
+      if (!exposure.name || ports.includes(exposure.name)) continue;
+      const node = nodeById.get(exposure.nodeId);
+      const module = node ? moduleById.get(node.moduleId) : null;
+      const modulePorts = side === 'input' ? module && module.inputs : module && module.outputs;
+      if (!node || !module || !Array.isArray(modulePorts) || !modulePorts.includes(exposure.port)) continue;
+      ports.push(exposure.name);
+      types[exposure.name] =
+        side === 'input'
+          ? (module.inputTypes && module.inputTypes[exposure.port]) || exposure.type || 'string'
+          : (module.outputTypes && module.outputTypes[exposure.port]) || exposure.type || 'string';
+      if (side === 'input' && (exposure.required || (module.requiredInputs || []).includes(exposure.port))) {
+        required.push(exposure.name);
+      }
+    }
+    return { ports, types, required };
+  };
+  const inputs = build(graph.exposedInputs, 'input');
+  const outputs = build(graph.exposedOutputs, 'output');
+  return {
+    inputs: inputs.ports,
+    inputTypes: inputs.types,
+    requiredInputs: inputs.required,
+    outputs: outputs.ports,
+    outputTypes: outputs.types,
   };
 }
 
@@ -487,7 +540,7 @@ export function validateModule(module, modules = [], graphs = [], environments =
   return errors;
 }
 
-export function validateGraph(graph, modules = [], graphs = []) {
+export function validateGraph(graph, modules = [], graphs = [], options = {}) {
   const errors = [];
   if (graph.id && !isUuid(graph.id)) errors.push('实验 id 必须是 UUID');
   if (!graph.name) errors.push('实验需要名称');
@@ -559,7 +612,40 @@ export function validateGraph(graph, modules = [], graphs = []) {
     if (pairs.has(pair)) errors.push('存在重复连线');
     pairs.add(pair);
   }
-  if (!errors.length) {
+  if (graph.interfaceExplicit) {
+    const names = new Map();
+    for (const [side, list, moduleSide] of [
+      ['输入', graph.exposedInputs || [], 'inputs'],
+      ['输出', graph.exposedOutputs || [], 'outputs'],
+    ]) {
+      for (const exposure of list) {
+        if (!exposure.name) {
+          errors.push(`子图${side}端口需要名称`);
+          continue;
+        }
+        if (names.has(exposure.name)) {
+          errors.push(`子图端口名「${exposure.name}」重复`);
+        } else {
+          names.set(exposure.name, side);
+        }
+        const node = nodeById.get(exposure.nodeId);
+        if (!node) {
+          errors.push(`子图${side}端口「${exposure.name}」指向不存在的节点`);
+          continue;
+        }
+        const module = moduleById.get(node.moduleId);
+        if (!module) {
+          errors.push(`子图${side}端口「${exposure.name}」的节点模块不存在`);
+          continue;
+        }
+        const ports = module[moduleSide] || [];
+        if (!ports.includes(exposure.port)) {
+          errors.push(`子图${side}端口「${exposure.name}」在节点上不存在对应端口「${exposure.port}」`);
+        }
+      }
+    }
+  }
+  if (!errors.length && !options.skipRequiredInputs) {
     for (const node of graph.nodes) {
       const module = moduleById.get(node.moduleId);
       if (!module || !Array.isArray(module.requiredInputs) || !module.requiredInputs.length) continue;
@@ -569,6 +655,23 @@ export function validateGraph(graph, modules = [], graphs = []) {
       for (const port of module.requiredInputs) {
         if (!connected.has(port)) {
           errors.push(`节点「${nodeName(node)}」的必填输入端口「${port}」尚未连线`);
+        }
+      }
+    }
+  }
+  if (!errors.length && options.skipRequiredInputs && graph.interfaceExplicit) {
+    const exposed = new Set(
+      (graph.exposedInputs || []).map((exposure) => `${exposure.nodeId}>${exposure.port}`),
+    );
+    for (const node of graph.nodes) {
+      const module = moduleById.get(node.moduleId);
+      if (!module || !Array.isArray(module.requiredInputs) || !module.requiredInputs.length) continue;
+      const connected = new Set(
+        graph.edges.filter((edge) => edge.to === node.id).map((edge) => edge.toPort).filter(Boolean),
+      );
+      for (const port of module.requiredInputs) {
+        if (!connected.has(port) && !exposed.has(`${node.id}>${port}`)) {
+          errors.push(`节点「${nodeName(node)}」的必填输入端口「${port}」既未内部连线，也未暴露为子图输入`);
         }
       }
     }
@@ -637,6 +740,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
       exits: [],
       entryNodes: [],
       exitNodes: [],
+      nodePlans: new Map(),
       error: `子图循环引用：${[...stack, graph.id].join(' → ')}`,
     };
   }
@@ -650,6 +754,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
       exits: [],
       entryNodes: [],
       exitNodes: [],
+      nodePlans: new Map(),
       error: `实验「${graph.name}」中存在环，无法执行`,
     };
   }
@@ -681,10 +786,34 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
         stack: [...stack, graph.id],
       });
       if (child.error) {
-        return { nodes: [], edges: [], entries: [], exits: [], entryNodes: [], exitNodes: [], error: child.error };
+        return {
+          nodes: [],
+          edges: [],
+          entries: [],
+          exits: [],
+          entryNodes: [],
+          exitNodes: [],
+          nodePlans: new Map(),
+          error: child.error,
+        };
       }
-      for (const entry of child.entryNodes) entry.deps = unique([...parentDeps, ...entry.deps]);
-      plan.set(nodeId, { entries: child.entryNodes, exits: child.exitNodes });
+      const childGraph = graphs.get(module.graphId);
+      if (childGraph && childGraph.interfaceExplicit) {
+        for (const exposure of childGraph.exposedInputs || []) {
+          const target = child.nodePlans && child.nodePlans.get(exposure.nodeId);
+          for (const entry of (target && target.entries) || []) {
+            entry.deps = unique([...parentDeps, ...entry.deps]);
+          }
+        }
+      } else {
+        for (const entry of child.entryNodes) entry.deps = unique([...parentDeps, ...entry.deps]);
+      }
+      plan.set(nodeId, {
+        entries: child.entryNodes,
+        exits: child.exitNodes,
+        interfaceGraph: childGraph,
+        childNodePlans: child.nodePlans || new Map(),
+      });
       nodes.push(...child.nodes);
       edges.push(...child.edges);
     } else {
@@ -726,18 +855,48 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
   const sinks = graph.nodes.filter((node) => !targets.has(node.id));
   const entryNodes = unique(sources.flatMap((node) => plan.get(node.id)?.entries || []));
   const exitNodes = unique(sinks.flatMap((node) => plan.get(node.id)?.exits || []));
+  const nodeByPath = new Map(nodes.map((item) => [item.path, item]));
+  const endpointPaths = (planEntry, side, port) => {
+    if (!planEntry) return [];
+    const contract = planEntry.interfaceGraph;
+    if (contract && contract.interfaceExplicit) {
+      const list = side === 'output' ? contract.exposedOutputs : contract.exposedInputs;
+      const mapping = (list || []).find((item) => item.name === port);
+      if (!mapping) return [];
+      const inner = planEntry.childNodePlans && planEntry.childNodePlans.get(mapping.nodeId);
+      return endpointPaths(inner, side, mapping.port);
+    }
+    const items = side === 'output' ? planEntry.exits : planEntry.entries;
+    return (items || []).map((item) => ({ path: item.path, port }));
+  };
   for (const edge of graph.edges) {
     const from = plan.get(edge.from);
     const to = plan.get(edge.to);
     if (!from || !to) continue;
-    for (const source of from.exits) {
-      for (const target of to.entries) {
+    for (const source of endpointPaths(from, 'output', edge.fromPort)) {
+      const sourceNode = nodeByPath.get(source.path);
+      if (
+        source.port &&
+        sourceNode &&
+        !(modules.get(sourceNode.moduleId)?.outputs || []).includes(source.port)
+      ) {
+        continue;
+      }
+      for (const target of endpointPaths(to, 'input', edge.toPort)) {
+        const targetNode = nodeByPath.get(target.path);
+        if (
+          target.port &&
+          targetNode &&
+          !(modules.get(targetNode.moduleId)?.inputs || []).includes(target.port)
+        ) {
+          continue;
+        }
         edges.push({
           id: `${edge.id}:${source.path}->${target.path}`,
           from: source.path,
           to: target.path,
-          fromPort: edge.fromPort,
-          toPort: edge.toPort,
+          fromPort: source.port,
+          toPort: target.port,
         });
       }
     }
@@ -749,6 +908,7 @@ export function expandGraph(graph, moduleList = [], graphList = [], options = {}
     exits: exitNodes.map((item) => item.path),
     entryNodes,
     exitNodes,
+    nodePlans: plan,
     error: null,
   };
 }

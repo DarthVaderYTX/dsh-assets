@@ -432,6 +432,353 @@ test('submitting an unsaved graph draft runs the edit without saving it', async 
   assert.match(rerunRun.nodes[0].stdoutTail, /brand-new/);
 });
 
+test('saving a subgraph without internal required inputs is allowed', async () => {
+  const moduleId = randomUUID();
+  const requiredModule = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: moduleId,
+        name: 'Required input module',
+        kind: 'command',
+        command: 'node -e "console.log(1)"',
+        inputs: ['in'],
+        inputTypes: { in: 'file' },
+        requiredInputs: ['in'],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(requiredModule.status, 200);
+
+  const graph = {
+    name: 'Subgraph with boundary input',
+    layout: 'vertical',
+    nodes: [{ id: 'work', moduleId, x: 40, y: 40 }],
+    edges: [],
+  };
+  const invalid = await call('/graphs/validate', { method: 'POST', body: { graph } });
+  assert.equal(invalid.status, 200);
+  assert.match(invalid.payload.errors.join('；'), /必填输入/);
+
+  const accepted = await call('/graphs/validate', { method: 'POST', body: { graph, asSubgraph: true } });
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(accepted.payload.errors, []);
+
+  const created = await call('/graphs', { method: 'POST', body: { graph, asSubgraph: true } });
+  assert.equal(created.status, 200);
+  const saved = created.payload.graph;
+
+  const plainCreate = await call('/graphs', {
+    method: 'POST',
+    body: { graph: { ...graph, name: 'Plain graph with missing input' } },
+  });
+  assert.equal(plainCreate.status, 400);
+
+  await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Subgraph wrapper',
+        kind: 'graph',
+        graphId: saved.id,
+        inputs: ['in'],
+        inputTypes: { in: 'file' },
+        outputs: [],
+      },
+    },
+  });
+  const update = await call('/graphs', {
+    method: 'POST',
+    body: { graph: { ...saved, description: 'referenced by a graph module' } },
+  });
+  assert.equal(update.status, 200);
+  assert.equal(update.payload.graph.description, 'referenced by a graph module');
+});
+
+test('subgraph port exposure maps parent ports to inner nodes', async () => {
+  const innerId = randomUUID();
+  const sourceId = randomUUID();
+  const sinkId = randomUUID();
+  const command = 'node -e "console.log(1)"';
+  for (const [id, name, inputs, outputs] of [
+    [innerId, 'Exposed inner', ['data'], ['out']],
+    [sourceId, 'Exposed source', [], ['out']],
+    [sinkId, 'Exposed sink', ['in'], []],
+  ]) {
+    const created = await call('/modules', {
+      method: 'POST',
+      body: {
+        create: true,
+        module: {
+          id,
+          name,
+          kind: 'command',
+          command,
+          inputs,
+          inputTypes: Object.fromEntries(inputs.map((port) => [port, 'file'])),
+          outputs,
+          outputTypes: Object.fromEntries(outputs.map((port) => [port, 'file'])),
+        },
+      },
+    });
+    assert.equal(created.status, 200);
+  }
+
+  const child = await call('/graphs', {
+    method: 'POST',
+    body: {
+      asSubgraph: true,
+      graph: {
+        name: 'Exposed child graph',
+        nodes: [{ id: 'work', moduleId: innerId, x: 40, y: 40 }],
+        edges: [],
+        exposedInputs: [{ name: 'payload', nodeId: 'work', port: 'data', type: 'file', required: true }],
+        exposedOutputs: [{ name: 'result', nodeId: 'work', port: 'out', type: 'file' }],
+        interfaceExplicit: true,
+      },
+    },
+  });
+  assert.equal(child.status, 200);
+
+  const wrapper = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Exposed wrapper',
+        kind: 'graph',
+        graphId: child.payload.graph.id,
+        inputs: ['ignored'],
+        inputTypes: { ignored: 'string' },
+        outputs: ['ignored'],
+        outputTypes: { ignored: 'string' },
+      },
+    },
+  });
+  assert.equal(wrapper.status, 200);
+  assert.deepEqual(wrapper.payload.module.inputs, ['payload']);
+  assert.deepEqual(wrapper.payload.module.requiredInputs, ['payload']);
+  assert.deepEqual(wrapper.payload.module.outputs, ['result']);
+
+  await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        name: 'Exposed parent graph',
+        nodes: [
+          { id: 'source', moduleId: sourceId, x: 40, y: 40 },
+          { id: 'subgraph', moduleId: wrapper.payload.module.id, x: 40, y: 240 },
+          { id: 'sink', moduleId: sinkId, x: 40, y: 440 },
+        ],
+        edges: [
+          { id: 'e1', from: 'source', to: 'subgraph', fromPort: 'out', toPort: 'payload' },
+          { id: 'e2', from: 'subgraph', to: 'sink', fromPort: 'result', toPort: 'in' },
+        ],
+      },
+    },
+  });
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId: (await graphByName('Exposed parent graph')).id },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded', JSON.stringify(run.nodes));
+  assert.equal(run.nodes.some((node) => node.path === 'subgraph/work'), true);
+  assert.equal(
+    run.edges.some(
+      (edge) =>
+        edge.from === 'source' &&
+        edge.to === 'subgraph/work' &&
+        edge.fromPort === 'out' &&
+        edge.toPort === 'data',
+    ),
+    true,
+  );
+  assert.equal(
+    run.edges.some(
+      (edge) =>
+        edge.from === 'subgraph/work' &&
+        edge.to === 'sink' &&
+        edge.fromPort === 'out' &&
+        edge.toPort === 'in',
+    ),
+    true,
+  );
+});
+
+test('updating subgraph exposures syncs the graph module ports', async () => {
+  const innerId = randomUUID();
+  const inner = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: innerId,
+        name: 'Exposure sync inner',
+        kind: 'command',
+        command: 'node -e "console.log(1)"',
+        inputs: ['a', 'b'],
+        inputTypes: { a: 'file', b: 'file' },
+        outputs: ['x'],
+        outputTypes: { x: 'file' },
+      },
+    },
+  });
+  assert.equal(inner.status, 200);
+
+  const makeGraph = (inputs) => ({
+    name: `Exposure sync ${Math.random().toString(36).slice(2, 7)}`,
+    nodes: [{ id: 'work', moduleId: innerId, x: 40, y: 40 }],
+    edges: [],
+    exposedInputs: inputs,
+    exposedOutputs: [{ name: 'x1', nodeId: 'work', port: 'x', type: 'file' }],
+    interfaceExplicit: true,
+  });
+  const first = await call('/graphs', {
+    method: 'POST',
+    body: { asSubgraph: true, graph: makeGraph([{ name: 'a1', nodeId: 'work', port: 'a', type: 'file' }]) },
+  });
+  assert.equal(first.status, 200);
+  const graph = first.payload.graph;
+  const wrapper = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Exposure sync wrapper',
+        kind: 'graph',
+        graphId: graph.id,
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(wrapper.status, 200);
+  assert.deepEqual(wrapper.payload.module.inputs, ['a1']);
+
+  const updated = await call('/graphs', {
+    method: 'POST',
+    body: {
+      asSubgraph: true,
+      graph: {
+        ...graph,
+        exposedInputs: [{ name: 'b1', nodeId: 'work', port: 'b', type: 'file' }],
+      },
+    },
+  });
+  assert.equal(updated.status, 200);
+  const state = await call('/state');
+  const synced = state.payload.modules.find((module) => module.id === wrapper.payload.module.id);
+  assert.deepEqual(synced.inputs, ['b1']);
+  assert.deepEqual(synced.outputs, ['x1']);
+
+  const requiredModule = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Exposure required inner',
+        kind: 'command',
+        command: 'node -e "console.log(1)"',
+        inputs: ['r'],
+        inputTypes: { r: 'file' },
+        requiredInputs: ['r'],
+        outputs: [],
+      },
+    },
+  });
+  const rejected = await call('/graphs', {
+    method: 'POST',
+    body: {
+      asSubgraph: true,
+      graph: {
+        name: 'Exposure missing required',
+        nodes: [{ id: 'work', moduleId: requiredModule.payload.module.id, x: 40, y: 40 }],
+        edges: [],
+        exposedInputs: [],
+        exposedOutputs: [],
+        interfaceExplicit: true,
+      },
+    },
+  });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.payload.error, /既未内部连线，也未暴露/);
+});
+
+test('rejects subgraph reference cycles and keeps the saved graph unchanged', async () => {
+  const first = await call('/graphs', {
+    method: 'POST',
+    body: { graph: { name: 'Cycle graph A', nodes: [], edges: [] } },
+  });
+  assert.equal(first.status, 200);
+  const graphA = first.payload.graph;
+
+  const moduleB = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Cycle graph B wrapper',
+        kind: 'graph',
+        graphId: graphA.id,
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(moduleB.status, 200);
+
+  const second = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        name: 'Cycle graph B',
+        nodes: [{ id: 'to-a', moduleId: moduleB.payload.module.id, x: 40, y: 40 }],
+        edges: [],
+      },
+    },
+  });
+  assert.equal(second.status, 200);
+  const graphB = second.payload.graph;
+
+  const moduleA = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        name: 'Cycle graph A wrapper',
+        kind: 'graph',
+        graphId: graphB.id,
+        inputs: [],
+        outputs: [],
+      },
+    },
+  });
+  assert.equal(moduleA.status, 200);
+
+  const candidate = {
+    ...graphA,
+    nodes: [{ id: 'to-b', moduleId: moduleA.payload.module.id, x: 40, y: 40 }],
+  };
+  const validate = await call('/graphs/validate', { method: 'POST', body: { graph: candidate } });
+  assert.equal(validate.status, 200);
+  assert.match(validate.payload.errors.join('；'), /子图循环引用/);
+
+  const rejected = await call('/graphs', { method: 'POST', body: { graph: candidate } });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.payload.error, /子图循环引用/);
+
+  const state = await call('/state');
+  const storedA = state.payload.graphs.find((graph) => graph.id === graphA.id);
+  assert.equal(storedA.nodeCount, 0);
+  const storedB = state.payload.graphs.find((graph) => graph.id === graphB.id);
+  assert.equal(Array.isArray(storedB.references), true);
+  assert.deepEqual(storedB.references, [graphA.id]);
+});
+
 test('modules record their execution environment', async () => {
   const created = await call('/modules', {
     method: 'POST',
@@ -1251,6 +1598,81 @@ test('cancelling a running experiment settles as cancelled', async () => {
   const run = await waitForRun(id);
   assert.equal(run.status, 'cancelled');
   assert.equal(run.nodes[0].status, 'cancelled');
+});
+
+test('the same module can run concurrently in isolated node folders', async () => {
+  const moduleId = randomUUID();
+  const graphId = randomUUID();
+  const script = [
+    "const fs = require('fs');",
+    "fs.writeFileSync('marker.txt', JSON.stringify({ tag: process.env.AETHER_PARAM_TAG || '', asset: process.env.AETHER_MODULE_ASSET || '', file: process.env.AETHER_MODULE_FILE || '' }));",
+  ].join('\n');
+  const asset = (
+    await call('/modules/assets', {
+      method: 'POST',
+      body: {
+        kind: 'directory',
+        name: 'concurrent-isolation',
+        files: [{ path: 'main.js', data: Buffer.from(script, 'utf8').toString('base64') }],
+      },
+    })
+  ).payload.asset;
+  const created = await call('/modules', {
+    method: 'POST',
+    body: {
+      create: true,
+      module: {
+        id: moduleId,
+        name: 'Concurrent isolation module',
+        kind: 'command',
+        command: 'node main.js',
+        inputs: [],
+        outputs: [],
+        params: { tag: '' },
+        paramTypes: { tag: 'string' },
+        assetId: asset.assetId,
+        assetKind: asset.assetKind,
+        assetName: asset.assetName,
+        assetPath: asset.assetPath,
+        assetFileCount: asset.assetFileCount,
+      },
+    },
+  });
+  assert.equal(created.status, 200);
+  const graph = await call('/graphs', {
+    method: 'POST',
+    body: {
+      graph: {
+        id: graphId,
+        name: 'Concurrent isolation graph',
+        nodes: [
+          { id: 'one', moduleId, params: { tag: 'one' }, x: 40, y: 40 },
+          { id: 'two', moduleId, params: { tag: 'two' }, x: 40, y: 220 },
+        ],
+        edges: [],
+      },
+    },
+  });
+  assert.equal(graph.status, 200);
+  const submitted = await call('/experiments', {
+    method: 'POST',
+    body: { graphId, concurrency: 2 },
+  });
+  const run = await waitForRun(submitted.payload.experiment.id);
+  assert.equal(run.status, 'succeeded', JSON.stringify(run.nodes));
+  const root = path.join(home, 'storages', 'aether');
+  const one = JSON.parse(
+    await fsp.readFile(path.join(root, 'runs', run.id, 'nodes', 'one', 'marker.txt'), 'utf8'),
+  );
+  const two = JSON.parse(
+    await fsp.readFile(path.join(root, 'runs', run.id, 'nodes', 'two', 'marker.txt'), 'utf8'),
+  );
+  assert.equal(one.tag, 'one');
+  assert.equal(two.tag, 'two');
+  assert.equal(path.resolve(one.asset), path.join(root, 'runs', run.id, 'nodes', 'one'));
+  assert.equal(path.resolve(two.asset), path.join(root, 'runs', run.id, 'nodes', 'two'));
+  assert.equal(one.file, '');
+  assert.equal(two.file, '');
 });
 
 test('module output artifacts can be inspected and downloaded', async () => {

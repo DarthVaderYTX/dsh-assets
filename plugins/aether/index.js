@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   expandGraph,
+  graphInterfacePorts,
   graphReferenceErrors,
   hydrateGraphPorts,
   isUuid,
@@ -21,7 +22,7 @@ import {
   validateGraph,
   validateModule,
 } from './dag.js';
-import { LocalExecutor, resolvePlacements, safeSegment } from './executor.js';
+import { LocalExecutor, nodeDirName, resolvePlacements, safeSegment } from './executor.js';
 import { findGraphFolder, materializeGraphs, removeGraphFolder, writeGraphFolder } from './graph-store.js';
 import { findModuleFolder, materializeModules, removeModuleFolder, writeModuleFolder } from './module-store.js';
 import { zipDirectory } from './zip.js';
@@ -258,6 +259,8 @@ async function importWorkspaceBundle(bundle) {
   }
   const bundleFiles = Array.isArray(bundle.files) ? bundle.files : [];
   const state = normalizeState(bundle.state);
+  const refErrors = graphReferenceErrors(state.graphs, state.modules);
+  if (refErrors.length) throw httpError(400, refErrors.join('；'));
   const incoming = [];
   let total = 0;
   for (const file of bundleFiles) {
@@ -785,6 +788,8 @@ async function startExperiment(input = {}) {
   }
   const graphErrors = validateGraph(graph, state.modules, state.graphs);
   if (graphErrors.length) throw httpError(400, graphErrors.join('；'));
+  const refErrors = graphReferenceErrors(state.graphs, state.modules);
+  if (refErrors.length) throw httpError(400, refErrors.join('；'));
   const plan = expandGraph(graph, state.modules, state.graphs);
   if (plan.error) throw httpError(400, plan.error);
   if (!plan.nodes.length) throw httpError(400, '实验里没有节点，无法运行');
@@ -850,6 +855,19 @@ async function startExperiment(input = {}) {
     };
   });
   const byPath = new Map(nodes.map((node) => [node.path, node]));
+  const usedDirNames = new Set();
+  for (const node of nodes) {
+    const base = (safeSegment(node.path) || 'node').slice(0, 100);
+    let dirName = base;
+    let index = 2;
+    while (usedDirNames.has(dirName)) {
+      const suffix = `-${index}`;
+      dirName = `${base.slice(0, 100 - suffix.length)}${suffix}`;
+      index += 1;
+    }
+    usedDirNames.add(dirName);
+    node.dirName = dirName;
+  }
   const runEdges = Array.isArray(plan.edges)
     ? plan.edges.map((edge, index) => ({
         id: `e-${index + 1}`,
@@ -1030,11 +1048,21 @@ async function buildStatePayload() {
   });
   const graphs = state.graphs.map((graph) => {
     const usedBy = graphUsage(state, graph.id);
+    const moduleById = new Map(state.modules.map((module) => [module.id, module]));
+    const references = [
+      ...new Set(
+        graph.nodes
+          .map((node) => moduleById.get(node.moduleId))
+          .filter((module) => module && module.kind === 'graph' && module.graphId)
+          .map((module) => module.graphId),
+      ),
+    ];
     return {
       ...graphSummary(graph),
       usedBy,
       isSubgraph: usedBy.length > 0,
       nodeCount: graph.nodes.length,
+      references,
     };
   });
   return {
@@ -1173,6 +1201,19 @@ async function saveModule(input, options = {}) {
   if (module.id && !isUuid(module.id)) throw httpError(400, '模块 id 必须是 UUID');
   if (!module.id) module.id = generateEntityId(state);
   else if (idInUse(state, module.id)) throw httpError(409, `模块 id「${module.id}」已存在，请换一个`);
+  if (module.kind === 'graph' && module.graphId) {
+    const target = state.graphs.find((graph) => graph.id === module.graphId);
+    const iface = graphInterfacePorts(target, state.modules);
+    if (iface) {
+      Object.assign(module, {
+        inputs: iface.inputs,
+        inputTypes: iface.inputTypes,
+        requiredInputs: iface.requiredInputs,
+        outputs: iface.outputs,
+        outputTypes: iface.outputTypes,
+      });
+    }
+  }
   const errors = validateModule(module, state.modules, state.graphs, state.environments);
   if (module.assetId) {
     const root = moduleAssetRoot(module);
@@ -1195,18 +1236,18 @@ async function saveModule(input, options = {}) {
   }
   if (errors.length) throw httpError(400, errors.join('；'));
 
-  let savedModule = {
+  const candidate = {
     ...module,
     version: 1,
     versions: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  savedModule = await writeModuleFolder(dataDir(), savedModule);
-
-  const moduleList = [...state.modules, savedModule];
-  const refErrors = graphReferenceErrors(state.graphs, moduleList);
+  const refErrors = graphReferenceErrors(state.graphs, [...state.modules, candidate]);
   if (refErrors.length) throw httpError(400, refErrors.join('；'));
+
+  const savedModule = await writeModuleFolder(dataDir(), candidate);
+  const moduleList = [...state.modules, savedModule];
 
   await writeState({ ...state, modules: moduleList, updatedAt: Date.now() });
   const next = await readState();
@@ -1231,7 +1272,7 @@ async function deleteModule(id) {
   return { ok: true, id };
 }
 
-async function saveGraph(input) {
+async function saveGraph(input, options = {}) {
   const state = await readState();
   const graph = normalizeGraph(input);
   const inputId = graph.id;
@@ -1247,7 +1288,10 @@ async function saveGraph(input) {
     throw httpError(400, `实验名称「${graph.name}」已被使用`);
   }
   hydrateGraphPorts(graph, state.modules);
-  const errors = validateGraph(graph, state.modules, state.graphs);
+  // 子图的必填输入由父图连线提供；保存子图本身时不能要求它在内部已连线。
+  const asSubgraph =
+    Boolean(options.asSubgraph) || Boolean(graph.interfaceExplicit) || graphUsage(state, graph.id).length > 0;
+  const errors = validateGraph(graph, state.modules, state.graphs, { skipRequiredInputs: asSubgraph });
   if (errors.length) throw httpError(400, errors.join('；'));
 
   const graphList = existing
@@ -1256,13 +1300,53 @@ async function saveGraph(input) {
   const refErrors = graphReferenceErrors(graphList, state.modules);
   if (refErrors.length) throw httpError(400, refErrors.join('；'));
 
+  const iface = graphInterfacePorts(graph, state.modules);
+  const updatedModules = [];
+  const sameList = (left, right) =>
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((item, index) => item === right[index]);
+  const sameTypes = (left, right) =>
+    Object.keys(right).length === Object.keys(left || {}).length &&
+    Object.entries(right).every(([key, value]) => (left || {})[key] === value);
+  const modules = iface
+    ? state.modules.map((module) => {
+        if (module.kind !== 'graph' || module.graphId !== graph.id) return module;
+        if (
+          sameList(module.inputs, iface.inputs) &&
+          sameList(module.outputs, iface.outputs) &&
+          sameList(module.requiredInputs, iface.requiredInputs) &&
+          sameTypes(module.inputTypes, iface.inputTypes) &&
+          sameTypes(module.outputTypes, iface.outputTypes)
+        ) {
+          return module;
+        }
+        const next = {
+          ...module,
+          inputs: iface.inputs,
+          inputTypes: iface.inputTypes,
+          requiredInputs: iface.requiredInputs,
+          outputs: iface.outputs,
+          outputTypes: iface.outputTypes,
+          updatedAt: Date.now(),
+        };
+        updatedModules.push(next);
+        return next;
+      })
+    : state.modules;
+
   graph.createdAt = existing?.createdAt || Date.now();
   graph.updatedAt = Date.now();
   await writeState({
     ...state,
     graphs: existing ? state.graphs.map((item) => (item.id === graph.id ? graph : item)) : [...state.graphs, graph],
+    modules,
     updatedAt: Date.now(),
   });
+  for (const module of updatedModules) {
+    await writeModuleFolder(dataDir(), module);
+  }
   const next = await readState();
   await writeGraphFolder(dataDir(), graph, graphUsage(next, graph.id).length > 0);
   return graph;
@@ -1285,7 +1369,7 @@ function artifactContext(run, nodePath, port) {
   const node = (run.nodes || []).find((item) => item.path === nodePath);
   if (!node) throw httpError(404, '节点不存在');
   const artifact = (node.artifacts || []).find((item) => item.port === port);
-  const nodeDir = path.join(run.dir, 'nodes', safeSegment(node.path));
+  const nodeDir = path.join(run.dir, 'nodes', nodeDirName(node));
   if (!artifact) return { node, nodeDir, artifact: null, root: '' };
   const root = path.resolve(nodeDir, artifact.path);
   if (root !== nodeDir && !root.startsWith(nodeDir + path.sep)) {
@@ -1362,7 +1446,7 @@ async function artifactDownloadTarget(root, fileParam) {
 }
 
 async function stdoutOutputText(run, node) {
-  const file = path.join(run.dir, 'outputs', `${safeSegment(node.path)}.out`);
+  const file = path.join(run.dir, 'outputs', `${nodeDirName(node)}.out`);
   try {
     return await fsp.readFile(file, 'utf8');
   } catch {
@@ -1407,7 +1491,7 @@ async function handleApi(req, res) {
 
   if (method === 'POST' && route === '/graphs') {
     const body = await readBody(req);
-    const graph = await saveGraph(body.graph || body);
+    const graph = await saveGraph(body.graph || body, { asSubgraph: Boolean(body.asSubgraph) });
     sendJson(res, 200, { ok: true, graph });
     return;
   }
@@ -1421,7 +1505,11 @@ async function handleApi(req, res) {
     const body = await readBody(req);
     const state = await readState();
     const graph = normalizeGraph(body.graph || body);
-    const errors = validateGraph(graph, state.modules, state.graphs);
+    const asSubgraph =
+      Boolean(body.asSubgraph) ||
+      Boolean(graph.interfaceExplicit) ||
+      (Boolean(graph.id) && graphUsage(state, graph.id).length > 0);
+    const errors = validateGraph(graph, state.modules, state.graphs, { skipRequiredInputs: asSubgraph });
     const candidate = graph.id ? state.graphs.map((item) => (item.id === graph.id ? graph : item)) : [...state.graphs, graph];
     const refErrors = graphReferenceErrors(candidate, state.modules);
     sendJson(res, 200, {
@@ -1594,7 +1682,7 @@ async function handleApi(req, res) {
     if (!run) throw httpError(404, '实验不存在');
     const node = (run.nodes || []).find((item) => item.path === nodePath);
     if (!node) throw httpError(404, '节点不存在');
-    const outputFile = path.join(run.dir, 'outputs', `${safeSegment(nodePath)}.out`);
+    const outputFile = path.join(run.dir, 'outputs', `${nodeDirName(node)}.out`);
     let content = '';
     try {
       content = await fsp.readFile(outputFile, 'utf8');

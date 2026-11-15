@@ -2,6 +2,7 @@
 
     function AetherPanel({ t: hostT }) {
       const [data, setData] = useState(null);
+      const [dataRevision, setDataRevision] = useState(0);
       const [phase, setPhase] = useState('loading');
       const [loadError, setLoadError] = useState('');
       const [language, setLanguage] = useState(() => {
@@ -134,6 +135,7 @@
           try {
             const next = await request('/state');
             setData(next);
+            setDataRevision((value) => value + 1);
             setPhase('ready');
             setLoadError('');
             return next;
@@ -504,19 +506,41 @@
         }
       };
 
-      const saveGraph = async () => {
+      const saveGraph = async (options = {}) => {
         if (!graphDraft) return;
+        const asNew = Boolean(options.asNew);
         const key = activeEditorKey;
         setGraphSaving(true);
         setGraphErrors([]);
         try {
-          const check = await request('/graphs/validate', { method: 'POST', body: { graph: graphDraft.graph } });
+          const source = graphDraft.graph;
+          const target = asNew
+            ? {
+                ...clone(source),
+                id: '',
+                name: uniqueExperimentName(
+                  String(source.name || '').trim() || t('graphEditor.new'),
+                  (data && data.graphs) || [],
+                  t('graphs.copySuffix'),
+                ),
+              }
+            : source;
+          const asSubgraph = Boolean(
+            target.id && (data && data.graphs ? data.graphs : []).find((graph) => graph.id === target.id)?.isSubgraph,
+          );
+          const check = await request('/graphs/validate', {
+            method: 'POST',
+            body: { graph: target, asSubgraph },
+          });
           if (check.errors && check.errors.length) {
             setGraphErrors(check.errors);
             return;
           }
-          const payload = await request('/graphs', { method: 'POST', body: { graph: graphDraft.graph } });
-          const saved = payload.graph || graphDraft.graph;
+          const payload = await request('/graphs', {
+            method: 'POST',
+            body: { graph: target, asSubgraph },
+          });
+          const saved = payload.graph || target;
           setEditorTabs((tabs) =>
             tabs.map((entry) =>
               entry.key === key
@@ -529,12 +553,378 @@
             ),
           );
           setGraphErrors([]);
-          pushToast(t('toast.saved'));
+          pushToast(asNew ? tr(t, 'toast.savedAs', { name: saved.name }) : t('toast.saved'));
           await loadState(true);
         } catch (error) {
           const message = error && error.message ? error.message : String(error);
           setGraphErrors(message.split('；').filter(Boolean));
           fail(error);
+        } finally {
+          setGraphSaving(false);
+        }
+      };
+
+      const replaceGraphForKey = (key, nextGraph) => {
+        setEditorTabs((tabs) =>
+          tabs.map((entry) =>
+            entry.key === key ? { ...entry, draft: { ...entry.draft, graph: clone(nextGraph) } } : entry,
+          ),
+        );
+      };
+
+      const mergeIntoSubgraph = async (nodeIds) => {
+        if (!graphDraft || !Array.isArray(nodeIds) || !nodeIds.length) return null;
+        const key = activeEditorKey;
+        const source = graphDraft.graph;
+        const selected = new Set(nodeIds);
+        const selectedNodes = source.nodes.filter((node) => selected.has(node.id));
+        if (!selectedNodes.length) return null;
+        const moduleById = new Map(((data && data.modules) || []).map((module) => [module.id, module]));
+        const portOf = (module, port, side) => {
+          const ports = side === 'input' ? module && module.inputs : module && module.outputs;
+          if (port && Array.isArray(ports) && ports.includes(port)) return port;
+          return Array.isArray(ports) && ports.length ? ports[0] : '';
+        };
+
+        setGraphSaving(true);
+        setGraphErrors([]);
+        try {
+          const internalEdges = source.edges
+            .filter((edge) => selected.has(edge.from) && selected.has(edge.to))
+            .map((edge) => clone(edge));
+          const incoming = source.edges.filter((edge) => !selected.has(edge.from) && selected.has(edge.to));
+          const outgoing = source.edges.filter((edge) => selected.has(edge.from) && !selected.has(edge.to));
+          const incomingSpecs = incoming.map((edge) => {
+            const target = selectedNodes.find((node) => node.id === edge.to);
+            const module = target ? moduleById.get(target.moduleId) : null;
+            const port = portOf(module, edge.toPort, 'input');
+            return {
+              edge,
+              node: target,
+              port,
+              type: (module && module.inputTypes && module.inputTypes[port]) || 'string',
+              required: Boolean(module && Array.isArray(module.requiredInputs) && module.requiredInputs.includes(port)),
+            };
+          });
+          const outgoingSpecs = outgoing.map((edge) => {
+            const origin = selectedNodes.find((node) => node.id === edge.from);
+            const module = origin ? moduleById.get(origin.moduleId) : null;
+            const port = portOf(module, edge.fromPort, 'output');
+            return {
+              edge,
+              node: origin,
+              port,
+              type: (module && module.outputTypes && module.outputTypes[port]) || 'string',
+            };
+          });
+
+          const usedExposureNames = new Set();
+          const exposureName = (base) => {
+            const candidate = uniquePortName(base, [...usedExposureNames]);
+            usedExposureNames.add(candidate.toLowerCase());
+            return candidate;
+          };
+          const inputExposures = [];
+          const outputExposures = [];
+          const inputExposureByNodePort = new Map();
+          const outputExposureByNodePort = new Map();
+          for (const spec of incomingSpecs) {
+            if (!spec.node || !spec.port) continue;
+            const key = `${spec.node.id}|${spec.port}`;
+            let exposure = inputExposureByNodePort.get(key);
+            if (!exposure) {
+              exposure = {
+                name: exposureName(spec.port),
+                nodeId: spec.node.id,
+                port: spec.port,
+                type: spec.type,
+                required: spec.required,
+              };
+              inputExposureByNodePort.set(key, exposure);
+              inputExposures.push(exposure);
+            }
+            spec.exposure = exposure;
+          }
+          for (const spec of outgoingSpecs) {
+            if (!spec.node || !spec.port) continue;
+            const key = `${spec.node.id}|${spec.port}`;
+            let exposure = outputExposureByNodePort.get(key);
+            if (!exposure) {
+              exposure = {
+                name: exposureName(spec.port),
+                nodeId: spec.node.id,
+                port: spec.port,
+                type: spec.type,
+                required: false,
+              };
+              outputExposureByNodePort.set(key, exposure);
+              outputExposures.push(exposure);
+            }
+            spec.exposure = exposure;
+          }
+          const moduleInputs = inputExposures.map((exposure) => exposure.name);
+          const moduleInputTypes = Object.fromEntries(
+            inputExposures.map((exposure) => [exposure.name, exposure.type]),
+          );
+          const moduleRequiredInputs = inputExposures
+            .filter((exposure) => exposure.required)
+            .map((exposure) => exposure.name);
+          const moduleOutputs = outputExposures.map((exposure) => exposure.name);
+          const moduleOutputTypes = Object.fromEntries(
+            outputExposures.map((exposure) => [exposure.name, exposure.type]),
+          );
+
+          const xs = selectedNodes.map((node) => Number(node.x)).filter(Number.isFinite);
+          const ys = selectedNodes.map((node) => Number(node.y)).filter(Number.isFinite);
+          const minX = xs.length ? Math.min(...xs) : 40;
+          const minY = ys.length ? Math.min(...ys) : 40;
+          const graphName = uniqueName(
+            `${String(source.name || '').trim() || t('graphEditor.new')} · ${t('graphs.mergedSubgraphSuffix')}`,
+            (data && data.graphs) || [],
+          );
+          const createdGraph = (
+            await request('/graphs', {
+              method: 'POST',
+              body: {
+                asSubgraph: true,
+                graph: {
+                  name: graphName,
+                  description: t('graphs.mergedSubgraphDesc'),
+                  layout: source.layout === 'horizontal' ? 'horizontal' : 'vertical',
+                  nodes: selectedNodes.map((node, index) => ({
+                    ...clone(node),
+                    x: Number.isFinite(Number(node.x)) ? Number(node.x) - minX + 40 : 40 + index * 220,
+                    y: Number.isFinite(Number(node.y)) ? Number(node.y) - minY + 40 : 40,
+                  })),
+                  edges: internalEdges,
+                  exposedInputs: inputExposures,
+                  exposedOutputs: outputExposures,
+                  interfaceExplicit: true,
+                },
+              },
+            })
+          ).graph;
+
+          const moduleName = uniqueName(createdGraph.name, (data && data.modules) || []);
+          const createdModule = (
+            await request('/modules', {
+              method: 'POST',
+              body: {
+                create: true,
+                module: {
+                  name: moduleName,
+                  description: t('graphs.mergedModuleDesc'),
+                  kind: 'graph',
+                  graphId: createdGraph.id,
+                  inputs: moduleInputs,
+                  inputTypes: moduleInputTypes,
+                  requiredInputs: moduleRequiredInputs,
+                  outputs: moduleOutputs,
+                  outputTypes: moduleOutputTypes,
+                  params: {},
+                  paramTypes: {},
+                  environmentId: 'local',
+                },
+              },
+            })
+          ).module;
+
+          let newNodeId = 'merged';
+          let counter = 2;
+          while (source.nodes.some((node) => node.id === newNodeId)) {
+            newNodeId = `merged-${counter}`;
+            counter += 1;
+          }
+          const centerX = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 40;
+          const centerY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 40;
+          const newNode = {
+            id: newNodeId,
+            moduleId: createdModule.id,
+            label: '',
+            params: {},
+            x: Math.max(0, centerX - 100),
+            y: Math.max(0, centerY - 47),
+            width: 0,
+            height: 0,
+          };
+          const remainingEdges = source.edges
+            .filter((edge) => !selected.has(edge.from) && !selected.has(edge.to))
+            .map((edge) => clone(edge));
+          const rewired = [
+            ...incomingSpecs.map((spec) => ({
+              ...clone(spec.edge),
+              to: newNodeId,
+              toPort: spec.exposure ? spec.exposure.name : spec.port,
+            })),
+            ...outgoingSpecs.map((spec) => ({
+              ...clone(spec.edge),
+              from: newNodeId,
+              fromPort: spec.exposure ? spec.exposure.name : spec.port,
+            })),
+          ];
+          const nextGraph = {
+            ...clone(source),
+            nodes: [...source.nodes.filter((node) => !selected.has(node.id)), newNode],
+            edges: [...remainingEdges, ...rewired],
+          };
+          await loadState(true);
+          replaceGraphForKey(key, nextGraph);
+          setGraphErrors([]);
+          pushToast(t('toast.mergedSubgraph'));
+          return { selectedNodeIds: [newNodeId] };
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setGraphErrors(message.split('；').filter(Boolean));
+          fail(error);
+          return null;
+        } finally {
+          setGraphSaving(false);
+        }
+      };
+
+      const flattenSubgraphNode = async (nodeId) => {
+        if (!graphDraft) return null;
+        const key = activeEditorKey;
+        const source = graphDraft.graph;
+        const subNode = source.nodes.find((node) => node.id === nodeId);
+        const moduleById = new Map(((data && data.modules) || []).map((module) => [module.id, module]));
+        const module = subNode ? moduleById.get(subNode.moduleId) : null;
+        if (!subNode || !module || module.kind !== 'graph' || !module.graphId) return null;
+
+        setGraphSaving(true);
+        setGraphErrors([]);
+        try {
+          const child = (await request(`/graphs?id=${encodeURIComponent(module.graphId)}`)).graph;
+          if (!child || !Array.isArray(child.nodes) || !child.nodes.length) {
+            throw new Error(t('graphs.flattenEmpty'));
+          }
+          const stamp = Date.now().toString(36);
+          const usedNodeIds = new Set(source.nodes.map((node) => node.id));
+          const idMap = new Map();
+          let nodeSeq = 0;
+          for (const childNode of child.nodes) {
+            let nextId;
+            do {
+              nodeSeq += 1;
+              nextId = `flat-${stamp}-${nodeSeq}`;
+            } while (usedNodeIds.has(nextId));
+            usedNodeIds.add(nextId);
+            idMap.set(childNode.id, nextId);
+          }
+          const usedEdgeIds = new Set(source.edges.map((edge) => edge.id));
+          let edgeSeq = 0;
+          const nextEdgeId = () => {
+            let nextId;
+            do {
+              edgeSeq += 1;
+              nextId = `flat-${stamp}-e${edgeSeq}`;
+            } while (usedEdgeIds.has(nextId));
+            usedEdgeIds.add(nextId);
+            return nextId;
+          };
+
+          const childXs = child.nodes.map((node) => Number(node.x)).filter(Number.isFinite);
+          const childYs = child.nodes.map((node) => Number(node.y)).filter(Number.isFinite);
+          const childMinX = childXs.length ? Math.min(...childXs) : 0;
+          const childMinY = childYs.length ? Math.min(...childYs) : 0;
+          const baseX = Number.isFinite(Number(subNode.x)) ? Number(subNode.x) : 0;
+          const baseY = Number.isFinite(Number(subNode.y)) ? Number(subNode.y) : 0;
+          const newNodes = child.nodes.map((node, index) => ({
+            ...clone(node),
+            id: idMap.get(node.id),
+            x: baseX + (Number.isFinite(Number(node.x)) ? Number(node.x) - childMinX : 40 + index * 220),
+            y: baseY + (Number.isFinite(Number(node.y)) ? Number(node.y) - childMinY : 40),
+          }));
+          const internalEdges = child.edges.map((edge) => ({
+            ...clone(edge),
+            id: nextEdgeId(),
+            from: idMap.get(edge.from),
+            to: idMap.get(edge.to),
+          }));
+          const hasIncoming = new Set(child.edges.map((edge) => edge.to));
+          const hasOutgoing = new Set(child.edges.map((edge) => edge.from));
+          const entries = child.nodes.filter((node) => !hasIncoming.has(node.id));
+          const exits = child.nodes.filter((node) => !hasOutgoing.has(node.id));
+          const incoming = source.edges.filter((edge) => edge.to === subNode.id);
+          const outgoing = source.edges.filter((edge) => edge.from === subNode.id);
+          const portOf = (childNode, port, side) => {
+            const childModule = moduleById.get(childNode.moduleId);
+            const ports = side === 'input' ? childModule && childModule.inputs : childModule && childModule.outputs;
+            if (port && Array.isArray(ports) && ports.includes(port)) return port;
+            return Array.isArray(ports) && ports.length ? ports[0] : '';
+          };
+          const exposedInputs = new Map(
+            (child.interfaceExplicit ? child.exposedInputs || [] : []).map((exposure) => [exposure.name, exposure]),
+          );
+          const exposedOutputs = new Map(
+            (child.interfaceExplicit ? child.exposedOutputs || [] : []).map((exposure) => [exposure.name, exposure]),
+          );
+          const rewired = [];
+          for (const edge of incoming) {
+            const exposure = exposedInputs.get(edge.toPort);
+            if (exposure && idMap.has(exposure.nodeId)) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                to: idMap.get(exposure.nodeId),
+                toPort: exposure.port,
+              });
+              continue;
+            }
+            const matching = edge.toPort
+              ? entries.filter((entry) => portOf(entry, edge.toPort, 'input') === edge.toPort)
+              : [];
+            const targets = matching.length ? matching : entries.slice(0, 1);
+            for (const entry of targets) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                to: idMap.get(entry.id),
+                toPort: portOf(entry, edge.toPort, 'input'),
+              });
+            }
+          }
+          for (const edge of outgoing) {
+            const exposure = exposedOutputs.get(edge.fromPort);
+            if (exposure && idMap.has(exposure.nodeId)) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                from: idMap.get(exposure.nodeId),
+                fromPort: exposure.port,
+              });
+              continue;
+            }
+            const matching = edge.fromPort
+              ? exits.filter((exit) => portOf(exit, edge.fromPort, 'output') === edge.fromPort)
+              : [];
+            const targets = matching.length ? matching : exits.slice(0, 1);
+            for (const exit of targets) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                from: idMap.get(exit.id),
+                fromPort: portOf(exit, edge.fromPort, 'output'),
+              });
+            }
+          }
+          const remainingEdges = source.edges
+            .filter((edge) => edge.from !== subNode.id && edge.to !== subNode.id)
+            .map((edge) => clone(edge));
+          const nextGraph = {
+            ...clone(source),
+            nodes: [...source.nodes.filter((node) => node.id !== subNode.id), ...newNodes],
+            edges: [...remainingEdges, ...internalEdges, ...rewired],
+          };
+          replaceGraphForKey(key, nextGraph);
+          setGraphErrors([]);
+          pushToast(t('toast.flattenedSubgraph'));
+          return { selectedNodeIds: newNodes.map((node) => node.id) };
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setGraphErrors(message.split('；').filter(Boolean));
+          fail(error);
+          return null;
         } finally {
           setGraphSaving(false);
         }
@@ -736,12 +1126,15 @@
             data,
             onNew: () => void startGraph(''),
             onEdit: (id) => void startGraph(id),
+            onCopy: copyModuleId,
+            onDelete: deleteGraph,
           });
         }
         if (tab === 'modules') {
           return h(ModulesView, {
             t,
             data,
+            revision: dataRevision,
             onNew: () => {
               setNewResourceError('');
               setNewModuleOpen(true);
@@ -790,18 +1183,25 @@
           key: activeEditorKey,
           t,
           modules: data ? data.modules : [],
+          graphs: data ? data.graphs : [],
+          revision: dataRevision,
           environments: data ? data.environments : [],
           draft: graphDraft,
           onDraftChange: updateActiveDraft,
           onPersistState: (patch) => persistEditorState(activeEditorKey, patch),
           onSubmit: () => openSubmitDraft(),
+          onMergeSubgraph: (nodeIds) => mergeIntoSubgraph(nodeIds),
+          onFlattenSubgraph: (nodeId) => flattenSubgraphNode(nodeId),
           dirty: activeEditor ? JSON.stringify(activeEditor.draft.graph) !== activeEditor.baseline : false,
           onSave: () => void saveGraph(),
+          onSaveAs: () => void saveGraph({ asNew: true }),
           onBack: () => {
             setActiveEditorKey('');
             setGraphErrors([]);
           },
           onOpenSubgraph: (graphId) => void openSubgraph(graphId),
+          onToast: pushToast,
+          onError: (message) => setGraphErrors(message ? [message] : []),
           subgraph: Boolean(
             (data && data.graphs ? data.graphs : []).find((graph) => graph.id === graphDraft.graph.id)?.isSubgraph,
           ),

@@ -32,11 +32,39 @@ const SKILL_DESCRIPTION =
 const SKILL_WHEN_TO_USE =
   'Use when asked to create, edit, delete, run or inspect TechHub datasets, templates, tasks, experiment runs, workspace exports/imports, or TechHub settings/docs.';
 const MAX_LOG_CHARS = 160_000;
+/** Port value types, mirroring Aether's module ports. `string` is the universal sink. */
+const VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
+const PARAMETER_TYPES = ['string', 'number', 'boolean', 'json'];
+const OUTPUT_TYPES = ['file', 'directory'];
+/** Placeholders a stage command may always use, without declaring a port. */
+const STAGE_BUILTINS = [
+  'run_id',
+  'run_dir',
+  'task_id',
+  'task_name',
+  'group_id',
+  'group_name',
+  'group_role',
+  'stage_id',
+  'stage_name',
+  'stage_dir',
+  'input_dir',
+  'output_dir',
+  'workspace',
+  'work_dir',
+  'dataset_path',
+  'dataset_format',
+];
+const MAX_STAGE_TIMEOUT_SEC = 86_400;
+/** Limits for a stage's submitted file/folder (Aether-style module asset). */
+const MAX_STAGE_ASSET_FILES = 1_000;
+const MAX_STAGE_ASSET_BYTES = 64 * 1024 * 1024;
 
 function emptyStore() {
   return {
     version: STORE_VERSION,
     datasets: [],
+    stages: [],
     templates: [],
     tasks: [],
     runs: [],
@@ -85,6 +113,7 @@ function normalizeParameterDefinition(value) {
   return {
     id: text(value.id).trim() || `param-${key}`,
     key,
+    type: normalizePortType(value.type, PARAMETER_TYPES, 'string'),
     defaultValue: text(value.defaultValue),
     description: text(value.description).slice(0, 2_000),
   };
@@ -112,8 +141,19 @@ function normalizeOutputDefinition(value) {
   return {
     id: text(value.id).trim() || `output-${name}`,
     name,
+    type: OUTPUT_TYPES.includes(value.type) ? value.type : 'file',
     file: file.slice(0, 1_000),
   };
+}
+
+function normalizePortType(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
+
+function normalizeTimeout(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return Math.min(MAX_STAGE_TIMEOUT_SEC, Math.round(seconds));
 }
 
 function normalizeInputReference(value) {
@@ -126,50 +166,336 @@ function normalizeInputReference(value) {
   return { id: text(value.id).trim() || `input-${key}`, key, stageId, outputName };
 }
 
-function normalizeStage(value) {
+/** A stage-declared input: a named value the stage consumes. */
+function normalizeStageInput(value) {
   if (!isRecord(value)) return null;
-  const id = text(value.id).trim();
-  if (id === '') return null;
+  const name = text(value.name).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
   return {
-    id,
-    name: text(value.name, 'Stage').slice(0, 200),
-    command: text(value.command).slice(0, 8_000),
-    args: text(value.args).slice(0, 8_000),
-    inputs: stringArray(value.inputs).filter(Boolean).slice(0, 20),
-    outputs: (Array.isArray(value.outputs) ? value.outputs : [])
-      .map(normalizeOutputDefinition)
-      .filter(Boolean)
-      .filter((output, index, list) => list.findIndex((item) => item.name === output.name) === index)
-      .slice(0, 20),
-    inputRefs: (Array.isArray(value.inputRefs) ? value.inputRefs : [])
-      .map(normalizeInputReference)
-      .filter(Boolean)
-      .filter(
-        (reference, index, list) =>
-          list.findIndex((item) => item.key === reference.key) === index,
-      )
-      .slice(0, 40),
+    id: text(value.id).trim() || `in-${name}`,
+    name,
+    type: normalizePortType(value.type, VALUE_TYPES, 'string'),
+    required: value.required === undefined ? true : Boolean(value.required),
     description: text(value.description).slice(0, 2_000),
   };
 }
 
-function normalizeTemplate(value) {
+/** A stage-declared parameter: a configurable value with a default. */
+function normalizeStageParameter(value) {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+  return {
+    id: text(value.id).trim() || `param-${name}`,
+    name,
+    type: normalizePortType(value.type, PARAMETER_TYPES, 'string'),
+    defaultValue: text(value.defaultValue),
+    description: text(value.description).slice(0, 2_000),
+  };
+}
+
+/**
+ * A value source: the output of an earlier stage reference, the parameter of an
+ * earlier stage reference, or a template global parameter.
+ */
+function normalizeValueSource(value) {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+  if (value.kind === 'global') return { kind: 'global', stageId: '', name };
+  if (value.kind !== 'output' && value.kind !== 'parameter') return null;
+  const stageId = text(value.stageId).trim();
+  if (stageId === '') return null;
+  return { kind: value.kind, stageId, name };
+}
+
+/** A template binding for one declared input. */
+function normalizeStageBinding(value) {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+  return {
+    id: text(value.id).trim() || `binding-${name}`,
+    name,
+    source: normalizeValueSource(value.source),
+  };
+}
+
+/** A template binding for one declared parameter; a missing source means default. */
+function normalizeParameterBinding(value) {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+  return {
+    id: text(value.id).trim() || `binding-${name}`,
+    name,
+    defaultValue: text(value.defaultValue),
+    source: normalizeValueSource(value.source),
+  };
+}
+
+function dedupeByName(items) {
+  return items.filter(
+    (item, index, list) => list.findIndex((candidate) => candidate.name === item.name) === index,
+  );
+}
+
+/** A stage has one command string; legacy stores kept a separate args field. */
+function mergeCommand(command, args) {
+  return [text(command), text(args)]
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .join(' ');
+}
+
+/** Rewrite {{input}} placeholders into @@input@@ for the given names. */
+function rewriteLegacyPlaceholders(command, names) {
+  if (!command || names.size === 0) return command;
+  return command.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, name) =>
+    names.has(name) ? `@@${name}@@` : match,
+  );
+}
+
+function normalizeStageAsset(value) {
+  const kind = value.assetKind === 'file' || value.assetKind === 'directory' ? value.assetKind : '';
+  return {
+    assetKind: kind,
+    assetName: kind ? text(value.assetName).slice(0, 200) : '',
+    assetFileCount: kind ? Math.max(0, Math.floor(numberOrNull(value.assetFileCount) ?? 0)) : 0,
+    assetSize: kind ? Math.max(0, Math.floor(numberOrNull(value.assetSize) ?? 0)) : 0,
+  };
+}
+
+function normalizeLibraryStage(value) {
   if (!isRecord(value)) return null;
   const id = text(value.id).trim();
   if (id === '') return null;
+  const inputs = dedupeByName(
+    (Array.isArray(value.inputs) ? value.inputs : []).map(normalizeStageInput).filter(Boolean),
+  ).slice(0, 40);
+  const outputs = (Array.isArray(value.outputs) ? value.outputs : [])
+    .map(normalizeOutputDefinition)
+    .filter(Boolean)
+    .filter((output, index, list) => list.findIndex((item) => item.name === output.name) === index)
+    .slice(0, 20);
+  const parameters = dedupeByName(
+    (Array.isArray(value.parameters) ? value.parameters : []).map(normalizeStageParameter).filter(Boolean),
+  )
+    .filter((parameter) => !inputs.some((input) => input.name === parameter.name))
+    .filter((parameter) => !outputs.some((output) => output.name === parameter.name))
+    .slice(0, 40);
+  return {
+    id,
+    name: text(value.name, 'Untitled stage').slice(0, 200),
+    description: text(value.description).slice(0, 2_000),
+    command: mergeCommand(value.command, value.args).slice(0, 12_000),
+    timeoutSec: normalizeTimeout(value.timeoutSec),
+    inputs,
+    parameters,
+    outputs,
+    ...normalizeStageAsset(value),
+    createdAt: numberOrNull(value.createdAt) ?? Date.now(),
+    updatedAt: numberOrNull(value.updatedAt) ?? Date.now(),
+  };
+}
+
+function normalizeTemplateStage(value) {
+  if (!isRecord(value)) return null;
+  // Legacy templates stored the whole stage inline (id + command + args + outputs).
+  // Those are lifted into the stage library before normalization; a reference that
+  // lost its stageId still resolves through the shared id.
+  const stageId = text(value.stageId).trim() || text(value.id).trim();
+  if (stageId === '') return null;
+  const id = text(value.id).trim() || stageId;
+  return {
+    id,
+    stageId,
+    inputs: dedupeByName(
+      (Array.isArray(value.inputs) ? value.inputs : []).map(normalizeStageBinding).filter(Boolean),
+    ).slice(0, 40),
+    parameters: dedupeByName(
+      (Array.isArray(value.parameters) ? value.parameters : []).map(normalizeParameterBinding).filter(Boolean),
+    ).slice(0, 40),
+    inputRefs: (Array.isArray(value.inputRefs) ? value.inputRefs : [])
+      .map(normalizeInputReference)
+      .filter(Boolean),
+  };
+}
+
+function validateValueSource(source, resolved, stageById, globalKeys) {
+  if (!source) return null;
+  if (source.kind === 'global') return globalKeys.has(source.name) ? source : null;
+  // Outputs and parameters may only come from a stage placed earlier in this template.
+  const upstream = resolved.find((candidate) => candidate.id === source.stageId);
+  if (!upstream) return null;
+  const upstreamLibrary = stageById.get(upstream.stageId);
+  if (!upstreamLibrary) return null;
+  const pool = source.kind === 'output' ? upstreamLibrary.outputs : upstreamLibrary.parameters;
+  return pool.some((item) => item.name === source.name) ? source : null;
+}
+
+function resolveTemplateStages(entries, stageById, globalKeys = new Set()) {
+  const resolved = [];
+  const usedIds = new Set();
+  for (const entry of entries) {
+    const library = stageById.get(entry.stageId);
+    // Templates may only use stages that exist in the library.
+    if (!library) continue;
+    let id = entry.id;
+    if (usedIds.has(id)) id = `${entry.stageId}~${resolved.length + 1}`;
+    usedIds.add(id);
+    const inputs = library.inputs.map((declaration) => {
+      const binding = entry.inputs.find((candidate) => candidate.name === declaration.name);
+      return {
+        id: binding?.id || `binding-${declaration.name}`,
+        name: declaration.name,
+        source: validateValueSource(binding?.source, resolved, stageById, globalKeys),
+      };
+    });
+    const parameters = library.parameters.map((declaration) => {
+      const binding = entry.parameters.find((candidate) => candidate.name === declaration.name);
+      return {
+        id: binding?.id || `binding-${declaration.name}`,
+        name: declaration.name,
+        defaultValue: declaration.defaultValue,
+        source: validateValueSource(binding?.source, resolved, stageById, globalKeys),
+      };
+    });
+    const keys = new Set();
+    const inputRefs = [];
+    for (const reference of entry.inputRefs) {
+      if (keys.has(reference.key)) continue;
+      const upstream = resolved.find((candidate) => candidate.id === reference.stageId);
+      const upstreamLibrary = upstream ? stageById.get(upstream.stageId) : null;
+      if (!upstreamLibrary || !upstreamLibrary.outputs.some((output) => output.name === reference.outputName)) continue;
+      keys.add(reference.key);
+      inputRefs.push(reference);
+    }
+    resolved.push({
+      id,
+      stageId: library.id,
+      inputs: inputs.slice(0, 40),
+      parameters: parameters.slice(0, 40),
+      inputRefs: inputRefs.slice(0, 40),
+    });
+  }
+  return resolved;
+}
+
+function normalizeTemplate(value, stageById = new Map()) {
+  if (!isRecord(value)) return null;
+  const id = text(value.id).trim();
+  if (id === '') return null;
+  const entries = (Array.isArray(value.stages) ? value.stages : [])
+    .map(normalizeTemplateStage)
+    .filter(Boolean);
+  const parameters = (Array.isArray(value.parameters) ? value.parameters : [])
+    .map(normalizeParameterDefinition)
+    .filter(Boolean)
+    .filter((parameter, index, list) => list.findIndex((item) => item.key === parameter.key) === index)
+    .slice(0, 60);
+  const globalKeys = new Set(parameters.map((parameter) => parameter.key));
   return {
     id,
     name: text(value.name, 'Untitled template').slice(0, 200),
     description: text(value.description).slice(0, 2_000),
-    parameters: (Array.isArray(value.parameters) ? value.parameters : [])
-      .map(normalizeParameterDefinition)
-      .filter(Boolean)
-      .filter((parameter, index, list) => list.findIndex((item) => item.key === parameter.key) === index)
-      .slice(0, 60),
-    stages: (Array.isArray(value.stages) ? value.stages : []).map(normalizeStage).filter(Boolean).slice(0, 60),
+    datasetId: text(value.datasetId).trim(),
+    parameters,
+    stages: resolveTemplateStages(entries, stageById, globalKeys).slice(0, 60),
     createdAt: numberOrNull(value.createdAt) ?? Date.now(),
     updatedAt: numberOrNull(value.updatedAt) ?? Date.now(),
   };
+}
+
+/**
+ * Older stores kept every stage inline in its template. Lift each one into the
+ * shared stage library (keeping ids stable so references and task snapshots keep
+ * resolving), turn the template entry into a reference, and turn the old
+ * `inputRefs` wiring into declared stage inputs plus template bindings.
+ */
+function migrateLegacyModel(value) {
+  if (!isRecord(value)) return value;
+  const templates = Array.isArray(value.templates) ? value.templates : [];
+  const stages = Array.isArray(value.stages) ? value.stages.filter(isRecord) : [];
+  const byId = new Map(stages.map((stage) => [text(stage.id).trim(), stage]));
+  const lifted = [];
+  const nextTemplates = templates.map((template) => {
+    if (!isRecord(template) || !Array.isArray(template.stages)) return template;
+    const nextStages = template.stages.map((stage) => {
+      if (!isRecord(stage)) return stage;
+      const inline = typeof stage.command === 'string' || typeof stage.args === 'string';
+      const referenceId = text(stage.stageId).trim();
+      if (!inline && referenceId !== '') return stage;
+      const id = text(stage.id).trim();
+      if (id === '') return stage;
+      if (!byId.has(id)) {
+        const liftedStage = {
+          id,
+          name: stage.name,
+          description: stage.description,
+          command: stage.command,
+          args: stage.args,
+          inputs: stage.inputs,
+          outputs: stage.outputs,
+          createdAt: template.createdAt,
+          updatedAt: template.updatedAt,
+        };
+        byId.set(id, liftedStage);
+        lifted.push(liftedStage);
+      }
+      return { id, stageId: id, inputRefs: stage.inputRefs };
+    });
+    return { ...template, stages: nextStages };
+  });
+
+  const stageById = new Map([...stages, ...lifted].map((stage) => [text(stage.id).trim(), stage]));
+  const withBindings = nextTemplates.map((template) => {
+    if (!isRecord(template) || !Array.isArray(template.stages)) return template;
+    const nextStages = template.stages.map((entry) => {
+      if (!isRecord(entry)) return entry;
+      const references = Array.isArray(entry.inputRefs) ? entry.inputRefs.filter(isRecord) : [];
+      if (references.length === 0) return entry;
+      const stage = stageById.get(text(entry.stageId).trim() || text(entry.id).trim());
+      if (!stage) return entry;
+      const inputs = Array.isArray(entry.inputs) ? [...entry.inputs] : [];
+      const declared = Array.isArray(stage.inputs) ? stage.inputs : [];
+      for (const reference of references) {
+        const key = text(reference.key).trim();
+        const upstreamId = text(reference.stageId).trim();
+        const outputName = text(reference.outputName).trim();
+        if (key === '' || upstreamId === '' || outputName === '') continue;
+        if (!inputs.some((binding) => isRecord(binding) && text(binding.name).trim() === key)) {
+          inputs.push({
+            id: text(reference.id).trim() || `binding-${key}`,
+            name: key,
+            source: { kind: 'output', stageId: upstreamId, name: outputName },
+          });
+        }
+        if (!declared.some((input) => isRecord(input) && text(input.name).trim() === key)) {
+          declared.push({ id: `in-${key}`, name: key, description: '' });
+        }
+      }
+      stage.inputs = declared;
+      return { ...entry, inputs, inputRefs: [] };
+    });
+    return { ...template, stages: nextStages };
+  });
+
+  // Command and args are one string now, and stage-local references use @@name@@.
+  const mergedStages = [...stages, ...lifted].map((stage) => {
+    const names = new Set(
+      (Array.isArray(stage.inputs) ? stage.inputs : [])
+        .map((input) => (isRecord(input) ? text(input.name).trim() : ''))
+        .filter(Boolean),
+    );
+    const command = rewriteLegacyPlaceholders(mergeCommand(stage.command, stage.args), names);
+    if (command === stage.command && stage.args === undefined) return stage;
+    const next = { ...stage, command };
+    delete next.args;
+    return next;
+  });
+
+  return { ...value, stages: mergedStages, templates: withBindings };
 }
 
 function normalizeStageConfig(value) {
@@ -178,10 +504,16 @@ function normalizeStageConfig(value) {
   if (stageId === '') return null;
   return {
     stageId,
+    libraryStageId: text(value.libraryStageId).trim(),
     name: text(value.name, 'Stage').slice(0, 200),
-    command: text(value.command).slice(0, 8_000),
-    args: text(value.args).slice(0, 8_000),
-    inputs: stringArray(value.inputs).filter(Boolean).slice(0, 20),
+    command: mergeCommand(value.command, value.args).slice(0, 12_000),
+    timeoutSec: normalizeTimeout(value.timeoutSec),
+    inputs: dedupeByName(
+      (Array.isArray(value.inputs) ? value.inputs : []).map(normalizeStageBinding).filter(Boolean),
+    ).slice(0, 40),
+    parameters: dedupeByName(
+      (Array.isArray(value.parameters) ? value.parameters : []).map(normalizeParameterBinding).filter(Boolean),
+    ).slice(0, 40),
     outputs: (Array.isArray(value.outputs) ? value.outputs : [])
       .map(normalizeOutputDefinition)
       .filter(Boolean)
@@ -260,6 +592,8 @@ function normalizeRun(value) {
         name: text(group.name, 'Group').slice(0, 200),
         role: group.role === 'control' ? 'control' : 'treatment',
         templateId: text(group.templateId),
+        datasetId: text(group.datasetId),
+        datasetName: text(group.datasetName),
         parameters: normalizeParameterValues(group.parameters),
         resultsDir: text(group.resultsDir),
         status: ['pending', 'running', 'completed', 'failed', 'stopped'].includes(group.status)
@@ -270,10 +604,19 @@ function normalizeRun(value) {
           return {
             id: text(stage.id),
             stageId: text(stage.stageId),
+            libraryStageId: text(stage.libraryStageId),
             name: text(stage.name, 'Stage').slice(0, 200),
             command: text(stage.command).slice(0, 8_000),
             args: text(stage.args).slice(0, 8_000),
-            inputs: stringArray(stage.inputs).filter(Boolean).slice(0, 20),
+            timeoutSec: normalizeTimeout(stage.timeoutSec),
+            assetSource: text(stage.assetSource),
+            workDir: text(stage.workDir),
+            inputs: dedupeByName(
+              (Array.isArray(stage.inputs) ? stage.inputs : []).map(normalizeStageBinding).filter(Boolean),
+            ).slice(0, 40),
+            parameters: dedupeByName(
+              (Array.isArray(stage.parameters) ? stage.parameters : []).map(normalizeParameterBinding).filter(Boolean),
+            ).slice(0, 40),
             outputs: (Array.isArray(stage.outputs) ? stage.outputs : [])
               .map(normalizeOutputDefinition)
               .filter(Boolean)
@@ -286,9 +629,13 @@ function normalizeRun(value) {
               ? stage.status
               : 'pending',
             exitCode: numberOrNull(stage.exitCode),
+            timedOut: Boolean(stage.timedOut),
             resultsDir: text(stage.resultsDir),
             outputDir: text(stage.outputDir),
             inputDir: text(stage.inputDir),
+            values: isRecord(stage.values)
+              ? Object.fromEntries(Object.entries(stage.values).filter(([, value]) => typeof value === 'string'))
+              : {},
             startedAt: numberOrNull(stage.startedAt),
             endedAt: numberOrNull(stage.endedAt),
             stdout: text(stage.stdout).slice(-MAX_LOG_CHARS),
@@ -301,20 +648,31 @@ function normalizeRun(value) {
 }
 
 function normalizeLoadedStore(value) {
-  const source = isRecord(value) ? value : {};
+  const source = migrateLegacyModel(isRecord(value) ? value : {});
+  const model = normalizeModel(source);
   return {
     version: STORE_VERSION,
-    datasets: (Array.isArray(source.datasets) ? source.datasets : []).map(normalizeDataset).filter(Boolean),
-    templates: (Array.isArray(source.templates) ? source.templates : []).map(normalizeTemplate).filter(Boolean),
-    tasks: (Array.isArray(source.tasks) ? source.tasks : []).map(normalizeTask).filter(Boolean),
+    datasets: model.datasets,
+    stages: model.stages,
+    templates: model.templates,
+    tasks: model.tasks,
     runs: (Array.isArray(source.runs) ? source.runs : []).map(normalizeRun).filter(Boolean).slice(0, MAX_RUNS),
   };
 }
 
 function normalizeModel(value) {
+  const stages = (Array.isArray(value.stages) ? value.stages : [])
+    .map(normalizeLibraryStage)
+    .filter(Boolean)
+    .filter((stage, index, list) => list.findIndex((item) => item.id === stage.id) === index)
+    .slice(0, 500);
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
   return {
     datasets: (Array.isArray(value.datasets) ? value.datasets : []).map(normalizeDataset).filter(Boolean),
-    templates: (Array.isArray(value.templates) ? value.templates : []).map(normalizeTemplate).filter(Boolean),
+    stages,
+    templates: (Array.isArray(value.templates) ? value.templates : [])
+      .map((template) => normalizeTemplate(template, stageById))
+      .filter(Boolean),
     tasks: (Array.isArray(value.tasks) ? value.tasks : []).map(normalizeTask).filter(Boolean),
   };
 }
@@ -429,6 +787,16 @@ function truncateLog(value) {
   return value.length > MAX_LOG_CHARS ? value.slice(-MAX_LOG_CHARS) : value;
 }
 
+/** Validate a submitted file path and return it as a relative OS path. */
+function safeAssetRelativePath(raw) {
+  const normalized = String(raw || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (normalized === '' || normalized.length > 300) return '';
+  const parts = normalized.split('/').filter((part) => part !== '');
+  if (parts.length === 0) return '';
+  if (parts.some((part) => part === '.' || part === '..' || part.includes(':'))) return '';
+  return parts.join(path.sep);
+}
+
 function applyParameters(value, parameters) {
   if (typeof value !== 'string' || value === '') return value;
   const values = new Map((Array.isArray(parameters) ? parameters : []).map((parameter) => [parameter.key, parameter.value]));
@@ -447,6 +815,16 @@ function applyInputReferences(value, references) {
   if (entries.length === 0) return value;
   const lookup = new Map(entries.map(([key, filePath]) => [key, filePath.replace(/\\/g, '/')]));
   const pattern = new RegExp(`\\{\\{\\s*(${entries.map(([key]) => escapeRegExp(key)).join('|')})\\s*\\}\\}`, 'g');
+  return value.replace(pattern, (match, key) => (lookup.has(key) ? lookup.get(key) : match));
+}
+
+/** Replace @@name@@ with the stage's resolved input/parameter/output values. */
+function applyStageValues(value, values) {
+  if (typeof value !== 'string' || value === '') return value;
+  const entries = Object.entries(values || {});
+  if (entries.length === 0) return value;
+  const lookup = new Map(entries.map(([key, entry]) => [key, String(entry).replace(/\\/g, '/')]));
+  const pattern = new RegExp(`@@\\s*(${entries.map(([key]) => escapeRegExp(key)).join('|')})\\s*@@`, 'g');
   return value.replace(pattern, (match, key) => (lookup.has(key) ? lookup.get(key) : match));
 }
 
@@ -583,6 +961,7 @@ export function apply(ctx) {
       updatedAt: Date.now(),
       includeTasks,
       datasets: store.datasets,
+      stages: store.stages,
       templates: store.templates,
       tasks: includeTasks ? store.tasks : [],
     };
@@ -608,6 +987,8 @@ export function apply(ctx) {
         await fs.rename(temporary, storeFile);
         await writeWorkspaceManifest(manifestPayload);
         await syncDatasetFiles();
+        await syncStageLibraryFiles();
+        await syncTemplateLibraryFiles();
         lastSaveError = null;
       })
       .catch((error) => {
@@ -716,6 +1097,155 @@ export function apply(ctx) {
         'utf8',
       );
     }
+  }
+
+  function stageLibraryDirectory(stage) {
+    return path.join(workspacePath(), 'stages', `${safeFilePart(stage.name)}__${safeFilePart(stage.id)}`);
+  }
+
+  function templateDirectory(template) {
+    return path.join(workspacePath(), 'templates', `${safeFilePart(template.name)}__${safeFilePart(template.id)}`);
+  }
+
+  /**
+   * Materialize one folder per catalogue item, each with its own description
+   * file (stages/<name>__<id>/stage.json, templates/<name>__<id>/template.json).
+   * Folders of removed items are deleted; folders without our description file
+   * are left alone.
+   */
+  async function syncLibraryFolders(rootName, configName, format, items, directoryFor) {
+    const root = path.join(workspacePath(), rootName);
+    await fs.mkdir(root, { recursive: true });
+    const expected = new Set(items.map((item) => path.resolve(directoryFor(item))));
+    const children = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const child of children) {
+      if (!child.isDirectory()) continue;
+      const directory = path.join(root, child.name);
+      let marker = null;
+      try {
+        marker = JSON.parse(await fs.readFile(path.join(directory, configName), 'utf8'));
+      } catch {
+        continue;
+      }
+      if (!marker || typeof marker.id !== 'string') continue;
+      if (!expected.has(path.resolve(directory))) {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    }
+    for (const item of items) {
+      const directory = directoryFor(item);
+      await fs.mkdir(directory, { recursive: true });
+      await fs.writeFile(
+        path.join(directory, configName),
+        JSON.stringify({ format, version: 1, ...item }, null, 2),
+        'utf8',
+      );
+    }
+  }
+
+  function stageAssetStagingDirectory(stageId) {
+    return path.join(workspacePath(), 'stages', '.uploads', safeFilePart(stageId));
+  }
+
+  function stageAssetDirectory(stage) {
+    return path.join(stageLibraryDirectory(stage), 'files');
+  }
+
+  /**
+   * Stage folders also carry the submitted files/folder (`files/`), so the
+   * rename-aware part moves a renamed stage's folder instead of recreating it,
+   * then staged uploads are adopted and the description file is rewritten.
+   */
+  async function syncStageLibraryFiles() {
+    const root = path.join(workspacePath(), 'stages');
+    await fs.mkdir(root, { recursive: true });
+    const expected = new Map(
+      store.stages.map((stage) => [stage.id, path.resolve(stageLibraryDirectory(stage))]),
+    );
+
+    const children = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const child of children) {
+      if (!child.isDirectory() || child.name === '.uploads') continue;
+      const directory = path.join(root, child.name);
+      let marker = null;
+      try {
+        marker = JSON.parse(await fs.readFile(path.join(directory, 'stage.json'), 'utf8'));
+      } catch {
+        continue;
+      }
+      const id = marker && typeof marker.id === 'string' ? marker.id.trim() : '';
+      const target = id === '' ? undefined : expected.get(id);
+      if (!target) {
+        await fs.rm(directory, { recursive: true, force: true });
+        continue;
+      }
+      if (path.resolve(directory) !== target) {
+        await fs.rm(target, { recursive: true, force: true });
+        try {
+          await fs.rename(directory, target);
+        } catch {
+          await fs.cp(directory, target, { recursive: true, force: true });
+          await fs.rm(directory, { recursive: true, force: true });
+        }
+      }
+    }
+
+    for (const stage of store.stages) {
+      const directory = stageLibraryDirectory(stage);
+      const assets = stageAssetDirectory(stage);
+      const staging = stageAssetStagingDirectory(stage.id);
+      if (stage.assetKind) {
+        const staged = await fs.stat(staging).catch(() => null);
+        if (staged && staged.isDirectory()) {
+          await fs.rm(assets, { recursive: true, force: true });
+          await fs.cp(staging, assets, { recursive: true, force: true });
+          await fs.rm(staging, { recursive: true, force: true });
+        }
+      } else {
+        await fs.rm(assets, { recursive: true, force: true });
+        await fs.rm(staging, { recursive: true, force: true });
+      }
+      await fs.mkdir(directory, { recursive: true });
+      await fs.writeFile(
+        path.join(directory, 'stage.json'),
+        JSON.stringify({ format: 'techhub-stage', version: 1, ...stage }, null, 2),
+        'utf8',
+      );
+    }
+
+    const stagingRoot = path.join(root, '.uploads');
+    const stagedChildren = await fs.readdir(stagingRoot, { withFileTypes: true }).catch(() => []);
+    const known = new Set(store.stages.map((stage) => safeFilePart(stage.id)));
+    for (const child of stagedChildren) {
+      if (!child.isDirectory()) continue;
+      if (!known.has(child.name)) {
+        await fs.rm(path.join(stagingRoot, child.name), { recursive: true, force: true });
+      }
+    }
+  }
+
+  async function syncTemplateLibraryFiles() {
+    await syncLibraryFolders('templates', 'template.json', 'techhub-template', store.templates, templateDirectory);
+  }
+
+  /** Copy the submitted file/folder into the stage run directory, at its root. */
+  async function materializeStageAsset(stage, workDir) {
+    const source = stage.assetSource;
+    if (!source) return false;
+    const stat = await fs.stat(source).catch(() => null);
+    if (!stat || !stat.isDirectory()) {
+      throw new Error(`阶段「${stage.name}」提交的文件不存在：${stage.assetName || source}`);
+    }
+    await fs.rm(workDir, { recursive: true, force: true });
+    await fs.mkdir(workDir, { recursive: true });
+    const entries = await fs.readdir(source, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      await fs.cp(path.join(source, entry.name), path.join(workDir, entry.name), {
+        recursive: true,
+        force: true,
+      });
+    }
+    return true;
   }
 
   function groupFolderName(group, groupIndex) {
@@ -978,6 +1508,8 @@ export function apply(ctx) {
       for (const child of children) {
         const childRelative = relative ? `${relative}/${child.name}` : child.name;
         if (!includeTasks && (childRelative === 'runs' || childRelative.startsWith('runs/'))) continue;
+        // Staged stage uploads are transient; the adopted copy lives in the stage folder.
+        if (childRelative === 'stages/.uploads' || childRelative.startsWith('stages/.uploads/')) continue;
         if (childRelative === manifestName || childRelative.endsWith('.tmp')) continue;
         const full = path.join(directory, child.name);
         if (child.isDirectory()) {
@@ -1002,6 +1534,7 @@ export function apply(ctx) {
         stage.resultsDir = path.join(group.resultsDir, 'stages', stageFolderName(stage, stageIndex));
         stage.inputDir = path.join(stage.resultsDir, 'input');
         stage.outputDir = path.join(stage.resultsDir, 'output');
+        stage.workDir = path.join(stage.resultsDir, 'work');
       }
     }
     return run;
@@ -1071,7 +1604,7 @@ export function apply(ctx) {
         const raw = await fs.readFile(workspaceManifestPath(), 'utf8');
         const parsed = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
         if (parsed && (parsed.format === 'techhub-workspace' || Array.isArray(parsed.datasets))) {
-          workspaceModel = normalizeModel(parsed);
+          workspaceModel = normalizeModel(migrateLegacyModel(parsed));
         }
       } catch (error) {
         if (error && error.code !== 'ENOENT') {
@@ -1083,12 +1616,14 @@ export function apply(ctx) {
         const parsed = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
         const normalized = normalizeLoadedStore(parsed);
         store.datasets = workspaceModel ? workspaceModel.datasets : normalized.datasets;
+        store.stages = workspaceModel ? workspaceModel.stages : normalized.stages;
         store.templates = workspaceModel ? workspaceModel.templates : normalized.templates;
         store.tasks = workspaceModel ? workspaceModel.tasks : normalized.tasks;
         store.runs = normalized.runs;
       } catch (error) {
         if (workspaceModel) {
           store.datasets = workspaceModel.datasets;
+          store.stages = workspaceModel.stages;
           store.templates = workspaceModel.templates;
           store.tasks = workspaceModel.tasks;
         }
@@ -1105,8 +1640,16 @@ export function apply(ctx) {
       if (!workspaceModel) {
         await persist();
       } else {
+        // The catalogue is the source of truth; materialize one folder per
+        // dataset, stage and template so the workspace stays browsable.
         await syncDatasetFiles().catch((error) => {
           console.error('[techhub] failed to sync dataset files:', error);
+        });
+        await syncStageLibraryFiles().catch((error) => {
+          console.error('[techhub] failed to sync stage folders:', error);
+        });
+        await syncTemplateLibraryFiles().catch((error) => {
+          console.error('[techhub] failed to sync template folders:', error);
         });
       }
     })();
@@ -1136,16 +1679,127 @@ export function apply(ctx) {
     }
   }
 
-  async function prepareStageInputs(group, stage) {
+  async function resolveOutputPath(upstream, outputName) {
+    const output = (upstream.outputs || []).find((candidate) => candidate.name === outputName);
+    if (!output) {
+      throw new Error(`上游阶段没有配置对外输出：${upstream.name}.${outputName}`);
+    }
+    const outputRoot = path.resolve(upstream.outputDir);
+    const filePath = path.resolve(outputRoot, output.file);
+    if (filePath !== outputRoot && !filePath.startsWith(`${outputRoot}${path.sep}`)) {
+      throw new Error(`上游输出文件路径越界：${upstream.name}.${output.name}`);
+    }
+    const stat = await fs.lstat(filePath).catch(() => null);
+    const expectDirectory = output.type === 'directory';
+    if (!stat || (expectDirectory ? !stat.isDirectory() : !stat.isFile())) {
+      throw new Error(
+        `上游输出${expectDirectory ? '目录' : '文件'}不存在：${upstream.name}.${output.name}（${output.file}）`,
+      );
+    }
+    return { output, filePath };
+  }
+
+  /** Values available to every stage command without declaring a port. */
+  function builtinValues(context, stage) {
+    const { run, task, group, datasetEnvironment } = context;
+    return {
+      run_id: run.id,
+      run_dir: run.resultsDir || '',
+      task_id: task.id,
+      task_name: task.name,
+      group_id: group.id,
+      group_name: group.name,
+      group_role: group.role,
+      stage_id: stage.stageId,
+      stage_name: stage.name,
+      stage_dir: stage.resultsDir || '',
+      input_dir: stage.inputDir || '',
+      output_dir: stage.outputDir || '',
+      workspace: run.workspace || workspacePath(),
+      work_dir: context.workDir || '',
+      dataset_path: datasetEnvironment?.TECHHUB_DATASET_PATH || '',
+      dataset_format: datasetEnvironment?.TECHHUB_DATASET_FORMAT || '',
+    };
+  }
+
+  function findUpstreamStage(group, stage, stageId) {
+    const upstream = group.stages.find((candidate) => candidate.stageId === stageId);
+    if (!upstream || upstream.status !== 'completed' || !upstream.outputDir) return null;
+    if (group.stages.indexOf(upstream) >= group.stages.indexOf(stage)) return null;
+    return upstream;
+  }
+
+  async function resolveBindingValue(source, group, stage, context) {
+    if (!source) return null;
+    if (source.kind === 'global') {
+      // An empty global value is a valid substitution; only a missing key fails.
+      const value = context.globals.get(source.name);
+      return typeof value === 'string' ? value : null;
+    }
+    const upstream = findUpstreamStage(group, stage, source.stageId);
+    if (!upstream) return null;
+    if (source.kind === 'parameter') {
+      const values = context.parameters.get(source.stageId);
+      if (!values || !Object.prototype.hasOwnProperty.call(values, source.name)) return null;
+      return typeof values[source.name] === 'string' ? values[source.name] : null;
+    }
+    const resolved = await resolveOutputPath(upstream, source.name);
+    return resolved.filePath.replace(/\\/g, '/');
+  }
+
+  async function prepareStageInputs(group, stage, context) {
     const inputDir = stage.inputDir;
-    if (!inputDir) return { refs: {}, paths: [], dirs: [] };
+    if (!inputDir) return { refs: {}, values: {}, paths: [] };
     await fs.rm(inputDir, { recursive: true, force: true });
     await fs.mkdir(inputDir, { recursive: true });
     const currentIndex = group.stages.indexOf(stage);
     const references = {};
+    const values = builtinValues(context, stage);
     const paths = [];
-    const dirs = new Set();
     const selected = [];
+
+    // Values bound in the template: declared inputs and parameters. An input
+    // without a binding is left for the placeholder to survive; a binding that
+    // cannot resolve fails the stage with the reason.
+    for (const binding of stage.inputs || []) {
+      if (!binding.source) continue;
+      const value = await resolveBindingValue(binding.source, group, stage, context);
+      if (value === null) {
+        throw new Error(`输入 ${binding.name} 无法解析：来源必须是上游阶段的输出/参数或全局参数`);
+      }
+      values[binding.name] = value;
+      if (binding.source.kind === 'output') paths.push(value);
+      selected.push({ name: binding.name, kind: binding.source.kind, source: binding.source, value });
+    }
+    for (const binding of stage.parameters || []) {
+      if (!binding.source) {
+        values[binding.name] = text(binding.defaultValue);
+        selected.push({ name: binding.name, kind: 'default', value: values[binding.name] });
+        continue;
+      }
+      const value = await resolveBindingValue(binding.source, group, stage, context);
+      if (value === null) {
+        throw new Error(`参数 ${binding.name} 无法解析：来源必须是上游阶段的输出/参数或全局参数`);
+      }
+      values[binding.name] = value;
+      if (binding.source.kind === 'output') paths.push(value);
+      selected.push({ name: binding.name, kind: binding.source.kind, source: binding.source, value });
+    }
+
+    // Declared outputs are addressable in the command as @@name@@ (absolute path
+    // inside this stage's output directory). Inputs/parameters win on a name clash.
+    if (stage.outputDir) {
+      const outputRoot = path.resolve(stage.outputDir);
+      for (const output of stage.outputs || []) {
+        const target = path.resolve(outputRoot, output.file);
+        if (target !== outputRoot && !target.startsWith(`${outputRoot}${path.sep}`)) continue;
+        if (!Object.prototype.hasOwnProperty.call(values, output.name)) {
+          values[output.name] = target.replace(/\\/g, '/');
+        }
+      }
+    }
+
+    // Legacy per-reference wiring, kept for task snapshots created before bindings.
     for (const reference of stage.inputRefs || []) {
       if (references[reference.key]) {
         throw new Error(`输入引用 key 重复：${reference.key}`);
@@ -1157,19 +1811,7 @@ export function apply(ctx) {
       if (group.stages.indexOf(upstream) >= currentIndex) {
         throw new Error(`输入引用必须来自前面的阶段：${reference.key}`);
       }
-      const output = (upstream.outputs || []).find((candidate) => candidate.name === reference.outputName);
-      if (!output) {
-        throw new Error(`上游阶段没有配置对外输出：${upstream.name}.${reference.outputName}`);
-      }
-      const outputRoot = path.resolve(upstream.outputDir);
-      const filePath = path.resolve(outputRoot, output.file);
-      if (filePath !== outputRoot && !filePath.startsWith(`${outputRoot}${path.sep}`)) {
-        throw new Error(`上游输出文件路径越界：${upstream.name}.${output.name}`);
-      }
-      const stat = await fs.lstat(filePath).catch(() => null);
-      if (!stat || !stat.isFile()) {
-        throw new Error(`上游输出文件不存在：${upstream.name}.${output.name}（${output.file}）`);
-      }
+      const { output, filePath } = await resolveOutputPath(upstream, reference.outputName);
       references[reference.key] = filePath;
       paths.push(filePath);
       selected.push({
@@ -1181,34 +1823,31 @@ export function apply(ctx) {
         path: filePath,
       });
     }
-    if ((stage.inputRefs || []).length === 0 && (stage.inputs || []).length > 0) {
-      for (const inputId of new Set(stage.inputs || [])) {
-        const upstream = group.stages.find((candidate) => candidate.stageId === inputId);
-        if (!upstream || upstream.status !== 'completed' || !upstream.outputDir) continue;
-        if (group.stages.indexOf(upstream) >= currentIndex) continue;
-        dirs.add(upstream.outputDir);
-        selected.push({
-          stageId: upstream.stageId,
-          stageName: upstream.name,
-          outputDir: upstream.outputDir,
-        });
-      }
-    }
+
     const manifest = {
       stage: { id: stage.stageId, name: stage.name },
       generatedAt: Date.now(),
       inputs: selected,
       refs: references,
+      values,
     };
     await fs.writeFile(path.join(inputDir, 'input.json'), JSON.stringify(manifest, null, 2), 'utf8');
-    return { refs: references, paths, dirs: [...dirs] };
+    return { refs: references, values, paths };
   }
 
-  async function materializeDataset(run, task) {
-    if (!task.datasetId) return {};
-    const dataset = store.datasets.find((item) => item.id === task.datasetId);
-    if (!dataset) return {};
-    const directory = run.resultsDir || path.join(runsDirectory, run.id);
+  /**
+   * Each group runs its template against that template's dataset, so the copy
+   * lives next to the group's results and every group may use a different one.
+   */
+  async function materializeGroupDataset(group) {
+    const datasetId = text(group.datasetId).trim();
+    if (datasetId === '') return {};
+    const dataset = store.datasets.find((item) => item.id === datasetId);
+    if (!dataset) {
+      throw new Error(`数据集不存在：${group.datasetName || datasetId}`);
+    }
+    const directory = group.resultsDir;
+    if (!directory) return {};
     await fs.mkdir(directory, { recursive: true });
     const extension = dataset.format === 'csv' ? 'csv' : 'jsonl';
     const file = path.join(directory, `dataset.${extension}`);
@@ -1221,7 +1860,7 @@ export function apply(ctx) {
     };
   }
 
-  function executeCommand(commandLine, cwd, environment, entry, stage, logBase) {
+  function executeCommand(commandLine, cwd, environment, entry, stage, logBase, timeoutSec = 0) {
     return new Promise((resolve) => {
       let child;
       try {
@@ -1247,8 +1886,16 @@ export function apply(ctx) {
       let stdout = '';
       let stderr = '';
       let spawnError = null;
+      let timedOut = false;
+      let timer = null;
       let lastPublished = 0;
       let lastLogWrite = 0;
+      if (timeoutSec > 0) {
+        timer = setTimeout(() => {
+          timedOut = true;
+          void terminateChild(child);
+        }, timeoutSec * 1_000);
+      }
       const collect = (current, chunk) => truncateLog(current + chunk.toString('utf8'));
       const writeLogs = (force = false) => {
         if (!logBase) return;
@@ -1280,17 +1927,21 @@ export function apply(ctx) {
         spawnError = error instanceof Error ? error.message : String(error);
       });
       child.on('close', (code, signal) => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
         entry.children.delete(child);
         stage.stdout = stdout;
         stage.stderr = stderr;
         scheduleSave();
         writeLogs(true);
-        resolve({ code, signal, stdout, stderr, error: spawnError });
+        resolve({ code, signal, stdout, stderr, error: spawnError, timedOut });
       });
     });
   }
 
-  async function executeGroup(run, task, group, entry, cwd, datasetEnvironment) {
+  async function executeGroup(run, task, group, entry, cwd) {
     if (entry.stopped) {
       group.status = 'stopped';
       for (const stage of group.stages) {
@@ -1300,6 +1951,29 @@ export function apply(ctx) {
     }
     group.status = 'running';
     scheduleSave();
+    let datasetEnvironment = {};
+    try {
+      datasetEnvironment = await materializeGroupDataset(group);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      group.status = 'failed';
+      for (const stage of group.stages) {
+        if (stage.status === 'pending') stage.status = 'failed';
+      }
+      if (!run.message) run.message = message;
+      scheduleSave();
+      return;
+    }
+    // Values visible to the following stages of this group: global parameters
+    // plus the parameters each completed stage resolved.
+    const context = {
+      run,
+      task,
+      group,
+      datasetEnvironment,
+      globals: new Map((group.parameters || []).map((parameter) => [parameter.key, parameter.value])),
+      parameters: new Map(),
+    };
     for (const stage of group.stages) {
       if (entry.stopped) {
         stage.status = 'stopped';
@@ -1314,9 +1988,28 @@ export function apply(ctx) {
           console.error('[techhub] failed to create stage output directory:', error);
         });
       }
-      let inputs = { refs: {}, paths: [], dirs: [] };
+      // A stage that submitted files runs inside its own work directory, which
+      // holds a copy of the submission at the root (Aether's node directory).
+      let stageCwd = cwd;
+      if (stage.assetSource && stage.workDir) {
+        try {
+          await materializeStageAsset(stage, stage.workDir);
+          stageCwd = stage.workDir;
+        } catch (error) {
+          stage.status = 'failed';
+          stage.stderr = error instanceof Error ? error.message : String(error);
+          stage.endedAt = Date.now();
+          group.status = 'failed';
+          if (!run.failedStage) run.failedStage = stage.name;
+          run.message = `阶段「${stage.name}」提交的文件不可用`;
+          scheduleSave();
+          return;
+        }
+      }
+      context.workDir = stageCwd;
+      let inputs = { refs: {}, values: {}, paths: [] };
       try {
-        inputs = await prepareStageInputs(group, stage);
+        inputs = await prepareStageInputs(group, stage, context);
       } catch (error) {
         stage.status = 'failed';
         stage.stderr = `无法准备上游输入：${error instanceof Error ? error.message : String(error)}`;
@@ -1326,9 +2019,24 @@ export function apply(ctx) {
         scheduleSave();
         return;
       }
-      stage.command = applyInputReferences(applyParameters(stage.command, group.parameters), inputs.refs);
-      stage.args = applyInputReferences(applyParameters(stage.args, group.parameters), inputs.refs);
-      const commandLine = [stage.command, stage.args].filter((part) => part.trim() !== '').join(' ').trim();
+      const parameters = {};
+      for (const binding of stage.parameters || []) {
+        if (Object.prototype.hasOwnProperty.call(inputs.values, binding.name)) {
+          parameters[binding.name] = inputs.values[binding.name];
+        }
+      }
+      context.parameters.set(stage.stageId, parameters);
+      stage.values = { ...inputs.values };
+      // Legacy args are merged on load; the fallback keeps hand-written run
+      // records working if one still carries a separate args string.
+      const rawCommand = [stage.command, typeof stage.args === 'string' ? stage.args : '']
+        .filter((part) => typeof part === 'string' && part.trim() !== '')
+        .join(' ');
+      stage.command = applyStageValues(
+        applyInputReferences(applyParameters(rawCommand, group.parameters), inputs.refs),
+        inputs.values,
+      );
+      const commandLine = stage.command.trim();
       stage.commandLine = commandLine;
       const logBase = stageLogBase(run, group, stage);
       const environment = {
@@ -1340,7 +2048,9 @@ export function apply(ctx) {
         TECHHUB_INPUT_MANIFEST: stage.inputDir ? path.join(stage.inputDir, 'input.json') : '',
         TECHHUB_INPUT_REFS: JSON.stringify(inputs.refs),
         TECHHUB_INPUT_PATHS: JSON.stringify(inputs.paths),
-        TECHHUB_INPUT_DIRS: JSON.stringify(inputs.dirs),
+        TECHHUB_INPUT_DIRS: JSON.stringify([]),
+        TECHHUB_STAGE_VALUES: JSON.stringify(inputs.values),
+        TECHHUB_WORK_DIR: stageCwd,
         TECHHUB_OUTPUT_DIR: stage.outputDir,
         TECHHUB_WORKSPACE: run.workspace || workspacePath(),
         TECHHUB_TASK_ID: task.id,
@@ -1351,7 +2061,15 @@ export function apply(ctx) {
         TECHHUB_STAGE_ID: stage.stageId,
         TECHHUB_STAGE_NAME: stage.name,
       };
-      const result = await executeCommand(commandLine, cwd, environment, entry, stage, logBase);
+      const result = await executeCommand(
+        commandLine,
+        stageCwd,
+        environment,
+        entry,
+        stage,
+        logBase,
+        normalizeTimeout(stage.timeoutSec),
+      );
       stage.exitCode = result.code;
       stage.stdout = result.stdout;
       stage.stderr = result.stderr;
@@ -1359,6 +2077,16 @@ export function apply(ctx) {
       if (entry.stopped) {
         stage.status = 'stopped';
         group.status = 'stopped';
+        return;
+      }
+      if (result.timedOut) {
+        stage.status = 'failed';
+        stage.timedOut = true;
+        stage.stderr = `${stage.stderr}\n阶段超时：超过 ${normalizeTimeout(stage.timeoutSec)} 秒，已终止。`.trim();
+        group.status = 'failed';
+        if (!run.failedStage) run.failedStage = stage.name;
+        run.message = `阶段「${stage.name}」超时`;
+        scheduleSave();
         return;
       }
       if (result.code === 0 && result.error === null) {
@@ -1399,16 +2127,7 @@ export function apply(ctx) {
     }
     run.cwd = cwd;
 
-    let datasetEnvironment = {};
-    try {
-      datasetEnvironment = await materializeDataset(run, task);
-    } catch (error) {
-      console.error('[techhub] failed to materialize dataset:', error);
-    }
-
-    await Promise.all(
-      run.groups.map((group) => executeGroup(run, task, group, entry, cwd, datasetEnvironment)),
-    );
+    await Promise.all(run.groups.map((group) => executeGroup(run, task, group, entry, cwd)));
 
     if (entry.stopped) {
       run.status = 'stopped';
@@ -1440,30 +2159,50 @@ export function apply(ctx) {
   }
 
   async function startRun(task) {
-    const run = {
-      id: `run-${randomUUID()}`,
-      taskId: task.id,
-      taskName: task.name,
-      datasetId: task.datasetId,
-      cwd: task.cwd,
-      status: 'running',
-      message: '正在执行',
-      startedAt: Date.now(),
-      endedAt: null,
-      groups: task.groups.map((group) => ({
+    // Make sure submitted stage files are materialized before resolving them.
+    await syncStageLibraryFiles().catch((error) => {
+      console.error('[techhub] failed to sync stage folders before run:', error);
+    });
+    const assetSourceFor = (stageConfig) => {
+      const libraryStageId = text(stageConfig.libraryStageId).trim();
+      if (libraryStageId === '') return '';
+      const libraryStage = store.stages.find((stage) => stage.id === libraryStageId);
+      if (!libraryStage || !libraryStage.assetKind) return '';
+      return stageAssetDirectory(libraryStage);
+    };
+    // The template owns the dataset; task.datasetId is only a legacy fallback.
+    const templateById = new Map(store.templates.map((template) => [template.id, template]));
+    const datasetForGroup = (group) => {
+      const template = templateById.get(group.templateId);
+      const datasetId = text(template?.datasetId).trim() || text(task.datasetId).trim();
+      const dataset = datasetId ? store.datasets.find((item) => item.id === datasetId) : null;
+      return { datasetId, datasetName: dataset?.name || '' };
+    };
+    const groups = task.groups.map((group) => {
+      const { datasetId, datasetName } = datasetForGroup(group);
+      return {
         id: group.id,
         name: group.name,
         role: group.role,
         templateId: group.templateId,
+        datasetId,
+        datasetName,
         parameters: groupParameterValues(group),
         status: 'pending',
         stages: group.stageConfigs.map((stage) => ({
           id: `${group.id}:${stage.stageId}`,
           stageId: stage.stageId,
+          libraryStageId: text(stage.libraryStageId).trim(),
           name: stage.name,
           command: stage.command,
-          args: stage.args,
-          inputs: stringArray(stage.inputs).filter(Boolean).slice(0, 20),
+          timeoutSec: normalizeTimeout(stage.timeoutSec),
+          assetSource: assetSourceFor(stage),
+          inputs: dedupeByName(
+            (Array.isArray(stage.inputs) ? stage.inputs : []).map(normalizeStageBinding).filter(Boolean),
+          ).slice(0, 40),
+          parameters: dedupeByName(
+            (Array.isArray(stage.parameters) ? stage.parameters : []).map(normalizeParameterBinding).filter(Boolean),
+          ).slice(0, 40),
           outputs: (Array.isArray(stage.outputs) ? stage.outputs : [])
             .map(normalizeOutputDefinition)
             .filter(Boolean)
@@ -1474,12 +2213,25 @@ export function apply(ctx) {
             .slice(0, 40),
           status: 'pending',
           exitCode: null,
+          values: {},
           startedAt: null,
           endedAt: null,
           stdout: '',
           stderr: '',
         })),
-      })),
+      };
+    });
+    const run = {
+      id: `run-${randomUUID()}`,
+      taskId: task.id,
+      taskName: task.name,
+      datasetId: groups[0]?.datasetId || '',
+      cwd: task.cwd,
+      status: 'running',
+      message: '正在执行',
+      startedAt: Date.now(),
+      endedAt: null,
+      groups,
     };
     const workspace = await ensureWorkspace();
     run.workspace = workspace;
@@ -1491,6 +2243,7 @@ export function apply(ctx) {
         stage.resultsDir = path.join(group.resultsDir, 'stages', stageFolderName(stage, stageIndex));
         stage.inputDir = path.join(stage.resultsDir, 'input');
         stage.outputDir = path.join(stage.resultsDir, 'output');
+        stage.workDir = path.join(stage.resultsDir, 'work');
       }
     }
     await Promise.all(
@@ -1591,6 +2344,7 @@ export function apply(ctx) {
           sendJson(res, 200, {
             version: store.version,
             datasets: store.datasets,
+            stages: store.stages,
             templates: store.templates,
             tasks: store.tasks,
             runs: store.runs,
@@ -1601,7 +2355,17 @@ export function apply(ctx) {
         }
         if (method === 'PUT' || method === 'POST') {
           const body = await readJsonBody(req);
-          const model = normalizeModel(isRecord(body) ? body : {});
+          const payload = isRecord(body) ? body : {};
+          // `stages` is optional: older payloads keep the current library, so a
+          // client that does not know about stages cannot wipe it by omission.
+          const model = normalizeModel(
+            migrateLegacyModel({
+              datasets: payload.datasets,
+              stages: payload.stages === undefined ? store.stages : payload.stages,
+              templates: payload.templates,
+              tasks: payload.tasks,
+            }),
+          );
           const taskIds = new Set(model.tasks.map((task) => task.id));
           for (const [runId, entry] of activeRuns) {
             if (taskIds.has(entry.run.taskId)) continue;
@@ -1613,6 +2377,7 @@ export function apply(ctx) {
             activeRuns.delete(runId);
           }
           store.datasets = model.datasets;
+          store.stages = model.stages;
           store.templates = model.templates;
           store.tasks = model.tasks;
           store.runs = store.runs.filter((run) => taskIds.has(run.taskId));
@@ -1621,6 +2386,7 @@ export function apply(ctx) {
           sendJson(res, 200, {
             version: store.version,
             datasets: store.datasets,
+            stages: store.stages,
             templates: store.templates,
             tasks: store.tasks,
             runs: store.runs,
@@ -1633,9 +2399,81 @@ export function apply(ctx) {
         return;
       }
 
+      if (segments.length === 1 && segments[0] === 'stage-assets' && method === 'POST') {
+        const body = await readJsonBody(req);
+        const record = isRecord(body) ? body : {};
+        const stageId = text(record.stageId).trim();
+        if (stageId === '') {
+          sendError(res, 400, 'A stageId is required.');
+          return;
+        }
+        const kind = record.kind === 'directory' ? 'directory' : 'file';
+        const name = text(record.name).trim().slice(0, 200) || (kind === 'file' ? 'file' : 'directory');
+        const files = Array.isArray(record.files) ? record.files : [];
+        if (files.length === 0) {
+          sendError(res, 400, 'Submit at least one file.');
+          return;
+        }
+        if (files.length > MAX_STAGE_ASSET_FILES) {
+          sendError(res, 400, `A stage can submit at most ${MAX_STAGE_ASSET_FILES} files.`);
+          return;
+        }
+        const decoded = [];
+        let total = 0;
+        for (const file of files) {
+          if (!isRecord(file)) continue;
+          const relative = safeAssetRelativePath(file.path);
+          if (relative === '') {
+            sendError(res, 400, `Invalid file path: ${text(file.path)}`);
+            return;
+          }
+          const data = typeof file.data === 'string' ? file.data : '';
+          const buffer = data === '' ? Buffer.alloc(0) : Buffer.from(data, 'base64');
+          total += buffer.length;
+          if (total > MAX_STAGE_ASSET_BYTES) {
+            sendError(res, 413, `A stage can submit at most ${Math.round(MAX_STAGE_ASSET_BYTES / 1024 / 1024)} MB.`);
+            return;
+          }
+          decoded.push({ relative, buffer });
+        }
+        if (decoded.length === 0) {
+          sendError(res, 400, 'Submit at least one file.');
+          return;
+        }
+        if (kind === 'file' && decoded.length !== 1) {
+          sendError(res, 400, 'A single-file submission can only contain one file.');
+          return;
+        }
+        const target = stageAssetStagingDirectory(stageId);
+        try {
+          await fs.rm(target, { recursive: true, force: true });
+          const root = path.resolve(target);
+          for (const item of decoded) {
+            const filePath = path.resolve(root, item.relative);
+            if (filePath !== root && !filePath.startsWith(`${root}${path.sep}`)) {
+              throw Object.assign(new Error('Asset path escapes the staging directory.'), { status: 400 });
+            }
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
+            await fs.writeFile(filePath, item.buffer);
+          }
+        } catch (error) {
+          await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+          throw error;
+        }
+        sendJson(res, 200, {
+          assetKind: kind,
+          assetName: name,
+          assetFileCount: decoded.length,
+          assetSize: total,
+        });
+        return;
+      }
+
       if (segments.length === 1 && segments[0] === 'open-folder' && method === 'POST') {
         const body = await readJsonBody(req);
         const datasetId = text(isRecord(body) ? body.datasetId : '').trim();
+        const templateId = text(isRecord(body) ? body.templateId : '').trim();
+        const libraryStageId = text(isRecord(body) ? body.libraryStageId : '').trim();
         const runId = text(isRecord(body) ? body.runId : '').trim();
         const groupId = text(isRecord(body) ? body.groupId : '').trim();
         const stageId = text(isRecord(body) ? body.stageId : '').trim();
@@ -1652,6 +2490,44 @@ export function apply(ctx) {
             if (!stat.isDirectory()) throw new Error('Target is not a directory.');
           } catch (error) {
             sendError(res, 404, `Dataset directory is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+          }
+          openDirectory(target);
+          sendJson(res, 200, { opened: true, path: target });
+          return;
+        }
+        if (libraryStageId) {
+          const stageItem = store.stages.find((item) => item.id === libraryStageId);
+          if (!stageItem) {
+            sendError(res, 404, 'Stage not found.');
+            return;
+          }
+          await syncStageLibraryFiles();
+          const target = stageLibraryDirectory(stageItem);
+          try {
+            const stat = await fs.stat(target);
+            if (!stat.isDirectory()) throw new Error('Target is not a directory.');
+          } catch (error) {
+            sendError(res, 404, `Stage folder is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+          }
+          openDirectory(target);
+          sendJson(res, 200, { opened: true, path: target });
+          return;
+        }
+        if (templateId) {
+          const templateItem = store.templates.find((item) => item.id === templateId);
+          if (!templateItem) {
+            sendError(res, 404, 'Template not found.');
+            return;
+          }
+          await syncTemplateLibraryFiles();
+          const target = templateDirectory(templateItem);
+          try {
+            const stat = await fs.stat(target);
+            if (!stat.isDirectory()) throw new Error('Target is not a directory.');
+          } catch (error) {
+            sendError(res, 404, `Template folder is unavailable: ${error instanceof Error ? error.message : String(error)}`);
             return;
           }
           openDirectory(target);
@@ -1758,7 +2634,7 @@ export function apply(ctx) {
         const includeTasks =
           manifest.includeTasks === true ||
           (manifest.includeTasks === undefined && Array.isArray(manifest.tasks) && manifest.tasks.length > 0);
-        const model = normalizeModel(manifest);
+        const model = normalizeModel(migrateLegacyModel(manifest));
         const prefix = manifestEntry.name.replace(/\\/g, '/').replace(/techhub-workspace\.json$/, '');
         const writes = [];
         try {
@@ -1782,6 +2658,7 @@ export function apply(ctx) {
           await fs.writeFile(write.target, write.data);
         }
         store.datasets = model.datasets;
+        store.stages = model.stages;
         store.templates = model.templates;
         store.tasks = includeTasks ? model.tasks : [];
         store.runs = includeTasks ? await loadRunsFromWorkspace(workspace) : [];
@@ -1789,12 +2666,14 @@ export function apply(ctx) {
         sendJson(res, 200, {
           version: store.version,
           datasets: store.datasets,
+          stages: store.stages,
           templates: store.templates,
           tasks: store.tasks,
           runs: store.runs,
           settings: workspaceInfo(),
           imported: {
             datasets: model.datasets.length,
+            stages: model.stages.length,
             templates: model.templates.length,
             tasks: includeTasks ? model.tasks.length : 0,
             runs: includeTasks ? store.runs.length : 0,
@@ -1888,6 +2767,7 @@ export function apply(ctx) {
         sendJson(res, 200, {
           version: store.version,
           datasets: store.datasets,
+          stages: store.stages,
           templates: store.templates,
           tasks: store.tasks,
           runs: store.runs,

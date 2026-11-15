@@ -20,7 +20,7 @@ Aether 有三个页面：
 
 ## 0. 先读：心智模型
 
-1. **资源创建后不可修改。** 名称、类型、文件、命令、端口、参数、执行环境都固定；要改只能删除后重建。更新模块的 API 始终返回 `409`。
+1. **资源创建后不可修改。** 名称、类型、文件、命令、端口、参数、执行环境都固定；要改只能删除后重建。更新模块的 API 始终返回 `409`。唯一例外是子图接口：保存子图时，宿主会把 `exposedInputs` / `exposedOutputs` 同步到引用它的 `graph` 模块端口。
 2. **实验没有状态，实例才有状态。** 实验只是 DAG；提交后生成的实例记录 `running / succeeded / failed / cancelled`。
 3. **提交可以不保存。** 实验编辑器里的「提交实验」按**当前编辑内容**运行；不点「保存」不会写回实验定义。未保存的新实验也可以提交。
 4. **实例是快照。** 提交时固化模块命令、参数、端口、模块版本与节点执行环境；之后改实验不影响已经提交的实例。
@@ -144,7 +144,8 @@ string / number / boolean / json / file / directory
 - `nodes[].id` 在实验内唯一；`edges` 引用节点 id。
 - `layout`：`vertical`（上下）或 `horizontal`（左右）。
 - 节点 `params` 覆盖模块默认参数；`width/height` 是画布尺寸，0 表示默认。
-- 实验必须无环；子图引用链也不能成环。
+- 实验必须无环；子图引用链也严禁成环。在子图里添加一个会直接或间接引用当前实验的子图模块时，客户端会立即拒绝并显示完整引用路径；保存、工作区导入、运行前服务端还会再次校验 `graphReferenceErrors`。
+- 子图接口由 `interfaceExplicit: true` + `exposedInputs` / `exposedOutputs` 管理，每项为 `{ name, nodeId, port, type, required }`，表示把内部节点端口暴露为子图端口；保存子图时会同步引用它的 graph 模块端口。未设置 `interfaceExplicit` 的旧子图沿用 graph 模块自己的端口。
 - 被任何 `graph` 模块引用的实验就是**子图**，不能单独提交。
 
 ### 2.3 实例（run / experiment）
@@ -262,7 +263,7 @@ UI：**资源 → 新建资源 → 数据集**。
 
 ### 3.4 卡片、详情、复制 id、删除
 
-- 页面顶部有搜索框与「全部 / 模块 / 数据集」筛选，匹配名称、描述、端口、数据集 URI 或子图实验名。
+- 页面顶部有搜索框与「全部 / 模块 / 数据集」筛选，匹配名称、描述、端口、数据集 URI 或子图实验名；保存子图后端口 / 子图名变化会触发资源页与编辑器右侧栏搜索重算，无需刷新页面。
 - 卡片只显示名称、描述、版本、UUID id。
 - 右键卡片（或聚焦后按菜单键 / Shift+F10）：复制 id、详情、删除资源。
 - 详情页只读；顶部显示 id。
@@ -275,13 +276,13 @@ UI：**资源 → 新建资源 → 数据集**。
 ### 4.1 新建与打开
 
 - **实验 → 新建实验**：空白草稿。
-- 实验列表可以按名称 / id 搜索；点已有实验卡片打开编辑器；多个实验可以在标签栏里同时打开。
+- 实验列表展示全部实验；点已有实验卡片打开编辑器；右键卡片（或聚焦后按菜单键 / Shift+F10）可「编辑实验 / 复制实验 id / 删除实验」，删除前会确认。多个实验可以在标签栏里同时打开。
 - 子图节点详情里可「在新标签页打开子图」，父实验标签不关闭。
 - 标签可切换、关闭；有未保存修改时关闭会确认。
 
 ### 4.2 编辑 DAG
 
-- 右侧栏搜索并添加模块 / 子图 / 数据集；单击添加到视口中心，或直接拖到画布位置。
+- 右侧栏搜索并添加模块 / 子图 / 数据集；**双击**添加到视口中心，或直接拖到画布位置（单击卡片只聚焦，不会添加）。
 - 从输出端口拖到另一节点的输入端口建立连线；端口类型必须兼容：
   - 相同类型可直接连；
   - `number / boolean / json` 可连到 `string`；
@@ -291,14 +292,20 @@ UI：**资源 → 新建资源 → 数据集**。
 - 拖动节点保存坐标；选中单个节点后四角手柄可调整宽高；「整理 / 复位」重新自动布局。
 - 选中后按 Delete/Backspace 或工具条「删除选中」删除；Esc 清除选择。
 - 方向「上下 / 左右」切换会重新自动布局。
-- 画布支持平移、滚轮缩放、框选（Shift + 右键拖动）。
+- 画布支持平移、滚轮缩放、框选（Shift + 左键拖动）、右键节点菜单（编辑子图 / 合并为子图 / 展平子图）。
+- **编辑子图**：选中一个子图节点后右键选「编辑子图」，会在新的编辑标签页打开它引用的实验；检查器里的「在新标签页打开子图」也可以。
+- **合并为子图**：框选一个或多个节点后，右键任一选中节点（或在选区上右键空白处），选择「合并为子图」。会创建一张新实验和一个引用它的子图模块，并把选中的节点替换成一个子图节点；当前实验的修改要保存后才生效。
+- **展平子图**：只选中一个子图节点时，右键选择「展平子图」。会把该子图内部的节点/连线复制到当前实验（只展平一层，不递归展平），外围连线按入口/出口节点重新连接；同样要保存当前实验。
+- **暴露子图端口**：在子图编辑器（被 graph 模块引用的实验）里，右键模块/子图节点的输入端口选择「暴露为子图输入」，右键输出端口选择「暴露为子图输出」；已暴露端口会高亮，再次右键可取消。保存子图后，引用它的 graph 模块会同步这些端口（名称/类型/必填），父图即可连线；重名会自动加后缀。子图定义里的 `exposedInputs` / `exposedOutputs` 保存映射（`name → nodeId + port + type + required`），`interfaceExplicit: true` 表示接口由这些映射管理。
+- 子图节点和普通模块节点使用相同的卡片渲染（不是虚线框）。
 - 节点卡片优先显示名称、`id=<UUID>`、合并后的参数；空间不足时省略或隐藏，放大节点会显示更多。
 
 ### 4.3 保存 vs 提交实验
 
 工具栏：
 
-- **保存**：`POST /graphs`，持久化实验定义；名称重复、环、必填输入、端口类型等问题会拒绝。
+- **保存**：`POST /graphs`，持久化实验定义；名称重复、环、必填输入、端口类型等问题会拒绝。保存子图（被 graph 模块引用的实验）时会跳过「必填输入必须内部连线」的检查，因为边界输入由父图提供；也可以显式传 `asSubgraph: true` 创建带边界输入的新子图。
+- **另存为新实验**：已有实验的保存按钮旁有下拉菜单，可选择保存或另存为。另存为会用唯一名称（原名 · 副本）创建一个新实验，原实验保持不变，当前编辑器切到新实验继续编辑。未保存的新实验直接保存即可（本身就是新建）。
 - **提交实验**：打开提交框，按**当前编辑内容**运行一次：
   - 不保存也会生效；
   - 不写回实验定义；
@@ -422,10 +429,12 @@ POST /aether-api/graphs/validate
 | `AETHER_INPUTS` | 端口名 → `{ type, path, text }` |
 | `AETHER_PARAMS` | 节点参数 JSON |
 | `AETHER_PARAM_<KEY>` | 每个参数一个变量（大写，非字母数字转 `_`） |
-| `AETHER_MODULE_ASSET` / `_KIND` / `_NAME` / `_FILE` | 模块资源信息 |
+| `AETHER_MODULE_ASSET` / `_KIND` / `_NAME` / `_FILE` | 复制到本节点执行文件夹的模块文件目录 / 文件（不是共享资源源路径） |
 | `AETHER_DATASET_URI` / `AETHER_DATASET_FORMAT` | 数据集节点专用 |
 
-命令由宿主用 shell 执行（Windows `cmd.exe /d /s /c`，macOS/Linux 系统 shell），**另起子进程**；stdout/stderr 写入执行文件夹的 `stdout.log` / `stderr.log`；节点退出码来自子进程。
+命令由宿主用 shell 执行（Windows `cmd.exe /d /s /c`，macOS/Linux 系统 shell），**另起子进程**；stdout/stderr 写入执行文件夹的 `stdout.log` / `stderr.log`；节点退出码来自子进程。每个节点有独立的 `runs/<run>/nodes/<node>/`：模块文件复制到节点目录，`cwd`、输入、输出、日志都按节点隔离；同一模块的多个并发节点和不同实例不共享执行文件夹。`AETHER_MODULE_ASSET` / `AETHER_MODULE_FILE` 指向复制后的本节点文件。
+  
+注意：`local` 执行器不是 OS 安全沙箱；代码写绝对路径、访问网络 / 固定端口 / 系统临时目录 / 全局服务，或使用 `AETHER_RUN_DIR` 等共享位置时，仍可能跨任务互相影响。需要绝对隔离时应使用容器 / VM / 独立用户执行器。
 
 ---
 
@@ -437,8 +446,8 @@ POST /aether-api/graphs/validate
 | --- | --- | --- |
 | GET | `/state` | 模块、实验摘要、环境/执行器、实例摘要、工作区 |
 | GET | `/graphs?id=` | 实验详情与计划；不带 id 返回摘要 |
-| POST | `/graphs` | 新建/更新实验 `{ graph }` |
-| POST | `/graphs/validate` | 预检 `{ graph }` |
+| POST | `/graphs` | 新建/更新实验 `{ graph, asSubgraph? }`；`graph.exposedInputs` / `exposedOutputs` 会同步引用它的 graph 模块端口 |
+| POST | `/graphs/validate` | 预检 `{ graph, asSubgraph? }` |
 | DELETE | `/graphs?id=` | 删除实验（被子图模块引用时拒绝） |
 | POST | `/modules` | 新建资源 `{ create: true, requireAsset?, module }`；不可更新 |
 | POST | `/modules/assets` | 上传 `{ kind, name, files: [{ path, data(base64) }] }` |
@@ -566,11 +575,19 @@ POST /aether-api/graphs
     ],
     "edges": [
       { "id": "e1", "from": "data", "to": "step", "fromPort": "rows", "toPort": "data" }
+    ],
+    "interfaceExplicit": true,
+    "exposedInputs": [
+      { "name": "rows_in", "nodeId": "step", "port": "data", "type": "file", "required": true }
+    ],
+    "exposedOutputs": [
+      { "name": "rows_out", "nodeId": "step", "port": "result", "type": "file" }
     ]
   }
 }
 ```
 
+- `exposedInputs` / `exposedOutputs` 只对子图有意义；保存时会把端口同步到引用这张图的 graph 模块。
 - 不带 `id` 新建；带 UUID `id` 更新。
 - 名称不能与其它实验重复。
 - 返回 `{ ok: true, graph: {...} }`。

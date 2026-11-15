@@ -150,6 +150,8 @@ window.__ModuleLoader__.load({
       'graphs.empty': '还没有实验。新建一个，添加模块并用端口连线。',
       'graphs.new': '新建实验',
       'graphs.open': '打开实验',
+      'graphs.copyId': '复制实验 id',
+      'graphs.deleteExperiment': '删除实验',
       'graphs.name': '实验名称',
       'graphs.desc': '说明',
       'graphs.addNode': '添加模块',
@@ -168,6 +170,8 @@ window.__ModuleLoader__.load({
       'graphs.deleteNode': '删除模块',
       'graphs.edges': '连线',
       'graphs.save': '保存实验',
+      'graphs.saveAs': '另存为新实验',
+      'graphs.saveMenu': '保存选项',
       'graphs.saving': '正在保存…',
       'graphs.cycle': '存在环，请调整连线',
       'graphs.cycleBlocked': '这条连线会形成环，已取消',
@@ -190,7 +194,10 @@ window.__ModuleLoader__.load({
       'canvas.zoomIn': '放大',
       'canvas.zoomOut': '缩小',
       'canvas.zoomReset': '恢复 100%',
-      'canvas.hint': '拖拽空白处平移 · 滚轮缩放 · Shift+右键框选模块与连线 · 从端口拖出连线 · 从右侧拖入模块',
+      'canvas.hint': '拖拽空白处平移 · 滚轮缩放 · Shift+左键框选模块与连线 · 从端口拖出连线 · 从右侧拖入模块',
+      'canvas.subgraphPortHint': '右键端口可暴露为子图输入/输出',
+      'canvas.mergeSubgraph': '合并为子图',
+      'canvas.flattenSubgraph': '展平子图',
       'canvas.input': '输入',
       'canvas.output': '输出',
       'canvas.inputs': '输入',
@@ -208,7 +215,7 @@ window.__ModuleLoader__.load({
       'canvas.filter.graph': '子图',
       'canvas.filter.dataset': '数据集',
       'canvas.emptyPalette': '没有匹配的项',
-      'canvas.paletteHint': '拖拽到画布或单击添加',
+      'canvas.paletteHint': '拖拽到画布，或双击 / 按 Enter 添加',
       'canvas.nodeParamsHint': '继承模块默认参数，可在这里覆盖。',
       'canvas.dropHint': '放到画布上',
       'canvas.resizeSidebar': '拖动调整画布宽度',
@@ -353,6 +360,11 @@ window.__ModuleLoader__.load({
       'common.paramValue': '值',
       'common.noParams': '没有参数',
       'toast.saved': '已保存',
+      'toast.savedAs': '已另存为新实验「{name}」',
+      'toast.mergedSubgraph': '已合并为子图，保存实验后生效',
+      'toast.flattenedSubgraph': '已展平子图，保存实验后生效',
+      'toast.exposedPort': '已暴露为子图端口，保存子图后生效',
+      'toast.unexposedPort': '已取消暴露，保存子图后生效',
       'toast.deleted': '已删除',
       'toast.submitted': '实验已提交',
       'toast.cancelled': '已请求取消',
@@ -381,6 +393,16 @@ window.__ModuleLoader__.load({
       'graphEditor.copyHint': '这是复制的实验草稿；保存后会创建一个新实验，不会修改原实验。',
       'graphEditor.unsavedSubmitHint': '有未保存的修改：提交只按当前编辑运行一次，不会写回实验。',
       'graphs.copySuffix': '副本',
+      'graphs.editSubgraph': '编辑子图',
+      'graphs.cyclicReference': '不能添加「{name}」：会形成子图循环引用（{path}）。',
+      'graphs.exposeInput': '暴露为子图输入',
+      'graphs.exposeOutput': '暴露为子图输出',
+      'graphs.unexposePort': '取消暴露',
+      'graphs.mergedSubgraphSuffix': '子图',
+      'graphs.mergedSubgraphDesc': '由选中节点合并生成的子图。',
+      'graphs.mergedModuleDesc': '由选中节点合并生成的子图模块。',
+      'graphs.flattenEmpty': '子图里没有节点，无法展平。',
+      'graphs.mergedPortConflict': '选中节点的外部输入/输出端口重名（{port}），无法合并为子图。',
       'moduleEditor.new': '新建模块',
       'moduleEditor.edit': '资源详情',
     };
@@ -517,6 +539,8 @@ window.__ModuleLoader__.load({
       'graphs.empty': 'No experiments yet. Create one, add modules and connect their ports.',
       'graphs.new': 'New experiment',
       'graphs.open': 'Open experiment',
+      'graphs.copyId': 'Copy experiment id',
+      'graphs.deleteExperiment': 'Delete experiment',
       'graphs.name': 'Experiment name',
       'graphs.desc': 'Description',
       'graphs.addNode': 'Add module',
@@ -535,6 +559,8 @@ window.__ModuleLoader__.load({
       'graphs.deleteNode': 'Delete module',
       'graphs.edges': 'Edges',
       'graphs.save': 'Save experiment',
+      'graphs.saveAs': 'Save as new experiment',
+      'graphs.saveMenu': 'Save options',
       'graphs.saving': 'Saving…',
       'graphs.cycle': 'The experiment contains a cycle',
       'graphs.cycleBlocked': 'That connection would create a cycle and was cancelled',
@@ -557,7 +583,10 @@ window.__ModuleLoader__.load({
       'canvas.zoomIn': 'Zoom in',
       'canvas.zoomOut': 'Zoom out',
       'canvas.zoomReset': 'Reset to 100%',
-      'canvas.hint': 'Drag the background to pan · wheel to zoom · Shift+right-drag to select modules and edges · drag from a port to connect · drag modules in from the right',
+      'canvas.hint': 'Drag the background to pan · wheel to zoom · Shift+left-drag to select modules and edges · drag from a port to connect · drag modules in from the right',
+      'canvas.subgraphPortHint': 'Right-click a port to expose it as a subgraph input/output',
+      'canvas.mergeSubgraph': 'Merge into subgraph',
+      'canvas.flattenSubgraph': 'Flatten subgraph',
       'canvas.input': 'Input',
       'canvas.output': 'Output',
       'canvas.inputs': 'Inputs',
@@ -575,7 +604,7 @@ window.__ModuleLoader__.load({
       'canvas.filter.graph': 'Subgraphs',
       'canvas.filter.dataset': 'Datasets',
       'canvas.emptyPalette': 'Nothing matches',
-      'canvas.paletteHint': 'Drag onto the canvas or click to add',
+      'canvas.paletteHint': 'Drag onto the canvas, or double-click / press Enter to add',
       'canvas.nodeParamsHint': 'Inherited from the module defaults; override them here.',
       'canvas.dropHint': 'Drop on the canvas',
       'canvas.resizeSidebar': 'Drag to resize the canvas',
@@ -720,6 +749,11 @@ window.__ModuleLoader__.load({
       'common.paramValue': 'Value',
       'common.noParams': 'No parameters',
       'toast.saved': 'Saved',
+      'toast.savedAs': 'Saved as a new experiment: {name}',
+      'toast.mergedSubgraph': 'Merged into a subgraph; save the experiment to apply',
+      'toast.flattenedSubgraph': 'Subgraph flattened; save the experiment to apply',
+      'toast.exposedPort': 'Port exposed; save the subgraph to apply',
+      'toast.unexposedPort': 'Exposure removed; save the subgraph to apply',
       'toast.deleted': 'Deleted',
       'toast.submitted': 'Experiment submitted',
       'toast.cancelled': 'Cancellation requested',
@@ -748,6 +782,16 @@ window.__ModuleLoader__.load({
       'graphEditor.copyHint': 'This is a copied experiment draft; saving creates a new experiment and leaves the original untouched.',
       'graphEditor.unsavedSubmitHint': 'Unsaved changes: submitting runs this edit once without saving it to the experiment.',
       'graphs.copySuffix': 'copy',
+      'graphs.editSubgraph': 'Edit subgraph',
+      'graphs.cyclicReference': 'Cannot add "{name}": it would create a subgraph reference cycle ({path}).',
+      'graphs.exposeInput': 'Expose as subgraph input',
+      'graphs.exposeOutput': 'Expose as subgraph output',
+      'graphs.unexposePort': 'Remove exposure',
+      'graphs.mergedSubgraphSuffix': 'subgraph',
+      'graphs.mergedSubgraphDesc': 'Subgraph created by merging the selected nodes.',
+      'graphs.mergedModuleDesc': 'Subgraph module created by merging the selected nodes.',
+      'graphs.flattenEmpty': 'The subgraph has no nodes to flatten.',
+      'graphs.mergedPortConflict': 'The selected nodes expose the same boundary port as both input and output ({port}); cannot merge into one subgraph.',
       'moduleEditor.new': 'New module',
       'moduleEditor.edit': 'Resource details',
     };
@@ -915,6 +959,13 @@ window.__ModuleLoader__.load({
 .ath-page-sub { margin: 3px 0 0; font-size: 12px; color: var(--dsw-alias-label-secondary); max-width: 720px; }
 .ath-page-head .ath-actions { margin-left: auto; }
 .ath-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ath-save-group { display: inline-flex; align-items: stretch; }
+.ath-save-group .ath-btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ath-save-group .ath-save-more {
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  padding-left: 8px; padding-right: 8px; min-width: 28px; justify-content: center;
+  border-left: 1px solid color-mix(in srgb, #fff 28%, transparent);
+}
 .ath-btn {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--dsw-alias-border-l1);
@@ -1123,7 +1174,6 @@ window.__ModuleLoader__.load({
   background: color-mix(in srgb, var(--ath-dataset) 38%, var(--dsw-alias-bg-layer-1));
 }
 .ath-canvas-node[data-selected="true"] { border-color: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, .18); }
-.ath-canvas-node[data-kind="graph"] { border-style: dashed; }
 .ath-canvas-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-canvas-node-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; white-space: nowrap; }
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
@@ -1210,6 +1260,11 @@ window.__ModuleLoader__.load({
 .ath-port-in { left: -7px; }
 .ath-port-out { right: -7px; border-color: #64748b; }
 .ath-port-dot:hover { transform: scale(1.3); border-color: #64748b; }
+.ath-port-dot[data-exposed="true"] {
+  border-color: var(--ath-accent);
+  background: color-mix(in srgb, var(--ath-accent) 22%, var(--dsw-alias-bg-base));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ath-accent) 16%, transparent);
+}
 .ath-port-dot.ath-port-required {
   border-color: #64748b; border-width: 3px;
   background: color-mix(in srgb, #64748b 18%, var(--dsw-alias-bg-base));
@@ -1728,6 +1783,30 @@ window.__ModuleLoader__.load({
       });
     }
 
+    /** 在已有对象里找一个不重复的名称；重名时追加序号。 */
+    function uniqueName(base, items) {
+      const taken = new Set((items || []).map((item) => String(item.name || '').toLowerCase()));
+      const stem = String(base || '').trim() || 'item';
+      if (!taken.has(stem.toLowerCase())) return stem;
+      for (let index = 2; index < 1000; index += 1) {
+        const candidate = `${stem} ${index}`;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return `${stem} ${Date.now().toString(36)}`;
+    }
+
+    function uniquePortName(base, names) {
+      const taken = new Set((names || []).map((name) => String(name || '').toLowerCase()));
+      const stem = String(base || '').trim().slice(0, 40) || 'port';
+      if (!taken.has(stem.toLowerCase())) return stem;
+      for (let index = 2; index < 1000; index += 1) {
+        const suffix = `_${index}`;
+        const candidate = `${stem.slice(0, 40 - suffix.length)}${suffix}`;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return `${stem.slice(0, 30)}_${Date.now().toString(36)}`;
+    }
+
     function uniqueExperimentName(base, graphs, suffix) {
       const taken = new Set((graphs || []).map((graph) => String(graph.name || '').toLowerCase()));
       const stem = `${String(base || 'experiment').trim()} · ${suffix}`.slice(0, 110);
@@ -1737,6 +1816,29 @@ window.__ModuleLoader__.load({
         if (!taken.has(candidate.toLowerCase())) return candidate;
       }
       return `${stem} ${Date.now().toString(36)}`;
+    }
+
+    function graphReferencePath(graphs, startId, targetId) {
+      if (!startId || !targetId) return null;
+      const refs = new Map(
+        (graphs || []).map((graph) => [
+          graph.id,
+          Array.isArray(graph.references) ? graph.references : [],
+        ]),
+      );
+      const queue = [[startId]];
+      const seen = new Set();
+      while (queue.length) {
+        const path = queue.shift();
+        const id = path[path.length - 1];
+        if (id === targetId) return path;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        for (const child of refs.get(id) || []) {
+          if (!seen.has(child)) queue.push([...path, child]);
+        }
+      }
+      return null;
     }
 
     /** 本地分层；有环时返回 null，画布退回单列布局。 */
@@ -3421,7 +3523,20 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     // ---------------------------------------------------------- 图列表
 
 // ---- client/src/55-graphs.js ----
-    function GraphsView({ t, data, onNew, onEdit }) {
+    function GraphsView({ t, data, onNew, onEdit, onCopy, onDelete }) {
+      const [menu, setMenu] = useState(null);
+      const showMenu = (graph, x, y) => {
+        setMenu({
+          graph,
+          x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 240)),
+          y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 140)),
+        });
+      };
+      const openMenu = (event, graph) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showMenu(graph, event.clientX, event.clientY);
+      };
       return h(
         'div',
         { className: 'ath-page' },
@@ -3454,6 +3569,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                     className: 'ath-module-card ath-graph-card',
                     title: t('graphs.open'),
                     onClick: () => onEdit(graph.id),
+                    onContextMenu: (event) => openMenu(event, graph),
+                    onKeyDown: (event) => {
+                      if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      showMenu(graph, rect.left + 28, rect.top + 30);
+                    },
                   },
                   h(
                     'div',
@@ -3464,6 +3586,33 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 ),
               ),
             ),
+        menu
+          ? h(ContextMenu, {
+              menu: {
+                x: menu.x,
+                y: menu.y,
+                items: [
+                  {
+                    key: 'edit',
+                    label: t('graphEditor.edit'),
+                    onSelect: () => onEdit(menu.graph.id),
+                  },
+                  {
+                    key: 'copy',
+                    label: t('graphs.copyId'),
+                    onSelect: () => onCopy(menu.graph),
+                  },
+                  {
+                    key: 'delete',
+                    label: t('graphs.deleteExperiment'),
+                    danger: true,
+                    onSelect: () => onDelete(menu.graph),
+                  },
+                ],
+              },
+              onClose: () => setMenu(null),
+            })
+          : null,
       );
     }
 
@@ -4487,16 +4636,23 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
     function ExperimentEditor({
       t,
       modules,
+      graphs,
+      revision,
       environments,
       draft,
       onDraftChange,
       onPersistState,
       onSave,
+      onSaveAs,
       onSubmit,
+      onMergeSubgraph,
+      onFlattenSubgraph,
       dirty,
       onBack,
       onOpenSubgraph,
       onDelete,
+      onToast,
+      onError,
       saving,
       errors,
       subgraph,
@@ -4533,6 +4689,8 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 
       const [view, setView] = useState(() => draft.view || { x: 30, y: 24, zoom: 1 });
       const [selection, setSelection] = useState(() => draft.selection || { nodes: [], edges: [] });
+      const [saveMenu, setSaveMenu] = useState(null);
+      const [selectionMenu, setSelectionMenu] = useState(null);
       const [interaction, setInteraction] = useState(null);
       const [marquee, setMarquee] = useState(null);
       const [connecting, setConnecting] = useState(null);
@@ -4618,7 +4776,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               .toLowerCase();
             return haystack.includes(query);
           });
-      }, [modules, paletteQuery, paletteFilter, t]);
+      }, [modules, paletteQuery, paletteFilter, t, revision]);
 
       const portPoint = (nodeId, kind, portName) => {
         const node = nodeById.get(nodeId);
@@ -5091,6 +5249,21 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       const addModule = (module, anchor) => {
         if (!module) return;
         const current = draftRef.current;
+        if (module.kind === 'graph' && module.graphId && current.graph.id) {
+          const path = graphReferencePath(graphs, module.graphId, current.graph.id);
+          if (path) {
+            const labels = path.map(
+              (graphId) => (graphs || []).find((graph) => graph.id === graphId)?.name || graphId,
+            );
+            const message = tr(t, 'graphs.cyclicReference', {
+              name: module.subgraphName || module.name,
+              path: labels.join(' → '),
+            });
+            if (onError) onError(message);
+            if (onToast) onToast(message);
+            return;
+          }
+        }
         const id = uniqueNodeId(current.graph, module.id);
         const size = nodeSizeFor(module, directionRef.current);
         const element = canvasRef.current;
@@ -5152,8 +5325,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 
       const onViewportPointerDown = (event) => {
         const rect = event.currentTarget.getBoundingClientRect();
-        if (event.button === 2) {
-          if (!event.shiftKey) return;
+        if (event.button === 0 && event.shiftKey) {
           event.preventDefault();
           setSelection({ nodes: [], edges: [] });
           setMarquee({ x1: event.clientX - rect.left, y1: event.clientY - rect.top, x2: event.clientX - rect.left, y2: event.clientY - rect.top });
@@ -5194,6 +5366,150 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         if (!dragIds.length) return;
         const origins = dragIds.map((id) => ({ id, ...(positionsRef.current.get(id) || { x: 0, y: 0 }) }));
         setInteraction({ type: 'node', startX: event.clientX, startY: event.clientY, origins });
+      };
+
+      const runMergeSelection = async (ids) => {
+        if (!onMergeSubgraph) return;
+        const result = await onMergeSubgraph(ids);
+        if (result && Array.isArray(result.selectedNodeIds)) {
+          setSelection({ nodes: result.selectedNodeIds, edges: [] });
+        }
+      };
+
+      const runFlattenSelection = async (nodeId) => {
+        if (!onFlattenSubgraph) return;
+        const result = await onFlattenSubgraph(nodeId);
+        if (result && Array.isArray(result.selectedNodeIds)) {
+          setSelection({ nodes: result.selectedNodeIds, edges: [] });
+        }
+      };
+
+      const showSelectionMenu = (x, y, ids, node) => {
+        const module = node ? moduleById.get(node.moduleId) : null;
+        const subgraphId =
+          ids.length === 1 && node && module && module.kind === 'graph' && module.graphId
+            ? module.graphId
+            : '';
+        const items = [];
+        if (subgraphId) {
+          items.push({
+            key: 'editSubgraph',
+            label: t('graphs.editSubgraph'),
+            onSelect: () => onOpenSubgraph(subgraphId),
+          });
+        }
+        items.push({
+          key: 'merge',
+          label: t('canvas.mergeSubgraph'),
+          disabled: !ids.length,
+          onSelect: () => void runMergeSelection(ids),
+        });
+        if (subgraphId) {
+          items.push({
+            key: 'flatten',
+            label: t('canvas.flattenSubgraph'),
+            onSelect: () => void runFlattenSelection(node.id),
+          });
+        }
+        setSelectionMenu({
+          x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
+          items,
+        });
+      };
+
+      const openSelectionMenu = (event, node) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (saving) return;
+        let ids = selectionRef.current.nodes;
+        if (!ids.includes(node.id)) {
+          ids = [node.id];
+          setSelection({ nodes: ids, edges: [] });
+        }
+        showSelectionMenu(event.clientX, event.clientY, ids, node);
+      };
+
+      const openCanvasMenu = (event) => {
+        event.preventDefault();
+        if (saving) return;
+        const ids = selectionRef.current.nodes;
+        if (!ids.length) return;
+        const node = ids.length === 1 ? graph.nodes.find((item) => item.id === ids[0]) : null;
+        showSelectionMenu(event.clientX, event.clientY, ids, node);
+      };
+
+      const isExposed = (side, nodeId, port) => {
+        const list = side === 'input' ? graph.exposedInputs : graph.exposedOutputs;
+        return (list || []).some((item) => item.nodeId === nodeId && item.port === port);
+      };
+
+      const updateExposure = (side, node, port, module, remove) => {
+        const current = draftRef.current;
+        const key = side === 'input' ? 'exposedInputs' : 'exposedOutputs';
+        const list = Array.isArray(current.graph[key]) ? current.graph[key] : [];
+        let next;
+        if (remove) {
+          next = list.filter((item) => !(item.nodeId === node.id && item.port === port));
+        } else {
+          const names = [...(current.graph.exposedInputs || []), ...(current.graph.exposedOutputs || [])].map(
+            (item) => item.name,
+          );
+          const name = uniquePortName(port, names);
+          const type =
+            side === 'input'
+              ? (module && module.inputTypes && module.inputTypes[port]) || 'string'
+              : (module && module.outputTypes && module.outputTypes[port]) || 'string';
+          next = [
+            ...list.filter((item) => !(item.nodeId === node.id && item.port === port)),
+            {
+              name,
+              nodeId: node.id,
+              port,
+              type,
+              required:
+                side === 'input' &&
+                Boolean(module && Array.isArray(module.requiredInputs) && module.requiredInputs.includes(port)),
+            },
+          ];
+        }
+        onDraftChange({
+          ...current,
+          graph: { ...current.graph, [key]: next, interfaceExplicit: true },
+        });
+        if (onToast) {
+          onToast(remove ? t('toast.unexposedPort') : t('toast.exposedPort'));
+        }
+        setSelectionMenu(null);
+      };
+
+      const openPortMenu = (event, node, side, port) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (saving || !subgraph) return;
+        const module = moduleById.get(node.moduleId);
+        const exposed = isExposed(side, node.id, port);
+        const items = exposed
+          ? [
+              {
+                key: 'remove',
+                label: t('graphs.unexposePort'),
+                danger: true,
+                onSelect: () => updateExposure(side, node, port, module, true),
+              },
+            ]
+          : [
+              {
+                key: 'add',
+                label: side === 'input' ? t('graphs.exposeInput') : t('graphs.exposeOutput'),
+                onSelect: () => updateExposure(side, node, port, module, false),
+              },
+            ];
+        setSelectionMenu({
+          x: Math.min(Math.max(12, event.clientX), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, event.clientY), Math.max(12, window.innerHeight - 100)),
+          items,
+        });
       };
 
       const onResizePointerDown = (event, node, corner) => {
@@ -5326,17 +5642,62 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
               },
               t('experiments.submit'),
             ),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'ath-btn ath-btn-primary',
-                onClick: onSave,
-                disabled: saving || modules.length === 0 || broken,
-                title: broken ? t('graphs.cycle') : undefined,
-              },
-              saving ? t('graphs.saving') : t('graphs.save'),
-            ),
+            graph.id
+              ? h(
+                  'div',
+                  { className: 'ath-save-group' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-primary',
+                      onClick: onSave,
+                      disabled: saving || modules.length === 0 || broken,
+                      title: broken ? t('graphs.cycle') : undefined,
+                    },
+                    saving ? t('graphs.saving') : t('graphs.save'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-primary ath-save-more',
+                      'aria-label': t('graphs.saveMenu'),
+                      'aria-haspopup': 'menu',
+                      'aria-expanded': saveMenu ? 'true' : 'false',
+                      title: t('graphs.saveMenu'),
+                      disabled: saving || modules.length === 0 || broken,
+                      onClick: (event) => {
+                        if (saveMenu) {
+                          setSaveMenu(null);
+                          return;
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const width = 210;
+                        setSaveMenu({
+                          x: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+                          y: rect.bottom + 6,
+                          items: [
+                            { key: 'save', label: t('graphs.save'), onSelect: onSave },
+                            { key: 'saveAs', label: t('graphs.saveAs'), onSelect: onSaveAs },
+                          ],
+                        });
+                      },
+                    },
+                    '▾',
+                  ),
+                )
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-primary',
+                    onClick: onSave,
+                    disabled: saving || modules.length === 0 || broken,
+                    title: broken ? t('graphs.cycle') : undefined,
+                  },
+                  saving ? t('graphs.saving') : t('graphs.save'),
+                ),
           ),
         ),
         dirty
@@ -5400,7 +5761,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 className: 'ath-canvas-viewport',
                 ref: canvasRef,
                 onPointerDown: onViewportPointerDown,
-                onContextMenu: (event) => event.preventDefault(),
+                onContextMenu: openCanvasMenu,
                 onDragEnter: (event) => {
                   event.preventDefault();
                   setDragOver(true);
@@ -5505,6 +5866,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                       title: infoTitle,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => onNodePointerDown(event, node),
+                      onContextMenu: (event) => openSelectionMenu(event, node),
                     },
                     h(
                       'div',
@@ -5614,12 +5976,14 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
+                        'data-exposed': isExposed('input', node.id, port) ? 'true' : 'false',
                         title: portTypeHint(
                           t,
                           port,
                           module.inputTypes && module.inputTypes[port],
                         ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
+                        onContextMenu: (event) => openPortMenu(event, node, 'input', port),
                       }),
                     ),
                     ports.outputs.map((port, index) =>
@@ -5633,12 +5997,14 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'output',
+                        'data-exposed': isExposed('output', node.id, port) ? 'true' : 'false',
                         title: portTypeHint(
                           t,
                           port,
                           module.outputTypes && module.outputTypes[port],
                         ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
+                        onContextMenu: (event) => openPortMenu(event, node, 'output', port),
                       }),
                     ),
                     showHandles
@@ -5726,7 +6092,13 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                 h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1.2), title: t('canvas.zoomIn') }, '+'),
               ),
               cycleNotice ? h('div', { className: 'ath-canvas-warning' }, cycleNotice) : null,
-              h('div', { className: 'ath-canvas-hint' }, t('canvas.hint')),
+              h(
+                'div',
+                { className: 'ath-canvas-hint' },
+                subgraph
+                  ? `${t('canvas.hint')} · ${t('canvas.subgraphPortHint')}`
+                  : t('canvas.hint'),
+              ),
             ),
           ),
           h('div', {
@@ -5768,6 +6140,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                   ),
                 ),
               ),
+              h('div', { className: 'ath-hint', style: { marginTop: 6 } }, t('canvas.paletteHint')),
               h(
                 'div',
                 { className: 'ath-palette-list' },
@@ -5781,9 +6154,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
                           type: 'button',
                           className: 'ath-palette-item',
                           draggable: true,
-                          onClick: () => {
+                          onDoubleClick: () => {
                             if (draggingRef.current) return;
                             addModule(module);
+                          },
+                          onKeyDown: (event) => {
+                            if (event.repeat) return;
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            if (!draggingRef.current) addModule(module);
                           },
                           onDragStart: (event) => {
                             draggingRef.current = true;
@@ -6072,13 +6451,17 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             broken ? h('div', { className: 'ath-error' }, t('graphs.cycle')) : null,
           ),
         ),
+        saveMenu ? h(ContextMenu, { menu: saveMenu, onClose: () => setSaveMenu(null) }) : null,
+        selectionMenu
+          ? h(ContextMenu, { menu: selectionMenu, onClose: () => setSelectionMenu(null) })
+          : null,
       );
     }
 
 // ---- client/src/80-modules.js ----
     // ---------------------------------------------------------- 模块
 
-    function ModulesView({ t, data, onNew, onEdit, onCopy, onDelete }) {
+    function ModulesView({ t, data, revision, onNew, onEdit, onCopy, onDelete }) {
       const [query, setQuery] = useState('');
       const [filter, setFilter] = useState('all');
       const [menu, setMenu] = useState(null);
@@ -6096,26 +6479,30 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
       };
       const modules = data.modules || [];
       const keyword = query.trim().toLowerCase();
-      const filtered = modules
-        .filter((module) => filter === 'all' || module.kind === filter)
-        .filter((module) => {
-          if (!keyword) return true;
-          const haystack = [
-            module.name,
-            module.id,
-            module.description,
-            module.kind,
-            t(`modules.kind.${module.kind}`),
-            module.datasetUri || '',
-            module.subgraphName || '',
-            module.graphId || '',
-            ...(module.inputs || []),
-            ...(module.outputs || []),
-          ]
-            .join(' ')
-            .toLowerCase();
-          return haystack.includes(keyword);
-        });
+      const filtered = useMemo(
+        () =>
+          modules
+            .filter((module) => filter === 'all' || module.kind === filter)
+            .filter((module) => {
+              if (!keyword) return true;
+              const haystack = [
+                module.name,
+                module.id,
+                module.description,
+                module.kind,
+                t(`modules.kind.${module.kind}`),
+                module.datasetUri || '',
+                module.subgraphName || '',
+                module.graphId || '',
+                ...(module.inputs || []),
+                ...(module.outputs || []),
+              ]
+                .join(' ')
+                .toLowerCase();
+              return haystack.includes(keyword);
+            }),
+        [modules, filter, keyword, t, revision],
+      );
       return h(
         'div',
         { className: 'ath-page' },
@@ -6702,6 +7089,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
 
     function AetherPanel({ t: hostT }) {
       const [data, setData] = useState(null);
+      const [dataRevision, setDataRevision] = useState(0);
       const [phase, setPhase] = useState('loading');
       const [loadError, setLoadError] = useState('');
       const [language, setLanguage] = useState(() => {
@@ -6834,6 +7222,7 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           try {
             const next = await request('/state');
             setData(next);
+            setDataRevision((value) => value + 1);
             setPhase('ready');
             setLoadError('');
             return next;
@@ -7204,19 +7593,41 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
         }
       };
 
-      const saveGraph = async () => {
+      const saveGraph = async (options = {}) => {
         if (!graphDraft) return;
+        const asNew = Boolean(options.asNew);
         const key = activeEditorKey;
         setGraphSaving(true);
         setGraphErrors([]);
         try {
-          const check = await request('/graphs/validate', { method: 'POST', body: { graph: graphDraft.graph } });
+          const source = graphDraft.graph;
+          const target = asNew
+            ? {
+                ...clone(source),
+                id: '',
+                name: uniqueExperimentName(
+                  String(source.name || '').trim() || t('graphEditor.new'),
+                  (data && data.graphs) || [],
+                  t('graphs.copySuffix'),
+                ),
+              }
+            : source;
+          const asSubgraph = Boolean(
+            target.id && (data && data.graphs ? data.graphs : []).find((graph) => graph.id === target.id)?.isSubgraph,
+          );
+          const check = await request('/graphs/validate', {
+            method: 'POST',
+            body: { graph: target, asSubgraph },
+          });
           if (check.errors && check.errors.length) {
             setGraphErrors(check.errors);
             return;
           }
-          const payload = await request('/graphs', { method: 'POST', body: { graph: graphDraft.graph } });
-          const saved = payload.graph || graphDraft.graph;
+          const payload = await request('/graphs', {
+            method: 'POST',
+            body: { graph: target, asSubgraph },
+          });
+          const saved = payload.graph || target;
           setEditorTabs((tabs) =>
             tabs.map((entry) =>
               entry.key === key
@@ -7229,12 +7640,378 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             ),
           );
           setGraphErrors([]);
-          pushToast(t('toast.saved'));
+          pushToast(asNew ? tr(t, 'toast.savedAs', { name: saved.name }) : t('toast.saved'));
           await loadState(true);
         } catch (error) {
           const message = error && error.message ? error.message : String(error);
           setGraphErrors(message.split('；').filter(Boolean));
           fail(error);
+        } finally {
+          setGraphSaving(false);
+        }
+      };
+
+      const replaceGraphForKey = (key, nextGraph) => {
+        setEditorTabs((tabs) =>
+          tabs.map((entry) =>
+            entry.key === key ? { ...entry, draft: { ...entry.draft, graph: clone(nextGraph) } } : entry,
+          ),
+        );
+      };
+
+      const mergeIntoSubgraph = async (nodeIds) => {
+        if (!graphDraft || !Array.isArray(nodeIds) || !nodeIds.length) return null;
+        const key = activeEditorKey;
+        const source = graphDraft.graph;
+        const selected = new Set(nodeIds);
+        const selectedNodes = source.nodes.filter((node) => selected.has(node.id));
+        if (!selectedNodes.length) return null;
+        const moduleById = new Map(((data && data.modules) || []).map((module) => [module.id, module]));
+        const portOf = (module, port, side) => {
+          const ports = side === 'input' ? module && module.inputs : module && module.outputs;
+          if (port && Array.isArray(ports) && ports.includes(port)) return port;
+          return Array.isArray(ports) && ports.length ? ports[0] : '';
+        };
+
+        setGraphSaving(true);
+        setGraphErrors([]);
+        try {
+          const internalEdges = source.edges
+            .filter((edge) => selected.has(edge.from) && selected.has(edge.to))
+            .map((edge) => clone(edge));
+          const incoming = source.edges.filter((edge) => !selected.has(edge.from) && selected.has(edge.to));
+          const outgoing = source.edges.filter((edge) => selected.has(edge.from) && !selected.has(edge.to));
+          const incomingSpecs = incoming.map((edge) => {
+            const target = selectedNodes.find((node) => node.id === edge.to);
+            const module = target ? moduleById.get(target.moduleId) : null;
+            const port = portOf(module, edge.toPort, 'input');
+            return {
+              edge,
+              node: target,
+              port,
+              type: (module && module.inputTypes && module.inputTypes[port]) || 'string',
+              required: Boolean(module && Array.isArray(module.requiredInputs) && module.requiredInputs.includes(port)),
+            };
+          });
+          const outgoingSpecs = outgoing.map((edge) => {
+            const origin = selectedNodes.find((node) => node.id === edge.from);
+            const module = origin ? moduleById.get(origin.moduleId) : null;
+            const port = portOf(module, edge.fromPort, 'output');
+            return {
+              edge,
+              node: origin,
+              port,
+              type: (module && module.outputTypes && module.outputTypes[port]) || 'string',
+            };
+          });
+
+          const usedExposureNames = new Set();
+          const exposureName = (base) => {
+            const candidate = uniquePortName(base, [...usedExposureNames]);
+            usedExposureNames.add(candidate.toLowerCase());
+            return candidate;
+          };
+          const inputExposures = [];
+          const outputExposures = [];
+          const inputExposureByNodePort = new Map();
+          const outputExposureByNodePort = new Map();
+          for (const spec of incomingSpecs) {
+            if (!spec.node || !spec.port) continue;
+            const key = `${spec.node.id}|${spec.port}`;
+            let exposure = inputExposureByNodePort.get(key);
+            if (!exposure) {
+              exposure = {
+                name: exposureName(spec.port),
+                nodeId: spec.node.id,
+                port: spec.port,
+                type: spec.type,
+                required: spec.required,
+              };
+              inputExposureByNodePort.set(key, exposure);
+              inputExposures.push(exposure);
+            }
+            spec.exposure = exposure;
+          }
+          for (const spec of outgoingSpecs) {
+            if (!spec.node || !spec.port) continue;
+            const key = `${spec.node.id}|${spec.port}`;
+            let exposure = outputExposureByNodePort.get(key);
+            if (!exposure) {
+              exposure = {
+                name: exposureName(spec.port),
+                nodeId: spec.node.id,
+                port: spec.port,
+                type: spec.type,
+                required: false,
+              };
+              outputExposureByNodePort.set(key, exposure);
+              outputExposures.push(exposure);
+            }
+            spec.exposure = exposure;
+          }
+          const moduleInputs = inputExposures.map((exposure) => exposure.name);
+          const moduleInputTypes = Object.fromEntries(
+            inputExposures.map((exposure) => [exposure.name, exposure.type]),
+          );
+          const moduleRequiredInputs = inputExposures
+            .filter((exposure) => exposure.required)
+            .map((exposure) => exposure.name);
+          const moduleOutputs = outputExposures.map((exposure) => exposure.name);
+          const moduleOutputTypes = Object.fromEntries(
+            outputExposures.map((exposure) => [exposure.name, exposure.type]),
+          );
+
+          const xs = selectedNodes.map((node) => Number(node.x)).filter(Number.isFinite);
+          const ys = selectedNodes.map((node) => Number(node.y)).filter(Number.isFinite);
+          const minX = xs.length ? Math.min(...xs) : 40;
+          const minY = ys.length ? Math.min(...ys) : 40;
+          const graphName = uniqueName(
+            `${String(source.name || '').trim() || t('graphEditor.new')} · ${t('graphs.mergedSubgraphSuffix')}`,
+            (data && data.graphs) || [],
+          );
+          const createdGraph = (
+            await request('/graphs', {
+              method: 'POST',
+              body: {
+                asSubgraph: true,
+                graph: {
+                  name: graphName,
+                  description: t('graphs.mergedSubgraphDesc'),
+                  layout: source.layout === 'horizontal' ? 'horizontal' : 'vertical',
+                  nodes: selectedNodes.map((node, index) => ({
+                    ...clone(node),
+                    x: Number.isFinite(Number(node.x)) ? Number(node.x) - minX + 40 : 40 + index * 220,
+                    y: Number.isFinite(Number(node.y)) ? Number(node.y) - minY + 40 : 40,
+                  })),
+                  edges: internalEdges,
+                  exposedInputs: inputExposures,
+                  exposedOutputs: outputExposures,
+                  interfaceExplicit: true,
+                },
+              },
+            })
+          ).graph;
+
+          const moduleName = uniqueName(createdGraph.name, (data && data.modules) || []);
+          const createdModule = (
+            await request('/modules', {
+              method: 'POST',
+              body: {
+                create: true,
+                module: {
+                  name: moduleName,
+                  description: t('graphs.mergedModuleDesc'),
+                  kind: 'graph',
+                  graphId: createdGraph.id,
+                  inputs: moduleInputs,
+                  inputTypes: moduleInputTypes,
+                  requiredInputs: moduleRequiredInputs,
+                  outputs: moduleOutputs,
+                  outputTypes: moduleOutputTypes,
+                  params: {},
+                  paramTypes: {},
+                  environmentId: 'local',
+                },
+              },
+            })
+          ).module;
+
+          let newNodeId = 'merged';
+          let counter = 2;
+          while (source.nodes.some((node) => node.id === newNodeId)) {
+            newNodeId = `merged-${counter}`;
+            counter += 1;
+          }
+          const centerX = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 40;
+          const centerY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 40;
+          const newNode = {
+            id: newNodeId,
+            moduleId: createdModule.id,
+            label: '',
+            params: {},
+            x: Math.max(0, centerX - 100),
+            y: Math.max(0, centerY - 47),
+            width: 0,
+            height: 0,
+          };
+          const remainingEdges = source.edges
+            .filter((edge) => !selected.has(edge.from) && !selected.has(edge.to))
+            .map((edge) => clone(edge));
+          const rewired = [
+            ...incomingSpecs.map((spec) => ({
+              ...clone(spec.edge),
+              to: newNodeId,
+              toPort: spec.exposure ? spec.exposure.name : spec.port,
+            })),
+            ...outgoingSpecs.map((spec) => ({
+              ...clone(spec.edge),
+              from: newNodeId,
+              fromPort: spec.exposure ? spec.exposure.name : spec.port,
+            })),
+          ];
+          const nextGraph = {
+            ...clone(source),
+            nodes: [...source.nodes.filter((node) => !selected.has(node.id)), newNode],
+            edges: [...remainingEdges, ...rewired],
+          };
+          await loadState(true);
+          replaceGraphForKey(key, nextGraph);
+          setGraphErrors([]);
+          pushToast(t('toast.mergedSubgraph'));
+          return { selectedNodeIds: [newNodeId] };
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setGraphErrors(message.split('；').filter(Boolean));
+          fail(error);
+          return null;
+        } finally {
+          setGraphSaving(false);
+        }
+      };
+
+      const flattenSubgraphNode = async (nodeId) => {
+        if (!graphDraft) return null;
+        const key = activeEditorKey;
+        const source = graphDraft.graph;
+        const subNode = source.nodes.find((node) => node.id === nodeId);
+        const moduleById = new Map(((data && data.modules) || []).map((module) => [module.id, module]));
+        const module = subNode ? moduleById.get(subNode.moduleId) : null;
+        if (!subNode || !module || module.kind !== 'graph' || !module.graphId) return null;
+
+        setGraphSaving(true);
+        setGraphErrors([]);
+        try {
+          const child = (await request(`/graphs?id=${encodeURIComponent(module.graphId)}`)).graph;
+          if (!child || !Array.isArray(child.nodes) || !child.nodes.length) {
+            throw new Error(t('graphs.flattenEmpty'));
+          }
+          const stamp = Date.now().toString(36);
+          const usedNodeIds = new Set(source.nodes.map((node) => node.id));
+          const idMap = new Map();
+          let nodeSeq = 0;
+          for (const childNode of child.nodes) {
+            let nextId;
+            do {
+              nodeSeq += 1;
+              nextId = `flat-${stamp}-${nodeSeq}`;
+            } while (usedNodeIds.has(nextId));
+            usedNodeIds.add(nextId);
+            idMap.set(childNode.id, nextId);
+          }
+          const usedEdgeIds = new Set(source.edges.map((edge) => edge.id));
+          let edgeSeq = 0;
+          const nextEdgeId = () => {
+            let nextId;
+            do {
+              edgeSeq += 1;
+              nextId = `flat-${stamp}-e${edgeSeq}`;
+            } while (usedEdgeIds.has(nextId));
+            usedEdgeIds.add(nextId);
+            return nextId;
+          };
+
+          const childXs = child.nodes.map((node) => Number(node.x)).filter(Number.isFinite);
+          const childYs = child.nodes.map((node) => Number(node.y)).filter(Number.isFinite);
+          const childMinX = childXs.length ? Math.min(...childXs) : 0;
+          const childMinY = childYs.length ? Math.min(...childYs) : 0;
+          const baseX = Number.isFinite(Number(subNode.x)) ? Number(subNode.x) : 0;
+          const baseY = Number.isFinite(Number(subNode.y)) ? Number(subNode.y) : 0;
+          const newNodes = child.nodes.map((node, index) => ({
+            ...clone(node),
+            id: idMap.get(node.id),
+            x: baseX + (Number.isFinite(Number(node.x)) ? Number(node.x) - childMinX : 40 + index * 220),
+            y: baseY + (Number.isFinite(Number(node.y)) ? Number(node.y) - childMinY : 40),
+          }));
+          const internalEdges = child.edges.map((edge) => ({
+            ...clone(edge),
+            id: nextEdgeId(),
+            from: idMap.get(edge.from),
+            to: idMap.get(edge.to),
+          }));
+          const hasIncoming = new Set(child.edges.map((edge) => edge.to));
+          const hasOutgoing = new Set(child.edges.map((edge) => edge.from));
+          const entries = child.nodes.filter((node) => !hasIncoming.has(node.id));
+          const exits = child.nodes.filter((node) => !hasOutgoing.has(node.id));
+          const incoming = source.edges.filter((edge) => edge.to === subNode.id);
+          const outgoing = source.edges.filter((edge) => edge.from === subNode.id);
+          const portOf = (childNode, port, side) => {
+            const childModule = moduleById.get(childNode.moduleId);
+            const ports = side === 'input' ? childModule && childModule.inputs : childModule && childModule.outputs;
+            if (port && Array.isArray(ports) && ports.includes(port)) return port;
+            return Array.isArray(ports) && ports.length ? ports[0] : '';
+          };
+          const exposedInputs = new Map(
+            (child.interfaceExplicit ? child.exposedInputs || [] : []).map((exposure) => [exposure.name, exposure]),
+          );
+          const exposedOutputs = new Map(
+            (child.interfaceExplicit ? child.exposedOutputs || [] : []).map((exposure) => [exposure.name, exposure]),
+          );
+          const rewired = [];
+          for (const edge of incoming) {
+            const exposure = exposedInputs.get(edge.toPort);
+            if (exposure && idMap.has(exposure.nodeId)) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                to: idMap.get(exposure.nodeId),
+                toPort: exposure.port,
+              });
+              continue;
+            }
+            const matching = edge.toPort
+              ? entries.filter((entry) => portOf(entry, edge.toPort, 'input') === edge.toPort)
+              : [];
+            const targets = matching.length ? matching : entries.slice(0, 1);
+            for (const entry of targets) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                to: idMap.get(entry.id),
+                toPort: portOf(entry, edge.toPort, 'input'),
+              });
+            }
+          }
+          for (const edge of outgoing) {
+            const exposure = exposedOutputs.get(edge.fromPort);
+            if (exposure && idMap.has(exposure.nodeId)) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                from: idMap.get(exposure.nodeId),
+                fromPort: exposure.port,
+              });
+              continue;
+            }
+            const matching = edge.fromPort
+              ? exits.filter((exit) => portOf(exit, edge.fromPort, 'output') === edge.fromPort)
+              : [];
+            const targets = matching.length ? matching : exits.slice(0, 1);
+            for (const exit of targets) {
+              rewired.push({
+                ...clone(edge),
+                id: nextEdgeId(),
+                from: idMap.get(exit.id),
+                fromPort: portOf(exit, edge.fromPort, 'output'),
+              });
+            }
+          }
+          const remainingEdges = source.edges
+            .filter((edge) => edge.from !== subNode.id && edge.to !== subNode.id)
+            .map((edge) => clone(edge));
+          const nextGraph = {
+            ...clone(source),
+            nodes: [...source.nodes.filter((node) => node.id !== subNode.id), ...newNodes],
+            edges: [...remainingEdges, ...internalEdges, ...rewired],
+          };
+          replaceGraphForKey(key, nextGraph);
+          setGraphErrors([]);
+          pushToast(t('toast.flattenedSubgraph'));
+          return { selectedNodeIds: newNodes.map((node) => node.id) };
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          setGraphErrors(message.split('；').filter(Boolean));
+          fail(error);
+          return null;
         } finally {
           setGraphSaving(false);
         }
@@ -7436,12 +8213,15 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
             data,
             onNew: () => void startGraph(''),
             onEdit: (id) => void startGraph(id),
+            onCopy: copyModuleId,
+            onDelete: deleteGraph,
           });
         }
         if (tab === 'modules') {
           return h(ModulesView, {
             t,
             data,
+            revision: dataRevision,
             onNew: () => {
               setNewResourceError('');
               setNewModuleOpen(true);
@@ -7490,18 +8270,25 @@ function WorkspaceDialog({ t, current, onClose, onSubmit, onExport, onImport, bu
           key: activeEditorKey,
           t,
           modules: data ? data.modules : [],
+          graphs: data ? data.graphs : [],
+          revision: dataRevision,
           environments: data ? data.environments : [],
           draft: graphDraft,
           onDraftChange: updateActiveDraft,
           onPersistState: (patch) => persistEditorState(activeEditorKey, patch),
           onSubmit: () => openSubmitDraft(),
+          onMergeSubgraph: (nodeIds) => mergeIntoSubgraph(nodeIds),
+          onFlattenSubgraph: (nodeId) => flattenSubgraphNode(nodeId),
           dirty: activeEditor ? JSON.stringify(activeEditor.draft.graph) !== activeEditor.baseline : false,
           onSave: () => void saveGraph(),
+          onSaveAs: () => void saveGraph({ asNew: true }),
           onBack: () => {
             setActiveEditorKey('');
             setGraphErrors([]);
           },
           onOpenSubgraph: (graphId) => void openSubgraph(graphId),
+          onToast: pushToast,
+          onError: (message) => setGraphErrors(message ? [message] : []),
           subgraph: Boolean(
             (data && data.graphs ? data.graphs : []).find((graph) => graph.id === graphDraft.graph.id)?.isSubgraph,
           ),

@@ -160,6 +160,13 @@
 .ath-page-sub { margin: 3px 0 0; font-size: 12px; color: var(--dsw-alias-label-secondary); max-width: 720px; }
 .ath-page-head .ath-actions { margin-left: auto; }
 .ath-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ath-save-group { display: inline-flex; align-items: stretch; }
+.ath-save-group .ath-btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ath-save-group .ath-save-more {
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  padding-left: 8px; padding-right: 8px; min-width: 28px; justify-content: center;
+  border-left: 1px solid color-mix(in srgb, #fff 28%, transparent);
+}
 .ath-btn {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--dsw-alias-border-l1);
@@ -368,7 +375,6 @@
   background: color-mix(in srgb, var(--ath-dataset) 38%, var(--dsw-alias-bg-layer-1));
 }
 .ath-canvas-node[data-selected="true"] { border-color: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, .18); }
-.ath-canvas-node[data-kind="graph"] { border-style: dashed; }
 .ath-canvas-node-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ath-canvas-node-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; white-space: nowrap; }
 .ath-canvas-node-meta > span { overflow: hidden; text-overflow: ellipsis; }
@@ -455,6 +461,11 @@
 .ath-port-in { left: -7px; }
 .ath-port-out { right: -7px; border-color: #64748b; }
 .ath-port-dot:hover { transform: scale(1.3); border-color: #64748b; }
+.ath-port-dot[data-exposed="true"] {
+  border-color: var(--ath-accent);
+  background: color-mix(in srgb, var(--ath-accent) 22%, var(--dsw-alias-bg-base));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ath-accent) 16%, transparent);
+}
 .ath-port-dot.ath-port-required {
   border-color: #64748b; border-width: 3px;
   background: color-mix(in srgb, #64748b 18%, var(--dsw-alias-bg-base));

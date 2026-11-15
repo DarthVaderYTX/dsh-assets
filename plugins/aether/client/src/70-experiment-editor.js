@@ -1,16 +1,23 @@
     function ExperimentEditor({
       t,
       modules,
+      graphs,
+      revision,
       environments,
       draft,
       onDraftChange,
       onPersistState,
       onSave,
+      onSaveAs,
       onSubmit,
+      onMergeSubgraph,
+      onFlattenSubgraph,
       dirty,
       onBack,
       onOpenSubgraph,
       onDelete,
+      onToast,
+      onError,
       saving,
       errors,
       subgraph,
@@ -47,6 +54,8 @@
 
       const [view, setView] = useState(() => draft.view || { x: 30, y: 24, zoom: 1 });
       const [selection, setSelection] = useState(() => draft.selection || { nodes: [], edges: [] });
+      const [saveMenu, setSaveMenu] = useState(null);
+      const [selectionMenu, setSelectionMenu] = useState(null);
       const [interaction, setInteraction] = useState(null);
       const [marquee, setMarquee] = useState(null);
       const [connecting, setConnecting] = useState(null);
@@ -132,7 +141,7 @@
               .toLowerCase();
             return haystack.includes(query);
           });
-      }, [modules, paletteQuery, paletteFilter, t]);
+      }, [modules, paletteQuery, paletteFilter, t, revision]);
 
       const portPoint = (nodeId, kind, portName) => {
         const node = nodeById.get(nodeId);
@@ -605,6 +614,21 @@
       const addModule = (module, anchor) => {
         if (!module) return;
         const current = draftRef.current;
+        if (module.kind === 'graph' && module.graphId && current.graph.id) {
+          const path = graphReferencePath(graphs, module.graphId, current.graph.id);
+          if (path) {
+            const labels = path.map(
+              (graphId) => (graphs || []).find((graph) => graph.id === graphId)?.name || graphId,
+            );
+            const message = tr(t, 'graphs.cyclicReference', {
+              name: module.subgraphName || module.name,
+              path: labels.join(' → '),
+            });
+            if (onError) onError(message);
+            if (onToast) onToast(message);
+            return;
+          }
+        }
         const id = uniqueNodeId(current.graph, module.id);
         const size = nodeSizeFor(module, directionRef.current);
         const element = canvasRef.current;
@@ -666,8 +690,7 @@
 
       const onViewportPointerDown = (event) => {
         const rect = event.currentTarget.getBoundingClientRect();
-        if (event.button === 2) {
-          if (!event.shiftKey) return;
+        if (event.button === 0 && event.shiftKey) {
           event.preventDefault();
           setSelection({ nodes: [], edges: [] });
           setMarquee({ x1: event.clientX - rect.left, y1: event.clientY - rect.top, x2: event.clientX - rect.left, y2: event.clientY - rect.top });
@@ -708,6 +731,150 @@
         if (!dragIds.length) return;
         const origins = dragIds.map((id) => ({ id, ...(positionsRef.current.get(id) || { x: 0, y: 0 }) }));
         setInteraction({ type: 'node', startX: event.clientX, startY: event.clientY, origins });
+      };
+
+      const runMergeSelection = async (ids) => {
+        if (!onMergeSubgraph) return;
+        const result = await onMergeSubgraph(ids);
+        if (result && Array.isArray(result.selectedNodeIds)) {
+          setSelection({ nodes: result.selectedNodeIds, edges: [] });
+        }
+      };
+
+      const runFlattenSelection = async (nodeId) => {
+        if (!onFlattenSubgraph) return;
+        const result = await onFlattenSubgraph(nodeId);
+        if (result && Array.isArray(result.selectedNodeIds)) {
+          setSelection({ nodes: result.selectedNodeIds, edges: [] });
+        }
+      };
+
+      const showSelectionMenu = (x, y, ids, node) => {
+        const module = node ? moduleById.get(node.moduleId) : null;
+        const subgraphId =
+          ids.length === 1 && node && module && module.kind === 'graph' && module.graphId
+            ? module.graphId
+            : '';
+        const items = [];
+        if (subgraphId) {
+          items.push({
+            key: 'editSubgraph',
+            label: t('graphs.editSubgraph'),
+            onSelect: () => onOpenSubgraph(subgraphId),
+          });
+        }
+        items.push({
+          key: 'merge',
+          label: t('canvas.mergeSubgraph'),
+          disabled: !ids.length,
+          onSelect: () => void runMergeSelection(ids),
+        });
+        if (subgraphId) {
+          items.push({
+            key: 'flatten',
+            label: t('canvas.flattenSubgraph'),
+            onSelect: () => void runFlattenSelection(node.id),
+          });
+        }
+        setSelectionMenu({
+          x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
+          items,
+        });
+      };
+
+      const openSelectionMenu = (event, node) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (saving) return;
+        let ids = selectionRef.current.nodes;
+        if (!ids.includes(node.id)) {
+          ids = [node.id];
+          setSelection({ nodes: ids, edges: [] });
+        }
+        showSelectionMenu(event.clientX, event.clientY, ids, node);
+      };
+
+      const openCanvasMenu = (event) => {
+        event.preventDefault();
+        if (saving) return;
+        const ids = selectionRef.current.nodes;
+        if (!ids.length) return;
+        const node = ids.length === 1 ? graph.nodes.find((item) => item.id === ids[0]) : null;
+        showSelectionMenu(event.clientX, event.clientY, ids, node);
+      };
+
+      const isExposed = (side, nodeId, port) => {
+        const list = side === 'input' ? graph.exposedInputs : graph.exposedOutputs;
+        return (list || []).some((item) => item.nodeId === nodeId && item.port === port);
+      };
+
+      const updateExposure = (side, node, port, module, remove) => {
+        const current = draftRef.current;
+        const key = side === 'input' ? 'exposedInputs' : 'exposedOutputs';
+        const list = Array.isArray(current.graph[key]) ? current.graph[key] : [];
+        let next;
+        if (remove) {
+          next = list.filter((item) => !(item.nodeId === node.id && item.port === port));
+        } else {
+          const names = [...(current.graph.exposedInputs || []), ...(current.graph.exposedOutputs || [])].map(
+            (item) => item.name,
+          );
+          const name = uniquePortName(port, names);
+          const type =
+            side === 'input'
+              ? (module && module.inputTypes && module.inputTypes[port]) || 'string'
+              : (module && module.outputTypes && module.outputTypes[port]) || 'string';
+          next = [
+            ...list.filter((item) => !(item.nodeId === node.id && item.port === port)),
+            {
+              name,
+              nodeId: node.id,
+              port,
+              type,
+              required:
+                side === 'input' &&
+                Boolean(module && Array.isArray(module.requiredInputs) && module.requiredInputs.includes(port)),
+            },
+          ];
+        }
+        onDraftChange({
+          ...current,
+          graph: { ...current.graph, [key]: next, interfaceExplicit: true },
+        });
+        if (onToast) {
+          onToast(remove ? t('toast.unexposedPort') : t('toast.exposedPort'));
+        }
+        setSelectionMenu(null);
+      };
+
+      const openPortMenu = (event, node, side, port) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (saving || !subgraph) return;
+        const module = moduleById.get(node.moduleId);
+        const exposed = isExposed(side, node.id, port);
+        const items = exposed
+          ? [
+              {
+                key: 'remove',
+                label: t('graphs.unexposePort'),
+                danger: true,
+                onSelect: () => updateExposure(side, node, port, module, true),
+              },
+            ]
+          : [
+              {
+                key: 'add',
+                label: side === 'input' ? t('graphs.exposeInput') : t('graphs.exposeOutput'),
+                onSelect: () => updateExposure(side, node, port, module, false),
+              },
+            ];
+        setSelectionMenu({
+          x: Math.min(Math.max(12, event.clientX), Math.max(12, window.innerWidth - 220)),
+          y: Math.min(Math.max(12, event.clientY), Math.max(12, window.innerHeight - 100)),
+          items,
+        });
       };
 
       const onResizePointerDown = (event, node, corner) => {
@@ -840,17 +1007,62 @@
               },
               t('experiments.submit'),
             ),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'ath-btn ath-btn-primary',
-                onClick: onSave,
-                disabled: saving || modules.length === 0 || broken,
-                title: broken ? t('graphs.cycle') : undefined,
-              },
-              saving ? t('graphs.saving') : t('graphs.save'),
-            ),
+            graph.id
+              ? h(
+                  'div',
+                  { className: 'ath-save-group' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-primary',
+                      onClick: onSave,
+                      disabled: saving || modules.length === 0 || broken,
+                      title: broken ? t('graphs.cycle') : undefined,
+                    },
+                    saving ? t('graphs.saving') : t('graphs.save'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'ath-btn ath-btn-primary ath-save-more',
+                      'aria-label': t('graphs.saveMenu'),
+                      'aria-haspopup': 'menu',
+                      'aria-expanded': saveMenu ? 'true' : 'false',
+                      title: t('graphs.saveMenu'),
+                      disabled: saving || modules.length === 0 || broken,
+                      onClick: (event) => {
+                        if (saveMenu) {
+                          setSaveMenu(null);
+                          return;
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const width = 210;
+                        setSaveMenu({
+                          x: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+                          y: rect.bottom + 6,
+                          items: [
+                            { key: 'save', label: t('graphs.save'), onSelect: onSave },
+                            { key: 'saveAs', label: t('graphs.saveAs'), onSelect: onSaveAs },
+                          ],
+                        });
+                      },
+                    },
+                    '▾',
+                  ),
+                )
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ath-btn ath-btn-primary',
+                    onClick: onSave,
+                    disabled: saving || modules.length === 0 || broken,
+                    title: broken ? t('graphs.cycle') : undefined,
+                  },
+                  saving ? t('graphs.saving') : t('graphs.save'),
+                ),
           ),
         ),
         dirty
@@ -914,7 +1126,7 @@
                 className: 'ath-canvas-viewport',
                 ref: canvasRef,
                 onPointerDown: onViewportPointerDown,
-                onContextMenu: (event) => event.preventDefault(),
+                onContextMenu: openCanvasMenu,
                 onDragEnter: (event) => {
                   event.preventDefault();
                   setDragOver(true);
@@ -1019,6 +1231,7 @@
                       title: infoTitle,
                       style: { left: position.x, top: position.y, width: size.width, height: size.height },
                       onPointerDown: (event) => onNodePointerDown(event, node),
+                      onContextMenu: (event) => openSelectionMenu(event, node),
                     },
                     h(
                       'div',
@@ -1128,12 +1341,14 @@
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'input',
+                        'data-exposed': isExposed('input', node.id, port) ? 'true' : 'false',
                         title: portTypeHint(
                           t,
                           port,
                           module.inputTypes && module.inputTypes[port],
                         ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'input', port),
+                        onContextMenu: (event) => openPortMenu(event, node, 'input', port),
                       }),
                     ),
                     ports.outputs.map((port, index) =>
@@ -1147,12 +1362,14 @@
                         'data-port-node': node.id,
                         'data-port-name': port,
                         'data-port-kind': 'output',
+                        'data-exposed': isExposed('output', node.id, port) ? 'true' : 'false',
                         title: portTypeHint(
                           t,
                           port,
                           module.outputTypes && module.outputTypes[port],
                         ),
                         onPointerDown: (event) => onPortPointerDown(event, node.id, 'output', port),
+                        onContextMenu: (event) => openPortMenu(event, node, 'output', port),
                       }),
                     ),
                     showHandles
@@ -1240,7 +1457,13 @@
                 h('button', { type: 'button', className: 'ath-icon-btn', onClick: () => zoomBy(1.2), title: t('canvas.zoomIn') }, '+'),
               ),
               cycleNotice ? h('div', { className: 'ath-canvas-warning' }, cycleNotice) : null,
-              h('div', { className: 'ath-canvas-hint' }, t('canvas.hint')),
+              h(
+                'div',
+                { className: 'ath-canvas-hint' },
+                subgraph
+                  ? `${t('canvas.hint')} · ${t('canvas.subgraphPortHint')}`
+                  : t('canvas.hint'),
+              ),
             ),
           ),
           h('div', {
@@ -1282,6 +1505,7 @@
                   ),
                 ),
               ),
+              h('div', { className: 'ath-hint', style: { marginTop: 6 } }, t('canvas.paletteHint')),
               h(
                 'div',
                 { className: 'ath-palette-list' },
@@ -1295,9 +1519,15 @@
                           type: 'button',
                           className: 'ath-palette-item',
                           draggable: true,
-                          onClick: () => {
+                          onDoubleClick: () => {
                             if (draggingRef.current) return;
                             addModule(module);
+                          },
+                          onKeyDown: (event) => {
+                            if (event.repeat) return;
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            if (!draggingRef.current) addModule(module);
                           },
                           onDragStart: (event) => {
                             draggingRef.current = true;
@@ -1586,5 +1816,9 @@
             broken ? h('div', { className: 'ath-error' }, t('graphs.cycle')) : null,
           ),
         ),
+        saveMenu ? h(ContextMenu, { menu: saveMenu, onClose: () => setSaveMenu(null) }) : null,
+        selectionMenu
+          ? h(ContextMenu, { menu: selectionMenu, onClose: () => setSelectionMenu(null) })
+          : null,
       );
     }

@@ -21,6 +21,7 @@ window.__ModuleLoader__.load({
       subtitle: '评测任务工作台',
       'tab.tasks': '任务',
       'tab.templates': '模板',
+      'tab.stages': '阶段',
       'tab.datasets': '数据集',
       'tab.docs': '文档',
       'theme.title': '主题风格',
@@ -169,6 +170,10 @@ window.__ModuleLoader__.load({
       'tasks.descriptionPlaceholder': '说明本次评测的目标、变量与观察指标（可选）',
       'tasks.dataset': '数据集',
       'tasks.datasetHint': '运行时数据集会导出为 JSONL/CSV 文件，并通过 TECHHUB_DATASET_PATH 提供。',
+      'tasks.datasetFromTemplate': '数据集：{name}（继承自模板）',
+      'tasks.datasetTemplateEmpty': '该模板未选择数据集',
+      'tasks.datasetTemplatePick': '选择模板后自动继承其数据集',
+      'datasets.deleteUsedBody': '有 {n} 个模板正在使用该数据集；删除后这些模板会失去数据集。',
       'tasks.cwd': '工作目录',
       'tasks.cwdPlaceholder': '留空使用 DSH 默认工作目录',
       'tasks.cwdHint': '命令在此目录中执行，支持相对路径。',
@@ -180,6 +185,9 @@ window.__ModuleLoader__.load({
       'tasks.template': '任务模板',
       'tasks.templatePlaceholder': '请选择任务模板',
       'tasks.templateMissing': '模板已删除',
+      'tasks.applyTemplate': '从模板重新生成',
+      'tasks.applyTemplateHint': '用当前模板重建该分组的阶段快照，会覆盖已修改的命令；保存后生效。',
+      'tasks.parameterTypeInvalid': '全局参数 {{key}} 的值必须是 {type}。',
       'tasks.noStageConfig': '选择任务模板后，会在这里生成可编辑的阶段命令。',
       'tasks.command': '命令',
       'tasks.commandPlaceholder': '例如：python eval.py',
@@ -209,11 +217,11 @@ window.__ModuleLoader__.load({
       'tasks.runStatus': '运行状态',
       'templates.title': '模板',
       'templates.kicker': 'TEMPLATE LIBRARY',
-      'templates.subtitle': '把评测流程拆成有序阶段；每个阶段保存一条可执行命令。',
+      'templates.subtitle': '从阶段库挑选已有阶段并排序，组成可复用的评测流程。',
       'templates.new': '新建模板',
       'templates.search': '搜索模板或阶段',
       'templates.empty': '还没有任务模板',
-      'templates.emptyHint': '先用有序阶段描述评测流程，再在任务里为每个分组覆盖命令与参数。',
+      'templates.emptyHint': '先从阶段库挑选阶段组成流程，再在任务里为每个分组覆盖命令与参数。',
       'templates.emptyAction': '创建第一个模板',
       'templates.newTitle': '新建任务模板',
       'templates.editTitle': '编辑任务模板',
@@ -222,6 +230,10 @@ window.__ModuleLoader__.load({
       'templates.nameRequired': '请填写模板名称。',
       'templates.description': '模板说明',
       'templates.descriptionPlaceholder': '描述模板适用的模型、数据或指标（可选）',
+      'templates.dataset': '模板数据集',
+      'templates.datasetHint': '模板声明它评估的数据集；任务引用模板时会自动继承，运行时导出为该分组的数据集文件。',
+      'templates.noDataset': '不使用数据集',
+      'templates.datasetMissing': '数据集已删除',
       'templates.parameters': '全局参数',
       'templates.parametersHint': '在阶段命令或参数中使用 {{KEY}} 引用；执行任务时按分组配置实际值。',
       'templates.addParameter': '添加参数',
@@ -237,7 +249,11 @@ window.__ModuleLoader__.load({
       'templates.parameterCount': '{n} 个参数',
       'templates.noParameters': '未定义全局参数',
       'templates.stages': '阶段序列',
-      'templates.stagesHint': '阶段按从上到下的顺序串行执行，可随时调整顺序。',
+      'templates.pipeline': '数据处理管线',
+      'templates.openFolder': '打开模板文件夹',
+      'templates.folderOpened': '已打开模板文件夹',
+      'templates.folderOpenFailed': '无法打开模板文件夹：{message}',
+      'templates.stagesHint': '阶段按从上到下的顺序串行执行；阶段内容在「阶段」页维护，这里只负责挑选与排序。',
       'templates.addStage': '添加阶段',
       'templates.stageName': '阶段名称',
       'templates.stageNamePlaceholder': '例如：准备环境',
@@ -301,6 +317,134 @@ window.__ModuleLoader__.load({
       'templates.noDefaultArgs': '无默认参数',
       'templates.previewUsage': '{n} 个任务引用',
       'templates.orderLabel': '执行顺序',
+      'templates.pickStage': '从阶段库添加',
+      'templates.pickStagePlaceholder': '选择一个阶段…',
+      'templates.addPickedStage': '添加阶段',
+      'templates.noMoreStages': '阶段库中没有可添加的阶段',
+      'templates.stageLibraryEmpty': '阶段库为空，请先到「阶段」页创建阶段。',
+      'templates.noStagesHint': '还没有添加阶段：从上面的下拉框挑选阶段库中的阶段加入流程。',
+      'templates.stageMissing': '阶段已被删除',
+      'templates.stageRefHint': '阶段内容在「阶段」页维护；这里只调整顺序与输入引用。',
+      'templates.stageRefCommand': '命令',
+      'stages.kicker': 'STAGE LIBRARY',
+      'stages.title': '阶段',
+      'stages.subtitle': '维护可复用的阶段命令；模板只能按顺序引用这里已有的阶段。',
+      'stages.new': '新建阶段',
+      'stages.search': '搜索阶段名称、说明或命令',
+      'stages.empty': '阶段库还是空的',
+      'stages.emptyHint': '先定义阶段（命令、参数与对外输出），再在模板里组合使用。',
+      'stages.emptyAction': '创建第一个阶段',
+      'stages.newTitle': '新建阶段',
+      'stages.editTitle': '编辑阶段',
+      'stages.name': '阶段名称',
+      'stages.namePlaceholder': '例如：清洗查询',
+      'stages.nameRequired': '请填写阶段名称。',
+      'stages.nameDuplicate': '阶段名称不能重复。',
+      'stages.description': '阶段说明',
+      'stages.descriptionPlaceholder': '这个阶段做什么（可选）',
+      'stages.command': '执行命令',
+      'stages.commandRequired': '请填写执行命令。',
+      'stages.commandPlaceholder': '例如：node "%TECHHUB_WORKSPACE%/scripts/clean.js" "@@input@@"',
+      'stages.commandHint': '命令、参数写在一起；用 @@名称@@ 引用本阶段的输入、输出或参数。',
+      'stages.commandUnknownRefs': '命令引用了未声明的名字：{names}；请先在输入/输出/参数里声明。',
+      'stages.args': '默认参数',
+      'stages.outputs': '对外输出',
+      'stages.outputsHint': '只有这里登记的文件，下游阶段才能通过输入引用使用；文件写在阶段 output/ 目录下。',
+      'stages.noOutputs': '还没有配置对外输出',
+      'stages.addOutput': '添加输出',
+      'stages.saved': '阶段已保存',
+      'stages.deleted': '阶段已删除',
+      'stages.deleteTitle': '删除这个阶段？',
+      'stages.deleteBody': '删除后无法撤销。',
+      'stages.deleteUsedBody': '该阶段被 {n} 个模板引用；删除后会同时从这些模板中移除，已创建的任务保留创建时的快照。',
+      'stages.usedBy': '{n} 个模板使用',
+      'stages.unused': '未被模板使用',
+      'stages.previewTitle': '阶段详情',
+      'stages.previewCommand': '执行命令',
+      'stages.previewArgs': '默认参数',
+      'stages.previewOutputs': '对外输出',
+      'stages.previewUsage': '引用此阶段的模板',
+      'stages.previewNoUsage': '还没有模板引用这个阶段',
+      'stages.outputCount': '{n} 个输出',
+      'stages.count': '共 {n} 个阶段',
+      'stages.openFolder': '打开阶段文件夹',
+      'stages.folderOpened': '已打开阶段文件夹',
+      'stages.folderOpenFailed': '无法打开阶段文件夹：{message}',
+      'stages.asset': '提交文件 / 文件夹',
+      'stages.assetHint': '提交后命令在它的根目录执行，根目录里能看到全部提交内容（@@work_dir@@ 也指向这里）。',
+      'stages.assetPickFile': '选择文件',
+      'stages.assetPickFolder': '选择文件夹',
+      'stages.assetClear': '清除',
+      'stages.assetEmpty': '未提交文件：命令在任务工作目录执行。',
+      'stages.assetBusy': '正在上传…',
+      'stages.assetTooLarge': '提交内容不能超过 64MB。',
+      'stages.assetTooMany': '提交文件数量不能超过 1000 个。',
+      'stages.assetUploadFailed': '上传失败：{message}',
+      'stages.assetFiles': '{n} 个文件',
+      'stages.assetFile': '文件',
+      'stages.assetFolder': '文件夹',
+      'stages.inputs': '输入',
+      'stages.inputsHint': '阶段要消费的输入；命令与参数里用 @@名称@@ 引用，模板负责为每个输入选择来源。',
+      'stages.noInputs': '没有声明输入',
+      'stages.addInput': '添加输入',
+      'stages.inputName': '输入名',
+      'stages.inputNamePlaceholder': '例如 query',
+      'stages.parameters': '参数',
+      'stages.parametersHint': '阶段自带的参数与默认值；模板里可以改用上游阶段的值或全局参数。',
+      'stages.noParameters': '没有声明参数',
+      'stages.addParameter': '添加参数',
+      'stages.parameterName': '参数名',
+      'stages.parameterNamePlaceholder': '例如 WEIGHT',
+      'stages.parameterDefault': '默认值',
+      'stages.parameterDefaultPlaceholder': '例如 1.25',
+      'stages.parameterDescriptionPlaceholder': '这个参数的作用（可选）',
+      'stages.ioHint': '命令里的 @@名称@@ 会替换为输入/参数/输出的值。',
+      'stages.type': '类型',
+      'stages.typeString': '文本',
+      'stages.typeNumber': '数字',
+      'stages.typeBoolean': '布尔',
+      'stages.typeJson': 'JSON',
+      'stages.typeFile': '文件',
+      'stages.typeDirectory': '目录',
+      'stages.required': '必填',
+      'stages.requiredHint': '必填输入必须由模板绑定来源；取消勾选后模板可以留空。',
+      'stages.optional': '可选',
+      'stages.timeout': '超时（秒）',
+      'stages.timeoutHint': '0 表示不限制；超时后宿主会终止该阶段的进程并标记失败。',
+      'stages.timeoutInvalid': '超时必须是 0 或正整数秒。',
+      'stages.defaultInvalid': '参数「{name}」的默认值与类型 {type} 不匹配。',
+      'stages.builtinNameConflict': '「{name}」是内置变量名，不能用作输入/输出/参数。',
+      'stages.builtins': '内置变量',
+      'stages.builtinsHint': '命令里可以直接引用这些变量，无需声明：',
+      'stages.commandUnclosed': '命令里的 @@ 占位符没有闭合。',
+      'stages.commandEmptyRef': '命令里存在空的 @@占位符@@。',
+      'stages.commandMultilineRef': '占位符不能跨行：{name}。',
+      'stages.inputNameDuplicate': '输入名不能重复。',
+      'stages.inputNameRequired': '请填写输入名。',
+      'stages.parameterNameRequired': '请填写参数名。',
+      'stages.parameterNameInvalid': '参数名只能使用字母、数字和下划线，且不能以数字开头。',
+      'stages.parameterNameDuplicate': '参数名不能重复。',
+      'stages.nameConflict': '输入、输出和参数的名字不能重复。',
+      'stages.inputCount': '{n} 个输入',
+      'stages.parameterCount': '{n} 个参数',
+      'templates.bindings': '输入与参数接线',
+      'templates.bindingsHint': '输入与参数的取值必须来自上方阶段的输出/参数，或模板的全局参数。',
+      'templates.bindingInput': '输入',
+      'templates.bindingParameter': '参数',
+      'templates.bindingSource': '来源',
+      'templates.bindingUnbound': '选择来源…',
+      'templates.bindingUseDefault': '使用默认值（{value}）',
+      'templates.bindingOutputs': '上游输出',
+      'templates.bindingParameters': '上游参数',
+      'templates.bindingGlobals': '全局参数',
+      'templates.bindingRequired': '输入 {name} 必须绑定来源。',
+      'templates.bindingInvalid': '「{name}」的来源无效，请重新选择。',
+      'templates.bindingNoSources': '上方没有可用来源：先添加带输出的阶段，或声明全局参数。',
+      'templates.bindingNoInputs': '该阶段没有声明输入',
+      'templates.bindingNoParameters': '该阶段没有声明参数',
+      'templates.bindingDefaultValue': '默认 {value}',
+      'templates.bindingTypeMismatch': '「{name}」的来源类型不匹配：需要 {expected}，来源是 {actual}。',
+      'templates.bindingOptionalHint': '可选输入，未绑定时占位符保持原样。',
       'datasets.title': '数据集',
       'datasets.kicker': 'DATASET HUB',
       'datasets.subtitle': '导入 JSONL 或 CSV，也可以直接粘贴或编辑数据内容。',
@@ -406,6 +550,7 @@ window.__ModuleLoader__.load({
       subtitle: 'Evaluation task workspace',
       'tab.tasks': 'Tasks',
       'tab.templates': 'Templates',
+      'tab.stages': 'Stages',
       'tab.datasets': 'Datasets',
       'tab.docs': 'Docs',
       'theme.title': 'Theme',
@@ -554,6 +699,10 @@ window.__ModuleLoader__.load({
       'tasks.descriptionPlaceholder': 'Goal, variables and metrics for this evaluation (optional)',
       'tasks.dataset': 'Dataset',
       'tasks.datasetHint': 'The dataset is materialized as JSONL/CSV at run time and exposed through TECHHUB_DATASET_PATH.',
+      'tasks.datasetFromTemplate': 'Dataset: {name} (from template)',
+      'tasks.datasetTemplateEmpty': 'This template has no dataset',
+      'tasks.datasetTemplatePick': 'Pick a template to inherit its dataset',
+      'datasets.deleteUsedBody': 'Used by {n} templates; deleting it clears their dataset.',
       'tasks.cwd': 'Working directory',
       'tasks.cwdPlaceholder': 'Leave empty to use the DSH default directory',
       'tasks.cwdHint': 'Commands run in this directory; relative paths are supported.',
@@ -565,6 +714,9 @@ window.__ModuleLoader__.load({
       'tasks.template': 'Task template',
       'tasks.templatePlaceholder': 'Choose a task template',
       'tasks.templateMissing': 'Template deleted',
+      'tasks.applyTemplate': 'Re-apply template',
+      'tasks.applyTemplateHint': 'Rebuild this group’s stage snapshot from the current template, overwriting edited commands. Applies when you save.',
+      'tasks.parameterTypeInvalid': 'Global parameter {{key}} must be a {type} value.',
       'tasks.noStageConfig': 'Choose a template to generate editable stage commands here.',
       'tasks.command': 'Command',
       'tasks.commandPlaceholder': 'e.g. python eval.py',
@@ -594,11 +746,11 @@ window.__ModuleLoader__.load({
       'tasks.runStatus': 'Run status',
       'templates.title': 'Templates',
       'templates.kicker': 'TEMPLATE LIBRARY',
-      'templates.subtitle': 'Break an evaluation flow into ordered stages, each with an executable command.',
+      'templates.subtitle': 'Pick stages from the library and order them into a reusable evaluation flow.',
       'templates.new': 'New template',
       'templates.search': 'Search templates or stages',
       'templates.empty': 'No task templates yet',
-      'templates.emptyHint': 'Describe the evaluation flow as ordered stages, then override commands and arguments per group in a task.',
+      'templates.emptyHint': 'Pick stages from the library to build a flow, then override commands and arguments per group in a task.',
       'templates.emptyAction': 'Create your first template',
       'templates.newTitle': 'New task template',
       'templates.editTitle': 'Edit task template',
@@ -607,6 +759,10 @@ window.__ModuleLoader__.load({
       'templates.nameRequired': 'Enter a template name.',
       'templates.description': 'Description',
       'templates.descriptionPlaceholder': 'Models, data or metrics this template applies to (optional)',
+      'templates.dataset': 'Template dataset',
+      'templates.datasetHint': 'The template declares the dataset it evaluates; tasks inherit it, and each group gets its own copy at run time.',
+      'templates.noDataset': 'No dataset',
+      'templates.datasetMissing': 'Dataset deleted',
       'templates.parameters': 'Global parameters',
       'templates.parametersHint': 'Reference a parameter as {{KEY}} in stage commands or arguments; tasks supply the actual value per group.',
       'templates.addParameter': 'Add parameter',
@@ -622,7 +778,11 @@ window.__ModuleLoader__.load({
       'templates.parameterCount': '{n} parameters',
       'templates.noParameters': 'No global parameters',
       'templates.stages': 'Stage sequence',
-      'templates.stagesHint': 'Stages run serially from top to bottom. Reorder them at any time.',
+      'templates.pipeline': 'Data pipeline',
+      'templates.openFolder': 'Open template folder',
+      'templates.folderOpened': 'Template folder opened',
+      'templates.folderOpenFailed': 'Could not open the template folder: {message}',
+      'templates.stagesHint': 'Stages run serially from top to bottom. Stage content lives on the Stages page; this editor only picks and orders them.',
       'templates.addStage': 'Add stage',
       'templates.stageName': 'Stage name',
       'templates.stageNamePlaceholder': 'e.g. Prepare environment',
@@ -686,6 +846,134 @@ window.__ModuleLoader__.load({
       'templates.noDefaultArgs': 'No default arguments',
       'templates.previewUsage': '{n} tasks reference this',
       'templates.orderLabel': 'Execution order',
+      'templates.pickStage': 'Add from stage library',
+      'templates.pickStagePlaceholder': 'Pick a stage…',
+      'templates.addPickedStage': 'Add stage',
+      'templates.noMoreStages': 'No more stages available in the library',
+      'templates.stageLibraryEmpty': 'The stage library is empty. Create stages on the Stages page first.',
+      'templates.noStagesHint': 'No stages yet — pick one from the library above to add it to the flow.',
+      'templates.stageMissing': 'Stage deleted',
+      'templates.stageRefHint': 'Stage content is maintained on the Stages page; here you only order stages and wire input references.',
+      'templates.stageRefCommand': 'Command',
+      'stages.kicker': 'STAGE LIBRARY',
+      'stages.title': 'Stages',
+      'stages.subtitle': 'Maintain reusable stage commands; templates may only reference stages from this library.',
+      'stages.new': 'New stage',
+      'stages.search': 'Search stage name, notes or command',
+      'stages.empty': 'The stage library is empty',
+      'stages.emptyHint': 'Define a stage (command, arguments and exposed outputs) first, then compose templates from it.',
+      'stages.emptyAction': 'Create your first stage',
+      'stages.newTitle': 'New stage',
+      'stages.editTitle': 'Edit stage',
+      'stages.name': 'Stage name',
+      'stages.namePlaceholder': 'e.g. Normalize query',
+      'stages.nameRequired': 'Enter a stage name.',
+      'stages.nameDuplicate': 'Stage names must be unique.',
+      'stages.description': 'Stage notes',
+      'stages.descriptionPlaceholder': 'What this stage does (optional)',
+      'stages.command': 'Command',
+      'stages.commandRequired': 'Enter a command.',
+      'stages.commandPlaceholder': 'e.g. node "%TECHHUB_WORKSPACE%/scripts/clean.js" "@@input@@"',
+      'stages.commandHint': 'The command and its arguments are one field; reference stage inputs, outputs and parameters as @@name@@.',
+      'stages.commandUnknownRefs': 'The command references undeclared names: {names}. Declare them as an input, output or parameter first.',
+      'stages.args': 'Default arguments',
+      'stages.outputs': 'Exposed outputs',
+      'stages.outputsHint': 'Only files registered here can be referenced by downstream stages; write them under the stage output/ directory.',
+      'stages.noOutputs': 'No exposed outputs yet',
+      'stages.addOutput': 'Add output',
+      'stages.saved': 'Stage saved',
+      'stages.deleted': 'Stage deleted',
+      'stages.deleteTitle': 'Delete this stage?',
+      'stages.deleteBody': 'This cannot be undone.',
+      'stages.deleteUsedBody': '{n} templates reference this stage. They lose it on delete; existing tasks keep their snapshot.',
+      'stages.usedBy': '{n} templates use this',
+      'stages.unused': 'Not used by any template',
+      'stages.previewTitle': 'Stage detail',
+      'stages.previewCommand': 'Command',
+      'stages.previewArgs': 'Default arguments',
+      'stages.previewOutputs': 'Exposed outputs',
+      'stages.previewUsage': 'Templates using this stage',
+      'stages.previewNoUsage': 'No template uses this stage yet',
+      'stages.outputCount': '{n} outputs',
+      'stages.count': '{n} stages',
+      'stages.openFolder': 'Open stage folder',
+      'stages.folderOpened': 'Stage folder opened',
+      'stages.folderOpenFailed': 'Could not open the stage folder: {message}',
+      'stages.asset': 'Submitted file / folder',
+      'stages.assetHint': 'The command runs in the root of the submission, and that root contains everything you submitted (@@work_dir@@ points there too).',
+      'stages.assetPickFile': 'Choose file',
+      'stages.assetPickFolder': 'Choose folder',
+      'stages.assetClear': 'Clear',
+      'stages.assetEmpty': 'Nothing submitted — the command runs in the task working directory.',
+      'stages.assetBusy': 'Uploading…',
+      'stages.assetTooLarge': 'A submission cannot exceed 64 MB.',
+      'stages.assetTooMany': 'A submission cannot exceed 1000 files.',
+      'stages.assetUploadFailed': 'Upload failed: {message}',
+      'stages.assetFiles': '{n} files',
+      'stages.assetFile': 'file',
+      'stages.assetFolder': 'folder',
+      'stages.inputs': 'Inputs',
+      'stages.inputsHint': 'Values the stage consumes; reference them as {{name}} in the command. Templates choose where each input comes from.',
+      'stages.noInputs': 'No inputs declared',
+      'stages.addInput': 'Add input',
+      'stages.inputName': 'Input name',
+      'stages.inputNamePlaceholder': 'e.g. query',
+      'stages.parameters': 'Parameters',
+      'stages.parametersHint': 'Stage parameters with defaults; a template may take the value from an upstream stage or a global parameter instead.',
+      'stages.noParameters': 'No parameters declared',
+      'stages.addParameter': 'Add parameter',
+      'stages.parameterName': 'Parameter name',
+      'stages.parameterNamePlaceholder': 'e.g. WEIGHT',
+      'stages.parameterDefault': 'Default',
+      'stages.parameterDefaultPlaceholder': 'e.g. 1.25',
+      'stages.parameterDescriptionPlaceholder': 'What this parameter controls (optional)',
+      'stages.ioHint': '@@name@@ in the command is replaced with the input/parameter/output value.',
+      'stages.type': 'Type',
+      'stages.typeString': 'Text',
+      'stages.typeNumber': 'Number',
+      'stages.typeBoolean': 'Boolean',
+      'stages.typeJson': 'JSON',
+      'stages.typeFile': 'File',
+      'stages.typeDirectory': 'Directory',
+      'stages.required': 'Required',
+      'stages.requiredHint': 'A required input must be bound in every template; clear it to make the input optional.',
+      'stages.optional': 'Optional',
+      'stages.timeout': 'Timeout (s)',
+      'stages.timeoutHint': '0 means no limit; on timeout the host terminates the stage and marks it failed.',
+      'stages.timeoutInvalid': 'The timeout must be 0 or a positive number of seconds.',
+      'stages.defaultInvalid': 'The default value of parameter “{name}” does not match its {type} type.',
+      'stages.builtinNameConflict': '“{name}” is a built-in variable name and cannot be used as a port.',
+      'stages.builtins': 'Built-in variables',
+      'stages.builtinsHint': 'These are always available in the command, no declaration needed:',
+      'stages.commandUnclosed': 'The @@ placeholders in the command are not closed.',
+      'stages.commandEmptyRef': 'The command contains an empty @@placeholder@@.',
+      'stages.commandMultilineRef': 'A placeholder cannot span lines: {name}.',
+      'stages.inputNameDuplicate': 'Input names must be unique.',
+      'stages.inputNameRequired': 'Enter an input name.',
+      'stages.parameterNameRequired': 'Enter a parameter name.',
+      'stages.parameterNameInvalid': 'Parameter names may contain letters, digits and underscores, and cannot start with a digit.',
+      'stages.parameterNameDuplicate': 'Parameter names must be unique.',
+      'stages.nameConflict': 'Input, output and parameter names must be unique.',
+      'stages.inputCount': '{n} inputs',
+      'stages.parameterCount': '{n} parameters',
+      'templates.bindings': 'Inputs and parameters',
+      'templates.bindingsHint': 'Inputs and parameters must come from an earlier stage’s output/parameter, or from a template global parameter.',
+      'templates.bindingInput': 'Input',
+      'templates.bindingParameter': 'Parameter',
+      'templates.bindingSource': 'Source',
+      'templates.bindingUnbound': 'Choose a source…',
+      'templates.bindingUseDefault': 'Use default ({value})',
+      'templates.bindingOutputs': 'Upstream outputs',
+      'templates.bindingParameters': 'Upstream parameters',
+      'templates.bindingGlobals': 'Global parameters',
+      'templates.bindingRequired': 'Input {name} must be bound to a source.',
+      'templates.bindingInvalid': 'The source of “{name}” is invalid. Choose again.',
+      'templates.bindingNoSources': 'No source available: add a stage with outputs above, or declare a global parameter.',
+      'templates.bindingNoInputs': 'This stage declares no inputs',
+      'templates.bindingNoParameters': 'This stage declares no parameters',
+      'templates.bindingDefaultValue': 'default {value}',
+      'templates.bindingTypeMismatch': 'The source of “{name}” has an incompatible type: expected {expected}, got {actual}.',
+      'templates.bindingOptionalHint': 'Optional input — the placeholder is left as-is when unbound.',
       'datasets.title': 'Datasets',
       'datasets.kicker': 'DATASET HUB',
       'datasets.subtitle': 'Import JSONL or CSV, or paste and edit the data directly.',
@@ -1210,6 +1498,100 @@ window.__ModuleLoader__.load({
       return cleaned || fallback;
     }
 
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const comma = result.indexOf(',');
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error('Failed to read the file.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ---- stage ports (mirrors the host's Aether-style module ports) ---------
+    const PORT_VALUE_TYPES = ['string', 'number', 'boolean', 'json', 'file', 'directory'];
+    const PORT_PARAMETER_TYPES = ['string', 'number', 'boolean', 'json'];
+    const PORT_OUTPUT_TYPES = ['file', 'directory'];
+    const STAGE_BUILTIN_NAMES = [
+      'run_id',
+      'run_dir',
+      'task_id',
+      'task_name',
+      'group_id',
+      'group_name',
+      'group_role',
+      'stage_id',
+      'stage_name',
+      'stage_dir',
+      'input_dir',
+      'output_dir',
+      'workspace',
+      'work_dir',
+      'dataset_path',
+      'dataset_format',
+    ];
+
+    function portTypeLabel(t, type) {
+      const key = `stages.type${String(type || 'string').charAt(0).toUpperCase()}${String(type || 'string').slice(1)}`;
+      return t(key);
+    }
+
+    /** A string sink accepts every source; otherwise the types must match. */
+    function portTypesCompatible(fromType, toType) {
+      const from = PORT_VALUE_TYPES.includes(fromType) ? fromType : 'string';
+      const to = PORT_VALUE_TYPES.includes(toType) ? toType : 'string';
+      if (from === to) return true;
+      return to === 'string';
+    }
+
+    function portDefaultMatches(type, value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (raw === '') return true;
+      if (type === 'number') return Number.isFinite(Number(raw));
+      if (type === 'boolean') return ['true', 'false', '1', '0'].includes(raw.toLowerCase());
+      if (type === 'json') {
+        try {
+          JSON.parse(raw);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /** Validate the @@placeholder@@ syntax and declared names of a stage command. */
+    function commandTemplateProblems(command, declared, t) {
+      const problems = [];
+      const text = String(command || '');
+      if (!text.includes('@@')) return problems;
+      const parts = text.split('@@');
+      if (parts.length % 2 === 0) {
+        problems.push(t('stages.commandUnclosed'));
+        return problems;
+      }
+      const unknown = new Set();
+      for (let index = 1; index < parts.length; index += 2) {
+        const name = parts[index].trim();
+        if (!name) {
+          problems.push(t('stages.commandEmptyRef'));
+          continue;
+        }
+        if (/[\r\n]/.test(name)) {
+          problems.push(t('stages.commandMultilineRef', { name: name.replace(/[\r\n]+/g, ' ') }));
+          continue;
+        }
+        if (!declared.has(name) && !STAGE_BUILTIN_NAMES.includes(name)) unknown.add(name);
+      }
+      if (unknown.size > 0) {
+        problems.push(t('stages.commandUnknownRefs', { names: [...unknown].join(', ') }));
+      }
+      return problems;
+    }
+
     function formatBytes(bytes) {
       if (!Number.isFinite(bytes) || bytes < 0) return '—';
       if (bytes < 1024) return `${bytes} B`;
@@ -1260,6 +1642,22 @@ window.__ModuleLoader__.load({
 
     function latestRunOf(taskId, runs) {
       return runs.find((run) => run.taskId === taskId);
+    }
+
+    /** The template owns the dataset; tasks only keep a legacy fallback id. */
+    function groupDatasetId(group, task, templates) {
+      const template = (templates || []).find((item) => item.id === group.templateId);
+      return (template?.datasetId || '').trim() || (task?.datasetId || '').trim();
+    }
+
+    function taskDatasetNames(task, templates, datasets) {
+      const names = [];
+      for (const group of task.groups || []) {
+        const datasetId = groupDatasetId(group, task, templates);
+        const name = (datasets || []).find((item) => item.id === datasetId)?.name;
+        if (name && !names.includes(name)) names.push(name);
+      }
+      return names;
     }
 
     function parameterRowsForGroup(group, templates) {
@@ -1790,7 +2188,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function TaskEditor({ initial, templates, datasets, t, saving, onClose, onSave }) {
+    function TaskEditor({ initial, templates, stages, datasets, t, saving, onClose, onSave }) {
       const makeGroup = (role, index) => ({
         id: uid('group'),
         role,
@@ -1837,6 +2235,7 @@ window.__ModuleLoader__.load({
 
       const changeTemplate = (groupId, templateId) => {
         const template = templates.find((item) => item.id === templateId);
+        const library = new Map((stages || []).map((stage) => [stage.id, stage]));
         setDraft((current) => ({
           ...current,
           groups: current.groups.map((group) => {
@@ -1849,19 +2248,88 @@ window.__ModuleLoader__.load({
                 ? (template.parameters || []).map((parameter) => ({ key: parameter.key, value: parameter.defaultValue }))
                 : [],
               stageConfigs: template
-                ? template.stages.map((stage) => ({
-                    stageId: stage.id,
-                    name: stage.name,
-                    command: stage.command,
-                    args: stage.args || '',
-                    outputs: (stage.outputs || []).map((output) => ({ ...output })),
-                    inputRefs: (stage.inputRefs || []).map((reference) => ({ ...reference })),
-                  }))
+                ? template.stages
+                    .map((entry) => {
+                      const stage = library.get(entry.stageId);
+                      if (!stage) return null;
+                      return {
+                        stageId: entry.id,
+                        libraryStageId: stage.id,
+                        name: stage.name,
+                        command: stage.command,
+                        timeoutSec: stage.timeoutSec || 0,
+                        outputs: (stage.outputs || []).map((output) => ({ ...output })),
+                        inputs: (stage.inputs || []).map((declaration) => ({
+                          id: declaration.id,
+                          name: declaration.name,
+                          type: declaration.type || 'string',
+                          required: declaration.required !== false,
+                          source: (entry.inputs || []).find((binding) => binding.name === declaration.name)?.source || null,
+                        })),
+                        parameters: (stage.parameters || []).map((declaration) => ({
+                          id: declaration.id,
+                          name: declaration.name,
+                          type: declaration.type || 'string',
+                          defaultValue: declaration.defaultValue || '',
+                          source: (entry.parameters || []).find((binding) => binding.name === declaration.name)?.source || null,
+                        })),
+                        inputRefs: (entry.inputRefs || []).map((reference) => ({ ...reference })),
+                      };
+                    })
+                    .filter(Boolean)
                 : [],
             };
           }),
         }));
       };
+
+      const applyTemplate = (groupId) =>
+        setDraft((current) => ({
+          ...current,
+          groups: current.groups.map((group) => {
+            if (group.id !== groupId) return group;
+            const template = templates.find((item) => item.id === group.templateId);
+            if (!template) return group;
+            const library = new Map((stages || []).map((stage) => [stage.id, stage]));
+            const existing = new Map((group.parameters || []).map((parameter) => [parameter.key, parameter.value]));
+            return {
+              ...group,
+              parameters: (template.parameters || []).map((parameter) => ({
+                key: parameter.key,
+                value: existing.has(parameter.key) ? existing.get(parameter.key) : parameter.defaultValue,
+              })),
+              stageConfigs: template.stages
+                .map((entry) => {
+                  const stage = library.get(entry.stageId);
+                  if (!stage) return null;
+                  return {
+                    stageId: entry.id,
+                    libraryStageId: stage.id,
+                    name: stage.name,
+                    command: stage.command,
+                    timeoutSec: stage.timeoutSec || 0,
+                    outputs: (stage.outputs || []).map((output) => ({ ...output })),
+                    inputs: (stage.inputs || []).map((declaration) => ({
+                      id: declaration.id,
+                      name: declaration.name,
+                      type: declaration.type || 'string',
+                      required: declaration.required !== false,
+                      source: (entry.inputs || []).find((binding) => binding.name === declaration.name)?.source || null,
+                    })),
+                    parameters: (stage.parameters || []).map((declaration) => ({
+                      id: declaration.id,
+                      name: declaration.name,
+                      type: declaration.type || 'string',
+                      defaultValue: declaration.defaultValue || '',
+                      source: (entry.parameters || []).find((binding) => binding.name === declaration.name)?.source || null,
+                    })),
+                    inputRefs: (entry.inputRefs || []).map((reference) => ({ ...reference })),
+                  };
+                })
+                .filter(Boolean),
+            };
+          }),
+        }));
 
       const updateGroupParameter = (groupId, key, value) =>
         setDraft((current) => ({
@@ -1913,6 +2381,19 @@ window.__ModuleLoader__.load({
           for (const stage of group.stageConfigs) {
             if (stage.command.trim() === '') problems.push(t('tasks.stageCommandRequired'));
           }
+          const templateDefinition = templates.find((item) => item.id === group.templateId);
+          for (const parameter of group.parameters || []) {
+            const definition = (templateDefinition?.parameters || []).find((item) => item.key === parameter.key);
+            if (!definition) continue;
+            if (!portDefaultMatches(definition.type || 'string', parameter.value)) {
+              problems.push(
+                t('tasks.parameterTypeInvalid', {
+                  key: parameter.key,
+                  type: portTypeLabel(t, definition.type || 'string'),
+                }),
+              );
+            }
+          }
         }
         if (problems.length > 0) {
           setError([...new Set(problems)].join(' '));
@@ -1937,7 +2418,6 @@ window.__ModuleLoader__.load({
             stageConfigs: group.stageConfigs.map((stage) => ({
               ...stage,
               command: stage.command.trim(),
-              args: stage.args.trim(),
             })),
           })),
         };
@@ -1971,12 +2451,6 @@ window.__ModuleLoader__.load({
               placeholder: t('tasks.namePlaceholder'),
               onChange: (event) => update({ name: event.target.value }),
             })),
-            h(Field, { label: t('tasks.dataset'), hint: t('tasks.datasetHint') }, h(
-              'select',
-              { className: 'th-select', value: draft.datasetId, onChange: (event) => update({ datasetId: event.target.value }) },
-              h('option', { value: '' }, t('tasks.noDataset')),
-              datasets.map((dataset) => h('option', { key: dataset.id, value: dataset.id }, `${dataset.name} · ${t('common.rows', { n: dataset.rowCount })}`)),
-            )),
             h(Field, { label: t('tasks.cwd'), hint: t('tasks.cwdHint') }, h('input', {
               className: 'th-input',
               value: draft.cwd,
@@ -2031,17 +2505,46 @@ window.__ModuleLoader__.load({
                     Field,
                     { label: t('tasks.template'), required: true },
                     h(
-                      'select',
-                      {
-                        className: 'th-select',
-                        value: group.templateId,
-                        onChange: (event) => changeTemplate(group.id, event.target.value),
-                      },
-                      h('option', { value: '' }, t('tasks.templatePlaceholder')),
-                      group.templateId && !template
-                        ? h('option', { value: group.templateId }, t('tasks.templateMissing'))
-                        : null,
-                      templates.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
+                      'div',
+                      { className: 'th-template-pick' },
+                      h(
+                        'select',
+                        {
+                          className: 'th-select',
+                          value: group.templateId,
+                          onChange: (event) => changeTemplate(group.id, event.target.value),
+                        },
+                        h('option', { value: '' }, t('tasks.templatePlaceholder')),
+                        group.templateId && !template
+                          ? h('option', { value: group.templateId }, t('tasks.templateMissing'))
+                          : null,
+                        templates.map((item) => h('option', { key: item.id, value: item.id }, item.name)),
+                      ),
+                      h(IconButton, {
+                        icon: 'refresh',
+                        label: t('tasks.applyTemplate'),
+                        title: t('tasks.applyTemplateHint'),
+                        disabled: !group.templateId || !template,
+                        onClick: () => applyTemplate(group.id),
+                      }),
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'th-group-dataset' },
+                    h(Icon, { name: 'database', size: 12 }),
+                    h(
+                      'span',
+                      null,
+                      template
+                        ? template.datasetId
+                          ? t('tasks.datasetFromTemplate', {
+                              name:
+                                (datasets || []).find((item) => item.id === template.datasetId)?.name
+                                || t('templates.datasetMissing'),
+                            })
+                          : t('tasks.datasetTemplateEmpty')
+                        : t('tasks.datasetTemplatePick'),
                     ),
                   ),
                 ),
@@ -2082,7 +2585,14 @@ window.__ModuleLoader__.load({
                         return h(
                           'div',
                           { key: definition.key, className: 'th-param-row' },
-                          h('code', { className: 'th-param-key' }, `{{${definition.key}}}`),
+                          h(
+                            'div',
+                            { className: 'th-param-keycell' },
+                            h('code', { className: 'th-param-key' }, `{{${definition.key}}}`),
+                            definition.type && definition.type !== 'string'
+                              ? h('em', { className: 'th-port-type-badge' }, portTypeLabel(t, definition.type))
+                              : null,
+                          ),
                           h('input', {
                             className: 'th-input th-mono',
                             value,
@@ -2108,7 +2618,6 @@ window.__ModuleLoader__.load({
                         h('span', null, '#'),
                         h('span', null, t('tasks.stage')),
                         h('span', null, t('tasks.command')),
-                        h('span', null, t('tasks.args')),
                       ),
                       group.stageConfigs.map((stage, stageIndex) =>
                         h(
@@ -2116,19 +2625,13 @@ window.__ModuleLoader__.load({
                           { key: stage.stageId, className: 'th-stagecfg' },
                           h('span', { className: 'th-stagecfg-index' }, String(stageIndex + 1).padStart(2, '0')),
                           h('div', { className: 'th-stagecfg-name' }, h('strong', null, stage.name), stage.command ? null : h('span', null, t('tasks.command'))),
-                          h('input', {
-                            className: 'th-input th-mono',
+                          h('textarea', {
+                            className: 'th-textarea th-mono th-stagecfg-command',
+                            rows: 2,
                             value: stage.command,
                             placeholder: t('tasks.commandPlaceholder'),
                             'aria-label': `${stage.name} · ${t('tasks.command')}`,
                             onChange: (event) => updateStage(group.id, stage.stageId, { command: event.target.value }),
-                          }),
-                          h('input', {
-                            className: 'th-input th-mono',
-                            value: stage.args,
-                            placeholder: t('tasks.argsPlaceholder'),
-                            'aria-label': `${stage.name} · ${t('tasks.args')}`,
-                            onChange: (event) => updateStage(group.id, stage.stageId, { args: event.target.value }),
                           }),
                         ),
                       ),
@@ -2148,19 +2651,894 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function TemplateEditor({ initial, t, saving, onClose, onSave }) {
-      const makeStage = (index) => ({
-        id: uid('stage'),
-        name: t('templates.stageN', { n: index }),
-        command: '',
-        args: '',
-        outputs: [],
-        inputRefs: [],
-        description: '',
-      });
+    function StageEditor({ initial, stages, t, saving, onClose, onSave }) {
+      const [draft, setDraft] = useState(() =>
+        initial
+          ? {
+              id: initial.id,
+              name: initial.name,
+              description: initial.description || '',
+              command: initial.command || '',
+              timeoutSec: initial.timeoutSec || 0,
+              assetKind: initial.assetKind || '',
+              assetName: initial.assetName || '',
+              assetFileCount: initial.assetFileCount || 0,
+              assetSize: initial.assetSize || 0,
+              inputs: (initial.inputs || []).map((input) => ({
+                id: input.id,
+                name: input.name,
+                type: input.type || 'string',
+                required: input.required !== false,
+                description: input.description || '',
+              })),
+              parameters: (initial.parameters || []).map((parameter) => ({
+                id: parameter.id,
+                name: parameter.name,
+                type: parameter.type || 'string',
+                defaultValue: parameter.defaultValue || '',
+                description: parameter.description || '',
+              })),
+              outputs: (initial.outputs || []).map((output) => ({
+                id: output.id,
+                name: output.name,
+                type: output.type || 'file',
+                file: output.file || '',
+              })),
+            }
+          : {
+              id: uid('stage'),
+              name: '',
+              description: '',
+              command: '',
+              timeoutSec: 0,
+              assetKind: '',
+              assetName: '',
+              assetFileCount: 0,
+              assetSize: 0,
+              inputs: [],
+              parameters: [],
+              outputs: [],
+            },
+      );
+      const [error, setError] = useState('');
+      const [assetBusy, setAssetBusy] = useState(false);
+      const [assetError, setAssetError] = useState('');
+      const fileInputRef = useRef(null);
+      const folderInputRef = useRef(null);
+
+      const uploadAsset = async (kind, fileList) => {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) return;
+        setAssetBusy(true);
+        setAssetError('');
+        try {
+          if (files.length > 1000) throw new Error(t('stages.assetTooMany'));
+          const payloadFiles = [];
+          let total = 0;
+          let name = '';
+          for (const file of files) {
+            const data = await fileToBase64(file);
+            total += file.size;
+            if (total > 64 * 1024 * 1024) throw new Error(t('stages.assetTooLarge'));
+            const relativePath = String(file.webkitRelativePath || '');
+            const relative = kind === 'directory'
+              ? relativePath.split('/').slice(1).join('/') || file.name
+              : file.name;
+            if (name === '') name = kind === 'directory' ? (relativePath.split('/')[0] || 'folder') : file.name;
+            payloadFiles.push({ path: relative, data });
+          }
+          const response = await fetch(`${API_BASE}/stage-assets`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ stageId: draft.id, kind, name, files: payloadFiles }),
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(payload?.error?.message || `HTTP ${response.status}`);
+          setDraft((current) => ({
+            ...current,
+            assetKind: payload.assetKind,
+            assetName: payload.assetName,
+            assetFileCount: payload.assetFileCount,
+            assetSize: payload.assetSize,
+          }));
+        } catch (uploadError) {
+          setAssetError(
+            t('stages.assetUploadFailed', {
+              message: uploadError instanceof Error ? uploadError.message : String(uploadError),
+            }),
+          );
+        } finally {
+          setAssetBusy(false);
+        }
+      };
+      const clearAsset = () =>
+        setDraft((current) => ({
+          ...current,
+          assetKind: '',
+          assetName: '',
+          assetFileCount: 0,
+          assetSize: 0,
+        }));
+
+      const update = (patch) => setDraft((current) => ({ ...current, ...patch }));
+      const addInput = () =>
+        setDraft((current) => ({
+          ...current,
+          inputs: [
+            ...current.inputs,
+            { id: uid('input'), name: '', type: 'string', required: true, description: '' },
+          ],
+        }));
+      const updateInput = (inputId, patch) =>
+        setDraft((current) => ({
+          ...current,
+          inputs: current.inputs.map((input) => (input.id === inputId ? { ...input, ...patch } : input)),
+        }));
+      const removeInput = (inputId) =>
+        setDraft((current) => ({ ...current, inputs: current.inputs.filter((input) => input.id !== inputId) }));
+      const addOutput = () =>
+        setDraft((current) => ({
+          ...current,
+          outputs: [...current.outputs, { id: uid('output'), file: '', name: '', type: 'file' }],
+        }));
+      const updateOutput = (outputId, patch) =>
+        setDraft((current) => ({
+          ...current,
+          outputs: current.outputs.map((output) => (output.id === outputId ? { ...output, ...patch } : output)),
+        }));
+      const removeOutput = (outputId) =>
+        setDraft((current) => ({ ...current, outputs: current.outputs.filter((output) => output.id !== outputId) }));
+      const addParameter = () =>
+        setDraft((current) => ({
+          ...current,
+          parameters: [
+            ...current.parameters,
+            { id: uid('parameter'), name: '', type: 'string', defaultValue: '', description: '' },
+          ],
+        }));
+      const updateParameter = (parameterId, patch) =>
+        setDraft((current) => ({
+          ...current,
+          parameters: current.parameters.map((parameter) =>
+            parameter.id === parameterId ? { ...parameter, ...patch } : parameter,
+          ),
+        }));
+      const removeParameter = (parameterId) =>
+        setDraft((current) => ({
+          ...current,
+          parameters: current.parameters.filter((parameter) => parameter.id !== parameterId),
+        }));
+
+      const submit = () => {
+        const problems = [];
+        const name = draft.name.trim();
+        if (name === '') {
+          problems.push(t('stages.nameRequired'));
+        } else if ((stages || []).some((stage) => stage.id !== initial?.id && stage.name.trim() === name)) {
+          problems.push(t('stages.nameDuplicate'));
+        }
+        if (draft.command.trim() === '') problems.push(t('stages.commandRequired'));
+        if (!Number.isInteger(Number(draft.timeoutSec)) || Number(draft.timeoutSec) < 0) {
+          problems.push(t('stages.timeoutInvalid'));
+        }
+
+        // Inputs, outputs and parameters share the @@name@@ namespace, so names
+        // must be unique across all three and must not shadow a builtin.
+        const declared = new Set();
+        const claimName = (rawName, requiredMessage, invalidMessage) => {
+          const value = rawName.trim();
+          if (value === '') {
+            problems.push(requiredMessage);
+            return false;
+          }
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+            problems.push(invalidMessage);
+            return false;
+          }
+          if (STAGE_BUILTIN_NAMES.includes(value)) {
+            problems.push(t('stages.builtinNameConflict', { name: value }));
+            return false;
+          }
+          if (declared.has(value)) {
+            problems.push(t('stages.nameConflict'));
+            return false;
+          }
+          declared.add(value);
+          return true;
+        };
+        for (const input of draft.inputs) {
+          claimName(input.name, t('stages.inputNameRequired'), t('templates.inputKeyInvalid'));
+        }
+        for (const output of draft.outputs) {
+          const file = output.file.trim();
+          claimName(output.name, t('templates.outputRequired'), t('templates.outputNameInvalid'));
+          if (file === '') problems.push(t('templates.outputRequired'));
+          if (
+            file !== '' &&
+            (/^(?:[A-Za-z]:[\\/]|[\\/])/.test(file) || /(^|[\\/])\.\.([\\/]|$)/.test(file))
+          ) {
+            problems.push(t('templates.outputFileInvalid'));
+          }
+        }
+        for (const parameter of draft.parameters) {
+          if (claimName(parameter.name, t('stages.parameterNameRequired'), t('stages.parameterNameInvalid'))) {
+            if (!portDefaultMatches(parameter.type, parameter.defaultValue)) {
+              problems.push(t('stages.defaultInvalid', { name: parameter.name.trim(), type: portTypeLabel(t, parameter.type) }));
+            }
+          }
+        }
+
+        // Every @@name@@ in the command must be declared (or be a builtin), and
+        // the placeholder syntax itself has to be well formed.
+        problems.push(...commandTemplateProblems(draft.command, declared, t));
+
+        if (problems.length > 0) {
+          setError([...new Set(problems)].join(' '));
+          return;
+        }
+        const now = Date.now();
+        onSave({
+          id: draft.id || initial?.id || uid('stage'),
+          name,
+          description: draft.description.trim(),
+          command: draft.command.trim(),
+          timeoutSec: Number(draft.timeoutSec) || 0,
+          assetKind: draft.assetKind || '',
+          assetName: draft.assetKind ? draft.assetName || '' : '',
+          assetFileCount: draft.assetKind ? Number(draft.assetFileCount) || 0 : 0,
+          assetSize: draft.assetKind ? Number(draft.assetSize) || 0 : 0,
+          inputs: draft.inputs.map((input) => ({
+            id: input.id,
+            name: input.name.trim(),
+            type: input.type,
+            required: input.required !== false,
+            description: (input.description || '').trim(),
+          })),
+          outputs: draft.outputs.map((output) => ({
+            id: output.id,
+            name: output.name.trim(),
+            type: output.type,
+            file: output.file.trim(),
+          })),
+          parameters: draft.parameters.map((parameter) => ({
+            id: parameter.id,
+            name: parameter.name.trim(),
+            type: parameter.type,
+            defaultValue: parameter.defaultValue || '',
+            description: (parameter.description || '').trim(),
+          })),
+          createdAt: initial?.createdAt || now,
+          updatedAt: now,
+        });
+      };
+
+      const typeSelect = (value, allowed, onChange, label) =>
+        h(
+          'select',
+          { className: 'th-select th-port-type', value, 'aria-label': label, onChange: (event) => onChange(event.target.value) },
+          allowed.map((type) => h('option', { key: type, value: type }, portTypeLabel(t, type))),
+        );
+
+      return h(
+        Modal,
+        {
+          title: initial ? t('stages.editTitle') : t('stages.newTitle'),
+          subtitle: t('stages.subtitle'),
+          onClose,
+          t,
+          width: 'min(900px, calc(100vw - 24px))',
+          footer: [
+            h(Button, { key: 'cancel', variant: 'ghost', onClick: onClose, disabled: saving }, t('common.cancel')),
+            h(Button, { key: 'save', variant: 'primary', icon: 'save', onClick: submit, disabled: saving }, saving ? t('common.saving') : t('common.save')),
+          ],
+        },
+        h(
+          'div',
+          { className: 'th-form' },
+          error ? h('div', { className: 'th-form-error', role: 'alert' }, h(Icon, { name: 'alert', size: 16 }), h('span', null, error)) : null,
+          h(
+            'div',
+            { className: 'th-form-grid' },
+            h(Field, { label: t('stages.name'), required: true, className: 'th-span-2' }, h('input', {
+              className: 'th-input',
+              value: draft.name,
+              autoFocus: true,
+              placeholder: t('stages.namePlaceholder'),
+              onChange: (event) => update({ name: event.target.value }),
+            })),
+            h(Field, { label: t('stages.description'), className: 'th-span-2' }, h('input', {
+              className: 'th-input',
+              value: draft.description,
+              placeholder: t('stages.descriptionPlaceholder'),
+              onChange: (event) => update({ description: event.target.value }),
+            })),
+          ),
+          h(
+            'div',
+            { className: 'th-stage-io' },
+            h(
+              'div',
+              { className: 'th-stage-io-head' },
+              h(Icon, { name: 'external', size: 13 }),
+              h('strong', null, t('stages.inputs')),
+              h('span', null, t('stages.inputsHint')),
+              h(Button, { size: 'sm', variant: 'ghost', icon: 'plus', onClick: addInput }, t('stages.addInput')),
+            ),
+            draft.inputs.length === 0
+              ? h('span', { className: 'th-input-source-empty' }, t('stages.noInputs'))
+              : h(
+                  'div',
+                  { className: 'th-port-list' },
+                  h(
+                    'div',
+                    { className: 'th-port-labels is-input' },
+                    h('span', null, t('stages.inputName')),
+                    h('span', null, t('stages.type')),
+                    h('span', null, t('stages.required')),
+                    h('span', null, t('templates.parameterDescription')),
+                    h('span', null, ''),
+                  ),
+                  draft.inputs.map((input) =>
+                    h(
+                      'div',
+                      { key: input.id, className: 'th-port-row is-input' },
+                      h('input', {
+                        className: 'th-input th-mono',
+                        value: input.name,
+                        placeholder: t('stages.inputNamePlaceholder'),
+                        'aria-label': t('stages.inputName'),
+                        onChange: (event) => updateInput(input.id, { name: event.target.value }),
+                      }),
+                      typeSelect(
+                        input.type,
+                        PORT_VALUE_TYPES,
+                        (type) => updateInput(input.id, { type }),
+                        `${input.name || t('stages.inputName')} · ${t('stages.type')}`,
+                      ),
+                      h(
+                        'label',
+                        { className: 'th-port-required', title: t('stages.requiredHint') },
+                        h('input', {
+                          type: 'checkbox',
+                          checked: input.required !== false,
+                          'aria-label': t('stages.required'),
+                          onChange: (event) => updateInput(input.id, { required: event.target.checked }),
+                        }),
+                      ),
+                      h('input', {
+                        className: 'th-input',
+                        value: input.description || '',
+                        placeholder: t('stages.parameterDescriptionPlaceholder'),
+                        'aria-label': t('templates.parameterDescription'),
+                        onChange: (event) => updateInput(input.id, { description: event.target.value }),
+                      }),
+                      h(IconButton, {
+                        icon: 'trash',
+                        label: t('common.delete'),
+                        onClick: () => removeInput(input.id),
+                        className: 'th-danger-hover',
+                      }),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'div',
+            { className: 'th-stage-io' },
+            h(
+              'div',
+              { className: 'th-stage-io-head' },
+              h(Icon, { name: 'folder', size: 13 }),
+              h('strong', null, t('stages.outputs')),
+              h('span', null, t('stages.outputsHint')),
+              h(Button, { size: 'sm', variant: 'ghost', icon: 'plus', onClick: addOutput }, t('stages.addOutput')),
+            ),
+            draft.outputs.length === 0
+              ? h('span', { className: 'th-input-source-empty' }, t('stages.noOutputs'))
+              : h(
+                  'div',
+                  { className: 'th-output-map-list' },
+                  h(
+                    'div',
+                    { className: 'th-output-map-labels is-output' },
+                    h('span', null, t('templates.outputFile')),
+                    h('span', null, t('templates.outputName')),
+                    h('span', null, t('stages.type')),
+                    h('span', null, ''),
+                  ),
+                  draft.outputs.map((output) =>
+                    h(
+                      'div',
+                      { key: output.id, className: 'th-output-map-row is-output' },
+                      h('input', {
+                        className: 'th-input th-mono',
+                        value: output.file,
+                        placeholder: t('templates.outputFilePlaceholder'),
+                        'aria-label': t('templates.outputFile'),
+                        onChange: (event) => updateOutput(output.id, { file: event.target.value }),
+                      }),
+                      h('input', {
+                        className: 'th-input th-mono',
+                        value: output.name,
+                        placeholder: t('templates.outputNamePlaceholder'),
+                        'aria-label': t('templates.outputName'),
+                        onChange: (event) => updateOutput(output.id, { name: event.target.value }),
+                      }),
+                      typeSelect(
+                        output.type,
+                        PORT_OUTPUT_TYPES,
+                        (type) => updateOutput(output.id, { type }),
+                        `${output.name || t('templates.outputName')} · ${t('stages.type')}`,
+                      ),
+                      h(IconButton, {
+                        icon: 'trash',
+                        label: t('common.delete'),
+                        onClick: () => removeOutput(output.id),
+                        className: 'th-danger-hover',
+                      }),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'div',
+            { className: 'th-stage-io' },
+            h(
+              'div',
+              { className: 'th-stage-io-head' },
+              h(Icon, { name: 'settings', size: 13 }),
+              h('strong', null, t('stages.parameters')),
+              h('span', null, t('stages.parametersHint')),
+              h(Button, { size: 'sm', variant: 'ghost', icon: 'plus', onClick: addParameter }, t('stages.addParameter')),
+            ),
+            draft.parameters.length === 0
+              ? h('span', { className: 'th-input-source-empty' }, t('stages.noParameters'))
+              : h(
+                  'div',
+                  { className: 'th-port-list' },
+                  h(
+                    'div',
+                    { className: 'th-port-labels is-parameter' },
+                    h('span', null, t('stages.parameterName')),
+                    h('span', null, t('stages.type')),
+                    h('span', null, t('stages.parameterDefault')),
+                    h('span', null, t('templates.parameterDescription')),
+                    h('span', null, ''),
+                  ),
+                  draft.parameters.map((parameter) =>
+                    h(
+                      'div',
+                      { key: parameter.id, className: 'th-port-row is-parameter' },
+                      h('input', {
+                        className: 'th-input th-mono',
+                        value: parameter.name,
+                        placeholder: t('stages.parameterNamePlaceholder'),
+                        'aria-label': t('stages.parameterName'),
+                        onChange: (event) => updateParameter(parameter.id, { name: event.target.value }),
+                      }),
+                      typeSelect(
+                        parameter.type,
+                        PORT_PARAMETER_TYPES,
+                        (type) => updateParameter(parameter.id, { type }),
+                        `${parameter.name || t('stages.parameterName')} · ${t('stages.type')}`,
+                      ),
+                      h('input', {
+                        className: 'th-input th-mono',
+                        value: parameter.defaultValue || '',
+                        placeholder: t('stages.parameterDefaultPlaceholder'),
+                        'aria-label': t('stages.parameterDefault'),
+                        onChange: (event) => updateParameter(parameter.id, { defaultValue: event.target.value }),
+                      }),
+                      h('input', {
+                        className: 'th-input',
+                        value: parameter.description || '',
+                        placeholder: t('stages.parameterDescriptionPlaceholder'),
+                        'aria-label': t('templates.parameterDescription'),
+                        onChange: (event) => updateParameter(parameter.id, { description: event.target.value }),
+                      }),
+                      h(IconButton, {
+                        icon: 'trash',
+                        label: t('common.delete'),
+                        onClick: () => removeParameter(parameter.id),
+                        className: 'th-danger-hover',
+                      }),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'div',
+            { className: 'th-stage-io' },
+            h(
+              'div',
+              { className: 'th-stage-io-head' },
+              h(Icon, { name: 'upload', size: 13 }),
+              h('strong', null, t('stages.asset')),
+              h('span', null, t('stages.assetHint')),
+            ),
+            h(
+              'div',
+              { className: 'th-asset-row' },
+              h(
+                'div',
+                { className: 'th-asset-meta' },
+                draft.assetKind
+                  ? h(
+                      'span',
+                      null,
+                      h('code', { className: 'th-asset-name' }, draft.assetName || '—'),
+                      h('em', { className: 'th-asset-kind' }, draft.assetKind === 'directory' ? t('stages.assetFolder') : t('stages.assetFile')),
+                      h('span', null, t('stages.assetFiles', { n: draft.assetFileCount })),
+                      h('span', null, formatBytes(draft.assetSize)),
+                    )
+                  : h('span', { className: 'th-asset-empty' }, t('stages.assetEmpty')),
+              ),
+              h(
+                'div',
+                { className: 'th-asset-actions' },
+                h(
+                  Button,
+                  {
+                    size: 'sm',
+                    variant: 'secondary',
+                    icon: 'file',
+                    disabled: assetBusy || saving,
+                    onClick: () => fileInputRef.current?.click(),
+                  },
+                  t('stages.assetPickFile'),
+                ),
+                h(
+                  Button,
+                  {
+                    size: 'sm',
+                    variant: 'secondary',
+                    icon: 'folder',
+                    disabled: assetBusy || saving,
+                    onClick: () => folderInputRef.current?.click(),
+                  },
+                  t('stages.assetPickFolder'),
+                ),
+                draft.assetKind
+                  ? h(
+                      Button,
+                      { size: 'sm', variant: 'ghost', icon: 'x', disabled: assetBusy || saving, onClick: clearAsset },
+                      t('stages.assetClear'),
+                    )
+                  : null,
+                assetBusy
+                  ? h('span', { className: 'th-saving' }, h('span', { className: 'th-mini-spinner' }), t('stages.assetBusy'))
+                  : null,
+              ),
+            ),
+            assetError
+              ? h('div', { className: 'th-form-error', role: 'alert' }, h(Icon, { name: 'alert', size: 14 }), h('span', null, assetError))
+              : null,
+            h('input', {
+              ref: fileInputRef,
+              type: 'file',
+              multiple: true,
+              className: 'th-visually-hidden',
+              onChange: (event) => {
+                void uploadAsset('file', event.target.files);
+                event.target.value = '';
+              },
+            }),
+            h('input', {
+              ref: folderInputRef,
+              type: 'file',
+              multiple: true,
+              webkitdirectory: '',
+              directory: '',
+              className: 'th-visually-hidden',
+              onChange: (event) => {
+                void uploadAsset('directory', event.target.files);
+                event.target.value = '';
+              },
+            }),
+          ),
+          h(
+            'div',
+            { className: 'th-stage-io' },
+            h(
+              'div',
+              { className: 'th-command-head' },
+              h(
+                'div',
+                { className: 'th-command-title' },
+                h(Icon, { name: 'terminal', size: 13 }),
+                h('strong', null, t('stages.command')),
+                h('span', null, t('stages.commandHint')),
+              ),
+              h(
+                'label',
+                { className: 'th-command-timeout', title: t('stages.timeoutHint') },
+                h('span', null, t('stages.timeout')),
+                h('input', {
+                  className: 'th-input th-mono',
+                  type: 'number',
+                  min: 0,
+                  step: 1,
+                  value: draft.timeoutSec,
+                  'aria-label': t('stages.timeout'),
+                  onChange: (event) => update({ timeoutSec: event.target.value }),
+                }),
+              ),
+            ),
+            h('textarea', {
+              className: 'th-textarea th-mono th-commandarea',
+              rows: 4,
+              value: draft.command,
+              placeholder: t('stages.commandPlaceholder'),
+              spellCheck: false,
+              'aria-label': t('stages.command'),
+              onChange: (event) => update({ command: event.target.value }),
+            }),
+            h(
+              'div',
+              { className: 'th-builtin-hint' },
+              h('div', null, h(Icon, { name: 'info', size: 12 }), h('strong', null, t('stages.builtins')), h('span', null, t('stages.builtinsHint'))),
+              h(
+                'div',
+                { className: 'th-builtin-chips' },
+                STAGE_BUILTIN_NAMES.map((builtin) => h('code', { key: builtin, className: 'th-builtin-chip' }, `@@${builtin}@@`)),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    function StagePreview({ stage, templates, t, onClose, onEdit, onOpenFolder }) {
+      const usage = (templates || []).filter((template) =>
+        (template.stages || []).some((entry) => entry.stageId === stage.id),
+      );
+      return h(
+        Modal,
+        {
+          title: stage.name,
+          subtitle: stage.description || t('stages.previewTitle'),
+          onClose,
+          t,
+          width: 'min(820px, calc(100vw - 24px))',
+          footer: [
+            h(Button, { key: 'close', variant: 'ghost', onClick: onClose }, t('common.close')),
+            h(Button, { key: 'folder', variant: 'secondary', icon: 'folder', onClick: () => onOpenFolder(stage.id) }, t('stages.openFolder')),
+            h(Button, { key: 'edit', variant: 'primary', icon: 'edit', onClick: onEdit }, t('common.edit')),
+          ],
+        },
+        h(
+          'div',
+          { className: 'th-preview-detail' },
+          h(
+            'div',
+            { className: 'th-preview-stats' },
+            h('span', { className: 'th-format-pill' }, t('stages.outputCount', { n: (stage.outputs || []).length })),
+            h('span', null, t('stages.inputCount', { n: (stage.inputs || []).length })),
+            h('span', null, t('stages.parameterCount', { n: (stage.parameters || []).length })),
+            stage.timeoutSec > 0
+              ? h('span', null, `${t('stages.timeout')} ${stage.timeoutSec}s`)
+              : h('span', null, `${t('stages.timeout')} —`),
+            stage.assetKind
+              ? h('span', null, `${t('stages.asset')} · ${stage.assetName} · ${t('stages.assetFiles', { n: stage.assetFileCount })}`)
+              : h('span', null, t('stages.assetEmpty')),
+            h('span', null, usage.length > 0 ? t('stages.usedBy', { n: usage.length }) : t('stages.unused')),
+            h('span', null, `${t('common.updated')} ${formatDate(stage.updatedAt)}`),
+          ),
+          h(
+            'div',
+            { className: 'th-preview-args' },
+            h('span', null, t('stages.previewCommand')),
+            stage.command ? h('code', null, stage.command) : h('em', null, '—'),
+          ),
+          h(
+            'div',
+            { className: 'th-section-head th-section-head-tight' },
+            h('div', null, h('h3', null, t('stages.inputs')), h('p', null, t('stages.inputsHint'))),
+          ),
+          (stage.inputs || []).length === 0
+            ? h('div', { className: 'th-preview-empty' }, t('stages.noInputs'))
+            : h(
+                'div',
+                { className: 'th-preview-args' },
+                (stage.inputs || []).map((input) =>
+                  h(
+                    'code',
+                    { key: input.id || input.name },
+                    `${input.name} · ${portTypeLabel(t, input.type || 'string')}${input.required === false ? ` · ${t('stages.optional')}` : ''}${input.description ? ` — ${input.description}` : ''}`,
+                  ),
+                ),
+              ),
+          h(
+            'div',
+            { className: 'th-section-head th-section-head-tight' },
+            h('div', null, h('h3', null, t('stages.parameters')), h('p', null, t('stages.parametersHint'))),
+          ),
+          (stage.parameters || []).length === 0
+            ? h('div', { className: 'th-preview-empty' }, t('stages.noParameters'))
+            : h(
+                'div',
+                { className: 'th-preview-args' },
+                (stage.parameters || []).map((parameter) =>
+                  h(
+                    'code',
+                    { key: parameter.id || parameter.name },
+                    `${parameter.name} · ${portTypeLabel(t, parameter.type || 'string')} = ${parameter.defaultValue || '""'}`,
+                  ),
+                ),
+              ),
+          h(
+            'div',
+            { className: 'th-section-head th-section-head-tight' },
+            h('div', null, h('h3', null, t('stages.previewOutputs')), h('p', null, t('stages.outputsHint'))),
+          ),
+          (stage.outputs || []).length === 0
+            ? h('div', { className: 'th-preview-empty' }, t('stages.noOutputs'))
+            : h(
+                'div',
+                { className: 'th-preview-args' },
+                (stage.outputs || []).map((output) =>
+                  h(
+                    'code',
+                    { key: output.id || output.name },
+                    `${output.name} · ${portTypeLabel(t, output.type || 'file')} = ${output.file}`,
+                  ),
+                ),
+              ),
+          h(
+            'div',
+            { className: 'th-section-head th-section-head-tight' },
+            h('div', null, h('h3', null, t('stages.previewUsage'))),
+          ),
+          usage.length === 0
+            ? h('div', { className: 'th-preview-empty' }, t('stages.previewNoUsage'))
+            : h(
+                'div',
+                { className: 'th-preview-args' },
+                usage.map((template) => h('code', { key: template.id }, template.name)),
+              ),
+        ),
+      );
+    }
+
+    function StagesPage({ data, t, query, setQuery, onNew, onPreview, onEdit, onDelete, onOpenFolder, usage }) {
+      const rows = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        return data.stages
+          .filter(
+            (stage) =>
+              needle === '' ||
+              stage.name.toLowerCase().includes(needle) ||
+              stage.description.toLowerCase().includes(needle) ||
+              stage.command.toLowerCase().includes(needle),
+          )
+          .sort((left, right) => right.updatedAt - left.updatedAt);
+      }, [data.stages, query]);
+
+      return h(
+        'div',
+        { className: 'th-page' },
+        h(
+          'div',
+          { className: 'th-pagehead' },
+          h(
+            'div',
+            { className: 'th-pagehead-copy' },
+            h('span', { className: 'th-kicker' }, t('stages.kicker')),
+            h('h1', null, t('stages.title')),
+            h('p', null, t('stages.subtitle')),
+          ),
+          h(Button, { variant: 'primary', icon: 'plus', onClick: onNew }, t('stages.new')),
+        ),
+        h(
+          'div',
+          { className: 'th-toolbar' },
+          h(
+            'div',
+            { className: 'th-search' },
+            h(Icon, { name: 'search', size: 16 }),
+            h('input', {
+              className: 'th-input',
+              type: 'search',
+              value: query,
+              placeholder: t('stages.search'),
+              'aria-label': t('stages.search'),
+              onChange: (event) => setQuery(event.target.value),
+            }),
+          ),
+          h('span', { className: 'th-toolbar-count' }, t('stages.count', { n: rows.length })),
+        ),
+        rows.length === 0
+          ? h(EmptyState, {
+              icon: 'terminal',
+              title: data.stages.length === 0 ? t('stages.empty') : t('common.none'),
+              hint: data.stages.length === 0 ? t('stages.emptyHint') : t('stages.search'),
+              actionLabel: data.stages.length === 0 ? t('stages.emptyAction') : undefined,
+              onAction: onNew,
+            })
+          : h(
+              'div',
+              { className: 'th-card-grid' },
+              rows.map((stage) =>
+                h(
+                  'article',
+                  { key: stage.id, className: 'th-card th-stage-card th-clickable-card', onClick: () => onPreview(stage) },
+                  h(
+                    'div',
+                    { className: 'th-card-head' },
+                    h(
+                      'div',
+                      { className: 'th-card-title' },
+                      h('span', { className: 'th-card-glyph is-stage' }, h(Icon, { name: 'terminal', size: 18 })),
+                      h('div', null, h('h3', null, stage.name), h('p', null, stage.description || t('common.noDescription'))),
+                    ),
+                    h(
+                      'div',
+                      { className: 'th-card-actions', onClick: (event) => event.stopPropagation() },
+                      h(Button, { size: 'sm', variant: 'ghost', onClick: () => onPreview(stage) }, t('common.preview')),
+                      h(IconButton, { icon: 'folder', label: t('stages.openFolder'), onClick: () => onOpenFolder(stage.id) }),
+                      h(IconButton, { icon: 'edit', label: t('common.edit'), onClick: () => onEdit(stage) }),
+                      h(IconButton, { icon: 'trash', label: t('common.delete'), onClick: () => onDelete(stage), className: 'th-danger-hover' }),
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'th-dataset-meta' },
+                    h('span', { className: 'th-source-name' }, h(Icon, { name: 'terminal', size: 13 }), stage.command),
+                    h('span', null, t('stages.inputCount', { n: (stage.inputs || []).length })),
+                    h('span', null, t('stages.parameterCount', { n: (stage.parameters || []).length })),
+                    h('span', null, t('stages.outputCount', { n: (stage.outputs || []).length })),
+                    stage.timeoutSec > 0 ? h('span', null, `${t('stages.timeout')} ${stage.timeoutSec}s`) : null,
+                    stage.assetKind
+                      ? h('span', null, `${t('stages.assetFolder')} · ${stage.assetName}`)
+                      : null,
+                    h('span', null, usage(stage.id) > 0 ? t('stages.usedBy', { n: usage(stage.id) }) : t('stages.unused')),
+                  ),
+                  (stage.outputs || []).length > 0
+                    ? h(
+                        'div',
+                        { className: 'th-column-chips' },
+                        stage.outputs.slice(0, 8).map((output) => h('span', { key: output.id || output.name, className: 'th-column-chip' }, output.name)),
+                        stage.outputs.length > 8
+                          ? h('span', { className: 'th-column-chip is-more' }, `+${stage.outputs.length - 8}`)
+                          : null,
+                      )
+                    : h('div', { className: 'th-column-chips' }, h('span', { className: 'th-stage-no-output' }, t('stages.noOutputs'))),
+                  h(
+                    'div',
+                    { className: 'th-card-foot' },
+                    h('span', null, `${t('common.updated')} ${formatDate(stage.updatedAt)}`),
+                    h(
+                      Button,
+                      {
+                        size: 'sm',
+                        variant: 'ghost',
+                        icon: 'edit',
+                        // The whole card opens the preview; keep this action from
+                        // also bubbling up and opening the preview behind the editor.
+                        onClick: (event) => {
+                          event.stopPropagation();
+                          onEdit(stage);
+                        },
+                      },
+                      t('common.edit'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+      );
+    }
+
+    function TemplateEditor({ initial, stages, datasets, t, saving, onClose, onSave }) {
+      const library = stages || [];
+      const stageById = new Map(library.map((stage) => [stage.id, stage]));
+      const libraryOutputs = (stageId) => stageById.get(stageId)?.outputs || [];
+      const libraryParameters = (stageId) => stageById.get(stageId)?.parameters || [];
       const makeParameter = () => ({
         id: uid('parameter'),
         key: '',
+        type: 'string',
         defaultValue: '',
         description: '',
       });
@@ -2168,15 +3546,24 @@ window.__ModuleLoader__.load({
         initial
           ? {
               ...initial,
-              parameters: (initial.parameters || []).map((parameter) => ({ ...parameter })),
-              stages: initial.stages.map((stage) => ({
-                ...stage,
-                outputs: (stage.outputs || []).map((output) => ({ ...output })),
-                inputRefs: (stage.inputRefs || []).map((reference) => ({ ...reference })),
+              parameters: (initial.parameters || []).map((parameter) => ({
+                ...parameter,
+                type: parameter.type || 'string',
+              })),
+              stages: initial.stages.map((entry) => ({
+                id: entry.id,
+                stageId: entry.stageId,
+                inputs: (entry.inputs || []).map((binding) => ({ ...binding, source: binding.source ? { ...binding.source } : null })),
+                parameters: (entry.parameters || []).map((binding) => ({
+                  ...binding,
+                  source: binding.source ? { ...binding.source } : null,
+                })),
+                inputRefs: (entry.inputRefs || []).map((reference) => ({ ...reference })),
               })),
             }
-          : { name: '', description: '', parameters: [], stages: [makeStage(1)] },
+          : { name: '', description: '', parameters: [], stages: [] },
       );
+      const [stageMenuOpen, setStageMenuOpen] = useState(false);
       const [error, setError] = useState('');
       const [dragIndex, setDragIndex] = useState(null);
       const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -2255,37 +3642,132 @@ window.__ModuleLoader__.load({
       );
 
       const update = (patch) => setDraft((current) => ({ ...current, ...patch }));
-      const updateStage = (stageId, patch) =>
+      const addableStages = library.filter(
+        (stage) => !draft.stages.some((entry) => entry.stageId === stage.id),
+      );
+      const addStage = (stageId) => {
+        const stage = stageById.get(stageId);
+        if (!stage) return;
         setDraft((current) => ({
           ...current,
-          stages: current.stages.map((stage) => (stage.id === stageId ? { ...stage, ...patch } : stage)),
+          stages: [
+            ...current.stages,
+            { id: uid('stage'), stageId: stage.id, inputs: [], parameters: [], inputRefs: [] },
+          ],
         }));
-      const addStage = () =>
-        setDraft((current) => ({ ...current, stages: [...current.stages, makeStage(current.stages.length + 1)] }));
-      const sanitizeReferences = (stages) =>
-        stages.map((stage, index) => {
-          const prior = new Map(stages.slice(0, index).map((candidate) => [candidate.id, candidate]));
-          const seen = new Set();
+        setStageMenuOpen(false);
+      };
+      const isEarlierSource = (entries, index, source) => {
+        if (!source) return false;
+        if (source.kind === 'global') return true;
+        const priorIndex = entries.findIndex((candidate) => candidate.id === source.stageId);
+        return priorIndex >= 0 && priorIndex < index;
+      };
+      const sourceIsValid = (entries, index, source) => {
+        if (!source) return false;
+        if (!isEarlierSource(entries, index, source)) return false;
+        if (source.kind === 'global') return true;
+        const upstream = entries.find((candidate) => candidate.id === source.stageId);
+        const pool = source.kind === 'output'
+          ? libraryOutputs(upstream.stageId)
+          : libraryParameters(upstream.stageId);
+        return pool.some((item) => item.name === source.name);
+      };
+      const sanitizeBindings = (entries) =>
+        entries.map((entry, index) => {
+          const stage = stageById.get(entry.stageId);
+          const declaredInputs = stage?.inputs || [];
+          const declaredParameters = stage?.parameters || [];
           return {
-            ...stage,
-            inputRefs: (stage.inputRefs || []).filter((reference) => {
-              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(reference.key) || seen.has(reference.key)) return false;
-              const upstream = prior.get(reference.stageId);
-              if (!upstream || !(upstream.outputs || []).some((output) => output.name === reference.outputName)) return false;
-              seen.add(reference.key);
-              return true;
-            }),
+            ...entry,
+            inputs: (entry.inputs || [])
+              .filter((binding) => declaredInputs.some((declaration) => declaration.name === binding.name))
+              .map((binding) => ({
+                ...binding,
+                source: sourceIsValid(entries, index, binding.source) ? binding.source : null,
+              })),
+            parameters: (entry.parameters || [])
+              .filter((binding) => declaredParameters.some((declaration) => declaration.name === binding.name))
+              .map((binding) => ({
+                ...binding,
+                source: binding.source && sourceIsValid(entries, index, binding.source) ? binding.source : null,
+              })),
           };
         });
-      const removeStage = (stageId) =>
+      const encodeSource = (source) => {
+        if (!source) return '';
+        return source.kind === 'global' ? `global::${source.name}` : `${source.kind}:${source.stageId}:${source.name}`;
+      };
+      const decodeSource = (value) => {
+        if (!value) return null;
+        const first = value.indexOf(':');
+        if (first < 0) return null;
+        const kind = value.slice(0, first);
+        if (kind === 'global') return { kind, stageId: '', name: value.slice(value.indexOf(':', first + 1) + 1) };
+        if (kind !== 'output' && kind !== 'parameter') return null;
+        const second = value.indexOf(':', first + 1);
+        if (second < 0) return null;
+        return { kind, stageId: value.slice(first + 1, second), name: value.slice(second + 1) };
+      };
+      // Options are filtered by the port type: a value can always feed a string
+      // sink, otherwise the types must match.
+      const sourceGroups = (priorEntries, globals, targetType = 'string') => {
+        const accepts = (type) => portTypesCompatible(type, targetType);
+        return [
+          {
+            id: 'outputs',
+            label: t('templates.bindingOutputs'),
+            options: priorEntries.flatMap(({ entry: priorEntry, stage: priorStage }) =>
+              (priorStage?.outputs || [])
+                .filter((output) => accepts(output.type || 'file'))
+                .map((output) => ({
+                  value: `output:${priorEntry.id}:${output.name}`,
+                  label: `${priorStage.name} · ${output.name} · ${portTypeLabel(t, output.type || 'file')}`,
+                })),
+            ),
+          },
+          {
+            id: 'parameters',
+            label: t('templates.bindingParameters'),
+            options: priorEntries.flatMap(({ entry: priorEntry, stage: priorStage }) =>
+              (priorStage?.parameters || [])
+                .filter((parameter) => accepts(parameter.type || 'string'))
+                .map((parameter) => ({
+                  value: `parameter:${priorEntry.id}:${parameter.name}`,
+                  label: `${priorStage.name} · ${parameter.name} · ${portTypeLabel(t, parameter.type || 'string')}`,
+                })),
+            ),
+          },
+          {
+            id: 'globals',
+            label: t('templates.bindingGlobals'),
+            options: (globals || [])
+              .filter((parameter) => parameter.key.trim() !== '')
+              .filter((parameter) => accepts(parameter.type || 'string'))
+              .map((parameter) => ({
+                value: `global::${parameter.key.trim()}`,
+                label: `${parameter.key.trim()} · ${portTypeLabel(t, parameter.type || 'string')}`,
+              })),
+          },
+        ];
+      };
+      const sourceType = (source) => {
+        if (!source) return null;
+        if (source.kind === 'global') {
+          return draft.parameters.find((parameter) => parameter.key.trim() === source.name)?.type || 'string';
+        }
+        const upstream = draft.stages.find((candidate) => candidate.id === source.stageId);
+        const upstreamStage = upstream ? stageById.get(upstream.stageId) : null;
+        if (!upstreamStage) return null;
+        if (source.kind === 'output') {
+          return (upstreamStage.outputs || []).find((output) => output.name === source.name)?.type || 'file';
+        }
+        return (upstreamStage.parameters || []).find((parameter) => parameter.name === source.name)?.type || 'string';
+      };
+      const removeStage = (entryId) =>
         setDraft((current) => ({
           ...current,
-          stages: current.stages
-            .filter((stage) => stage.id !== stageId)
-            .map((stage) => ({
-              ...stage,
-              inputRefs: (stage.inputRefs || []).filter((reference) => reference.stageId !== stageId),
-            })),
+          stages: sanitizeBindings(current.stages.filter((entry) => entry.id !== entryId)),
         }));
       const reorderStages = (from, to) =>
         setDraft((current) => {
@@ -2293,127 +3775,33 @@ window.__ModuleLoader__.load({
           const stages = [...current.stages];
           const [moved] = stages.splice(from, 1);
           stages.splice(to, 0, moved);
-          return { ...current, stages: sanitizeReferences(stages) };
+          return { ...current, stages: sanitizeBindings(stages) };
         });
-      const moveStage = (stageId, direction) =>
+      const moveStage = (entryId, direction) =>
         setDraft((current) => {
           const stages = [...current.stages];
-          const index = stages.findIndex((stage) => stage.id === stageId);
+          const index = stages.findIndex((entry) => entry.id === entryId);
           const next = index + direction;
           if (index < 0 || next < 0 || next >= stages.length) return current;
           [stages[index], stages[next]] = [stages[next], stages[index]];
-          return { ...current, stages: sanitizeReferences(stages) };
+          return { ...current, stages: sanitizeBindings(stages) };
         });
-      const addOutput = (stageId) =>
+      const updateBinding = (entryId, section, name, source) =>
         setDraft((current) => ({
           ...current,
-          stages: current.stages.map((stage) =>
-            stage.id === stageId
-              ? { ...stage, outputs: [...(stage.outputs || []), { id: uid('output'), file: '', name: '' }] }
-              : stage,
-          ),
-        }));
-      const updateOutput = (stageId, outputId, patch) =>
-        setDraft((current) => {
-          const source = current.stages.find((stage) => stage.id === stageId);
-          const previous = (source?.outputs || []).find((output) => output.id === outputId);
-          const nextName = patch.name !== undefined ? patch.name : previous?.name;
-          return {
-            ...current,
-            stages: current.stages.map((stage) => {
-              if (stage.id === stageId) {
-                return {
-                  ...stage,
-                  outputs: (stage.outputs || []).map((output) =>
-                    output.id === outputId ? { ...output, ...patch } : output,
-                  ),
-                };
-              }
-              if (!previous || previous.name === nextName) return stage;
-              return {
-                ...stage,
-                inputRefs: (stage.inputRefs || []).map((reference) =>
-                  reference.stageId === stageId && reference.outputName === previous.name
-                    ? { ...reference, outputName: nextName }
-                    : reference,
-                ),
-              };
-            }),
-          };
-        });
-      const removeOutput = (stageId, outputId) =>
-        setDraft((current) => {
-          const source = current.stages.find((stage) => stage.id === stageId);
-          const removed = (source?.outputs || []).find((output) => output.id === outputId);
-          return {
-            ...current,
-            stages: current.stages.map((stage) => {
-              if (stage.id === stageId) {
-                return { ...stage, outputs: (stage.outputs || []).filter((output) => output.id !== outputId) };
-              }
-              if (!removed) return stage;
-              return {
-                ...stage,
-                inputRefs: (stage.inputRefs || []).filter(
-                  (reference) => !(reference.stageId === stageId && reference.outputName === removed.name),
-                ),
-              };
-            }),
-          };
-        });
-      const addInputReference = (stageId) =>
-        setDraft((current) => ({
-          ...current,
-          stages: current.stages.map((stage) => {
-            if (stage.id !== stageId) return stage;
-            const stageIndex = current.stages.indexOf(stage);
-            const upstream = current.stages
-              .slice(0, stageIndex)
-              .find((candidate) => (candidate.outputs || []).some((output) => output.name.trim() !== ''));
-            const firstOutput = upstream?.outputs?.find((output) => output.name.trim() !== '');
-            return {
-              ...stage,
-              inputRefs: [
-                ...(stage.inputRefs || []),
-                {
-                  id: uid('input'),
-                  key: '',
-                  stageId: upstream?.id || '',
-                  outputName: firstOutput?.name || '',
-                },
-              ],
+          stages: current.stages.map((entry) => {
+            if (entry.id !== entryId) return entry;
+            const bindings = [...(entry[section] || [])];
+            const index = bindings.findIndex((binding) => binding.name === name);
+            const next = {
+              ...(index >= 0 ? bindings[index] : { id: uid('binding') }),
+              name,
+              source: source || null,
             };
+            if (index >= 0) bindings[index] = next;
+            else bindings.push(next);
+            return { ...entry, [section]: bindings };
           }),
-        }));
-      const updateInputReference = (stageId, referenceId, patch) =>
-        setDraft((current) => ({
-          ...current,
-          stages: current.stages.map((stage) => {
-            if (stage.id !== stageId) return stage;
-            return {
-              ...stage,
-              inputRefs: (stage.inputRefs || []).map((reference) => {
-                if (reference.id !== referenceId) return reference;
-                const next = { ...reference, ...patch };
-                if (patch.stageId !== undefined) {
-                  const upstream = current.stages.find((candidate) => candidate.id === patch.stageId);
-                  if (!(upstream?.outputs || []).some((output) => output.name === next.outputName)) {
-                    next.outputName = upstream?.outputs?.find((output) => output.name.trim() !== '')?.name || '';
-                  }
-                }
-                return next;
-              }),
-            };
-          }),
-        }));
-      const removeInputReference = (stageId, referenceId) =>
-        setDraft((current) => ({
-          ...current,
-          stages: current.stages.map((stage) =>
-            stage.id === stageId
-              ? { ...stage, inputRefs: (stage.inputRefs || []).filter((reference) => reference.id !== referenceId) }
-              : stage,
-          ),
         }));
       const addParameter = () =>
         setDraft((current) => ({ ...current, parameters: [...current.parameters, makeParameter()] }));
@@ -2434,41 +3822,69 @@ window.__ModuleLoader__.load({
         const problems = [];
         if (draft.name.trim() === '') problems.push(t('templates.nameRequired'));
         if (draft.stages.length === 0) problems.push(t('templates.stageRequired'));
-        const parameterKeys = new Set(
-          draft.parameters.map((parameter) => parameter.key.trim()).filter((key) => key !== ''),
-        );
-        const stageNames = new Set();
-        for (const [stageIndex, stage] of draft.stages.entries()) {
-          if (stage.command.trim() === '') problems.push(t('templates.commandRequired'));
-          const stageName = stage.name.trim();
-          if (stageName !== '' && stageNames.has(stageName)) problems.push(t('templates.stageNameDuplicate'));
-          stageNames.add(stageName);
-          const outputNames = new Set();
-          for (const output of stage.outputs || []) {
-            const name = output.name.trim();
-            const file = output.file.trim();
-            if (name === '' || file === '') problems.push(t('templates.outputRequired'));
-            else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) problems.push(t('templates.outputNameInvalid'));
-            else if (outputNames.has(name)) problems.push(t('templates.outputNameDuplicate'));
-            outputNames.add(name);
-            if (
-              file !== '' &&
-              (/^(?:[A-Za-z]:[\\/]|[\\/])/.test(file) || /(^|[\\/])\.\.([\\/]|$)/.test(file))
-            ) {
-              problems.push(t('templates.outputFileInvalid'));
+        const globalKeys = new Set(draft.parameters.map((parameter) => parameter.key.trim()).filter((key) => key !== ''));
+        for (const [stageIndex, entry] of draft.stages.entries()) {
+          const stage = stageById.get(entry.stageId);
+          if (!stage) {
+            problems.push(t('templates.stageMissing'));
+            continue;
+          }
+          const priorEntries = draft.stages.slice(0, stageIndex);
+          const sourceProblem = (source) => {
+            if (!source) return 'missing';
+            if (source.kind === 'global') return globalKeys.has(source.name) ? null : 'invalid';
+            const upstream = priorEntries.find((candidate) => candidate.id === source.stageId);
+            if (!upstream) return 'invalid';
+            const pool = source.kind === 'output'
+              ? libraryOutputs(upstream.stageId)
+              : libraryParameters(upstream.stageId);
+            return pool.some((item) => item.name === source.name) ? null : 'invalid';
+          };
+          const typeProblem = (source, declaration) => {
+            if (!source) return null;
+            const from = sourceType(source);
+            if (from === null) return null;
+            return portTypesCompatible(from, declaration.type || 'string')
+              ? null
+              : { expected: declaration.type || 'string', actual: from };
+          };
+          for (const declaration of stage.inputs || []) {
+            const binding = (entry.inputs || []).find((candidate) => candidate.name === declaration.name);
+            const problem = sourceProblem(binding?.source);
+            const requiresBinding = declaration.required !== false;
+            if (problem === 'missing') {
+              if (requiresBinding) problems.push(t('templates.bindingRequired', { name: declaration.name }));
+            } else if (problem === 'invalid') {
+              problems.push(t('templates.bindingInvalid', { name: declaration.name }));
+            } else if (binding?.source) {
+              const mismatch = typeProblem(binding.source, declaration);
+              if (mismatch) {
+                problems.push(
+                  t('templates.bindingTypeMismatch', {
+                    name: declaration.name,
+                    expected: portTypeLabel(t, mismatch.expected),
+                    actual: portTypeLabel(t, mismatch.actual),
+                  }),
+                );
+              }
             }
           }
-          const referenceKeys = new Set();
-          for (const reference of stage.inputRefs || []) {
-            const key = reference.key.trim();
-            if (key === '') problems.push(t('templates.inputKeyRequired'));
-            else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) problems.push(t('templates.inputKeyInvalid'));
-            else if (referenceKeys.has(key)) problems.push(t('templates.inputKeyDuplicate'));
-            else if (parameterKeys.has(key)) problems.push(t('templates.inputKeyConflict'));
-            referenceKeys.add(key);
-            const upstream = draft.stages.slice(0, stageIndex).find((candidate) => candidate.id === reference.stageId);
-            if (!upstream || !(upstream.outputs || []).some((output) => output.name === reference.outputName)) {
-              problems.push(t('templates.inputStageRequired'));
+          for (const declaration of stage.parameters || []) {
+            const binding = (entry.parameters || []).find((candidate) => candidate.name === declaration.name);
+            if (!binding?.source) continue;
+            if (sourceProblem(binding.source)) {
+              problems.push(t('templates.bindingInvalid', { name: declaration.name }));
+              continue;
+            }
+            const mismatch = typeProblem(binding.source, declaration);
+            if (mismatch) {
+              problems.push(
+                t('templates.bindingTypeMismatch', {
+                  name: declaration.name,
+                  expected: portTypeLabel(t, mismatch.expected),
+                  actual: portTypeLabel(t, mismatch.actual),
+                }),
+              );
             }
           }
         }
@@ -2479,12 +3895,18 @@ window.__ModuleLoader__.load({
           else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) problems.push(t('templates.parameterKeyInvalid'));
           else if (keys.has(key)) problems.push(t('templates.parameterKeyDuplicate'));
           keys.add(key);
+          if (key !== '' && !portDefaultMatches(parameter.type || 'string', parameter.defaultValue)) {
+            problems.push(
+              t('stages.defaultInvalid', { name: key, type: portTypeLabel(t, parameter.type || 'string') }),
+            );
+          }
         }
         if (problems.length > 0) {
           setError([...new Set(problems)].join(' '));
           return;
         }
         const now = Date.now();
+        const sanitized = sanitizeBindings(draft.stages);
         onSave({
           ...draft,
           id: initial?.id || uid('template'),
@@ -2495,25 +3917,34 @@ window.__ModuleLoader__.load({
           parameters: draft.parameters.map((parameter) => ({
             ...parameter,
             key: parameter.key.trim(),
+            type: parameter.type || 'string',
             defaultValue: parameter.defaultValue,
             description: parameter.description.trim(),
           })),
-          stages: sanitizeReferences(draft.stages).map((stage, index) => ({
-            ...stage,
-            name: stage.name.trim() || t('templates.stageN', { n: index + 1 }),
-            command: stage.command.trim(),
-            args: stage.args.trim(),
-            outputs: (stage.outputs || []).map((output) => ({
-              ...output,
-              file: output.file.trim(),
-              name: output.name.trim(),
-            })),
-            inputRefs: (stage.inputRefs || []).map((reference) => ({
-              ...reference,
-              key: reference.key.trim(),
-            })),
-            description: stage.description.trim(),
-          })),
+          stages: sanitized
+            .filter((entry) => stageById.has(entry.stageId))
+            .map((entry) => {
+              const stage = stageById.get(entry.stageId);
+              const bindingsFor = (section, declarations) =>
+                (declarations || []).map((declaration) => {
+                  const binding = (entry[section] || []).find((candidate) => candidate.name === declaration.name);
+                  return {
+                    id: binding?.id || uid('binding'),
+                    name: declaration.name,
+                    source: binding?.source || null,
+                  };
+                });
+              return {
+                id: entry.id,
+                stageId: entry.stageId,
+                inputs: bindingsFor('inputs', stage.inputs),
+                parameters: bindingsFor('parameters', stage.parameters),
+                inputRefs: (entry.inputRefs || []).map((reference) => ({
+                  ...reference,
+                  key: reference.key.trim(),
+                })),
+              };
+            }),
         });
       };
 
@@ -2551,6 +3982,27 @@ window.__ModuleLoader__.load({
               placeholder: t('templates.descriptionPlaceholder'),
               onChange: (event) => update({ description: event.target.value }),
             })),
+            h(Field, {
+              label: t('templates.dataset'),
+              hint: t('templates.datasetHint'),
+              className: 'th-span-2',
+            }, h(
+              'select',
+              {
+                className: 'th-select',
+                value: draft.datasetId || '',
+                onChange: (event) => update({ datasetId: event.target.value }),
+              },
+              h('option', { value: '' }, t('templates.noDataset')),
+              draft.datasetId && !(datasets || []).some((item) => item.id === draft.datasetId)
+                ? h('option', { value: draft.datasetId }, t('templates.datasetMissing'))
+                : null,
+              (datasets || []).map((dataset) => h(
+                'option',
+                { key: dataset.id, value: dataset.id },
+                `${dataset.name} · ${t('common.rows', { n: dataset.rowCount })}`,
+              )),
+            )),
           ),
           h(
             'div',
@@ -2567,6 +4019,7 @@ window.__ModuleLoader__.load({
                   'div',
                   { className: 'th-param-labels' },
                   h('span', null, t('templates.parameterKey')),
+                  h('span', null, t('stages.type')),
                   h('span', null, t('templates.parameterDefault')),
                   h('span', null, t('templates.parameterDescription')),
                   h('span', null, ''),
@@ -2582,6 +4035,16 @@ window.__ModuleLoader__.load({
                       'aria-label': t('templates.parameterKey'),
                       onChange: (event) => updateParameter(parameter.id, { key: event.target.value }),
                     }),
+                    h(
+                      'select',
+                      {
+                        className: 'th-select th-port-type',
+                        value: parameter.type || 'string',
+                        'aria-label': `${parameter.key || t('templates.parameterKey')} · ${t('stages.type')}`,
+                        onChange: (event) => updateParameter(parameter.id, { type: event.target.value }),
+                      },
+                      PORT_PARAMETER_TYPES.map((type) => h('option', { key: type, value: type }, portTypeLabel(t, type))),
+                    ),
                     h('input', {
                       className: 'th-input th-mono',
                       value: parameter.defaultValue,
@@ -2611,286 +4074,353 @@ window.__ModuleLoader__.load({
             h(
               'div',
               null,
-              h('h3', null, t('templates.stages')),
+              h('h3', null, t('templates.pipeline')),
               h('p', null, t('templates.stagesHint')),
-              h('p', { className: 'th-section-subhint' }, t('templates.dragHint')),
+              h('p', { className: 'th-section-subhint' }, t('templates.stageRefHint')),
             ),
           ),
-          h(
-            'ol',
-            { className: 'th-stagebuilder' },
-            draft.stages.map((stage, index) =>
-              h(
-                'li',
-                {
-                  key: stage.id,
-                  className: cx(
-                    'th-stagebuilder-item',
-                    dragIndex === index && 'is-dragging',
-                    dragOverIndex === index && dragIndex !== null && dragIndex !== index && 'is-drag-over',
-                  ),
-                  onDragOver: (event) => {
-                    if (dragIndexRef.current === null) return;
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = 'move';
-                    if (dragOverIndex !== index) setDragOverIndex(index);
-                  },
-                  onDragLeave: () => {
-                    if (dragOverIndex === index) setDragOverIndex(null);
-                  },
-                  onDrop: (event) => {
-                    event.preventDefault();
-                    const from = dragIndexRef.current;
-                    dragIndexRef.current = null;
-                    setDragIndex(null);
-                    setDragOverIndex(null);
-                    removeDragGhost();
-                    if (from !== null) reorderStages(from, index);
-                  },
-                },
-                h('span', { className: 'th-stagebuilder-index' }, String(index + 1).padStart(2, '0')),
-                h(
-                  'div',
-                  { className: 'th-stagebuilder-card' },
-                  h(
-                    'div',
-                    { className: 'th-stagebuilder-top' },
-                    h('input', {
-                      className: 'th-input th-stage-name',
-                      value: stage.name,
-                      placeholder: t('templates.stageNamePlaceholder'),
-                      'aria-label': t('templates.stageName'),
-                      onChange: (event) => updateStage(stage.id, { name: event.target.value }),
-                    }),
-                    h(
-                      'div',
-                      { className: 'th-stagebuilder-tools' },
-                      h(
-                        'span',
-                        {
-                          className: 'th-drag-handle',
-                          draggable: true,
-                          role: 'button',
-                          tabIndex: -1,
-                          title: t('templates.dragHandle'),
-                          'aria-label': t('templates.dragHandle'),
-                          onDragStart: (event) => {
-                            dragIndexRef.current = index;
-                            setDragIndex(index);
-                            setDragOverIndex(index);
-                            showDragGhost(event);
-                            event.dataTransfer.effectAllowed = 'move';
-                            try {
-                              event.dataTransfer.setData('text/plain', String(index));
-                            } catch {
-                              // Some browsers do not expose a writable drag store.
-                            }
-                          },
-                          onDragEnd: () => {
-                            dragIndexRef.current = null;
-                            setDragIndex(null);
-                            setDragOverIndex(null);
-                            removeDragGhost();
-                          },
-                        },
-                        h(Icon, { name: 'grip', size: 15 }),
+          draft.stages.length === 0
+            ? h(
+                'div',
+                { className: 'th-param-empty' },
+                library.length === 0 ? t('templates.stageLibraryEmpty') : t('templates.noStagesHint'),
+              )
+            : h(
+                'ol',
+                { className: 'th-stagebuilder' },
+                draft.stages.map((entry, index) => {
+                  const stage = stageById.get(entry.stageId);
+                  const outputs = stage?.outputs || [];
+                  const priorEntries = draft.stages.slice(0, index).map((candidate) => ({
+                    entry: candidate,
+                    stage: stageById.get(candidate.stageId),
+                  }));
+                  return h(
+                    'li',
+                    {
+                      key: entry.id,
+                      className: cx(
+                        'th-stagebuilder-item',
+                        dragIndex === index && 'is-dragging',
+                        dragOverIndex === index && dragIndex !== null && dragIndex !== index && 'is-drag-over',
                       ),
-                      h(IconButton, { icon: 'arrow-up', label: t('templates.moveUp'), onClick: () => moveStage(stage.id, -1), disabled: index === 0 }),
-                      h(IconButton, { icon: 'arrow-down', label: t('templates.moveDown'), onClick: () => moveStage(stage.id, 1), disabled: index === draft.stages.length - 1 }),
-                      h(IconButton, { icon: 'trash', label: t('templates.removeStage'), onClick: () => removeStage(stage.id), className: 'th-danger-hover' }),
-                    ),
-                  ),
-                  h(
-                    'div',
-                    { className: 'th-stagebuilder-fields' },
-                    h(Field, { label: t('templates.stageCommand'), required: true, className: 'th-span-2' }, h('input', {
-                      className: 'th-input th-mono',
-                      value: stage.command,
-                      placeholder: t('templates.stageCommandPlaceholder'),
-                      onChange: (event) => updateStage(stage.id, { command: event.target.value }),
-                    })),
-                    h(Field, { label: t('templates.stageArgs'), hint: t('templates.stageArgsHint') }, h('input', {
-                      className: 'th-input th-mono',
-                      value: stage.args,
-                      placeholder: t('templates.stageArgsPlaceholder'),
-                      onChange: (event) => updateStage(stage.id, { args: event.target.value }),
-                    })),
-                    h(Field, { label: t('templates.stageDescription') }, h('input', {
-                      className: 'th-input',
-                      value: stage.description,
-                      placeholder: t('templates.stageDescriptionPlaceholder'),
-                      onChange: (event) => updateStage(stage.id, { description: event.target.value }),
-                    })),
-                  ),
-                  h(
-                    'div',
-                    { className: 'th-stage-io' },
+                      onDragOver: (event) => {
+                        if (dragIndexRef.current === null) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        if (dragOverIndex !== index) setDragOverIndex(index);
+                      },
+                      onDragLeave: () => {
+                        if (dragOverIndex === index) setDragOverIndex(null);
+                      },
+                      onDrop: (event) => {
+                        event.preventDefault();
+                        const from = dragIndexRef.current;
+                        dragIndexRef.current = null;
+                        setDragIndex(null);
+                        setDragOverIndex(null);
+                        removeDragGhost();
+                        if (from !== null) reorderStages(from, index);
+                      },
+                    },
+                    h('span', { className: 'th-stagebuilder-index' }, String(index + 1).padStart(2, '0')),
                     h(
                       'div',
-                      { className: 'th-stage-io-head' },
-                      h(Icon, { name: 'folder', size: 13 }),
-                      h('strong', null, t('templates.outputs')),
-                      h('span', null, t('templates.outputsHint')),
-                      h(Button, {
-                        size: 'sm',
-                        variant: 'ghost',
-                        icon: 'plus',
-                        onClick: () => addOutput(stage.id),
-                      }, t('templates.addOutput')),
-                    ),
-                    (stage.outputs || []).length === 0
-                      ? h('span', { className: 'th-input-source-empty' }, t('templates.noOutputs'))
-                      : h(
-                          'div',
-                          { className: 'th-output-map-list' },
-                          h(
-                            'div',
-                            { className: 'th-output-map-labels' },
-                            h('span', null, t('templates.outputFile')),
-                            h('span', null, t('templates.outputName')),
-                            h('span', null, ''),
-                          ),
-                          (stage.outputs || []).map((output) =>
-                            h(
-                              'div',
-                              { key: output.id, className: 'th-output-map-row' },
-                              h('input', {
-                                className: 'th-input th-mono',
-                                value: output.file,
-                                placeholder: t('templates.outputFilePlaceholder'),
-                                'aria-label': t('templates.outputFile'),
-                                onChange: (event) => updateOutput(stage.id, output.id, { file: event.target.value }),
-                              }),
-                              h('input', {
-                                className: 'th-input th-mono',
-                                value: output.name,
-                                placeholder: t('templates.outputNamePlaceholder'),
-                                'aria-label': t('templates.outputName'),
-                                onChange: (event) => updateOutput(stage.id, output.id, { name: event.target.value }),
-                              }),
-                              h(IconButton, {
-                                icon: 'trash',
-                                label: t('common.delete'),
-                                onClick: () => removeOutput(stage.id, output.id),
-                                className: 'th-danger-hover',
-                              }),
-                            ),
-                          ),
-                        ),
-                  ),
-                  (() => {
-                    const priorStages = draft.stages.slice(0, index).map((previous) => ({
-                      previous,
-                      outputs: (previous.outputs || []).filter((output) => output.name.trim() !== ''),
-                    }));
-                    const referenceable = priorStages.filter((entry) => entry.outputs.length > 0);
-                    return h(
-                      'div',
-                      { className: 'th-stage-io' },
+                      { className: 'th-stagebuilder-card' },
                       h(
                         'div',
-                        { className: 'th-stage-io-head' },
-                        h(Icon, { name: 'external', size: 13 }),
-                        h('strong', null, t('templates.inputs')),
-                        h('span', null, t('templates.inputsHint')),
-                        h(Button, {
-                          size: 'sm',
-                          variant: 'ghost',
-                          icon: 'plus',
-                          disabled: referenceable.length === 0,
-                          onClick: () => addInputReference(stage.id),
-                        }, t('templates.addInputRef')),
+                        { className: 'th-stagebuilder-top' },
+                        h(
+                          'div',
+                          { className: 'th-stage-ref' },
+                          h('strong', { className: 'th-stage-ref-name' }, stage ? stage.name : t('templates.stageMissing')),
+                          stage?.description ? h('span', { className: 'th-stage-ref-desc' }, stage.description) : null,
+                          h(
+                            'code',
+                            { className: 'th-stage-ref-command' },
+                            stage ? stage.command : '—',
+                          ),
+                        ),
+                        h(
+                          'div',
+                          { className: 'th-stagebuilder-tools' },
+                          h(
+                            'span',
+                            {
+                              className: 'th-drag-handle',
+                              draggable: true,
+                              role: 'button',
+                              tabIndex: -1,
+                              title: t('templates.dragHandle'),
+                              'aria-label': t('templates.dragHandle'),
+                              onDragStart: (event) => {
+                                dragIndexRef.current = index;
+                                setDragIndex(index);
+                                setDragOverIndex(index);
+                                showDragGhost(event);
+                                event.dataTransfer.effectAllowed = 'move';
+                                try {
+                                  event.dataTransfer.setData('text/plain', String(index));
+                                } catch {
+                                  // Some browsers do not expose a writable drag store.
+                                }
+                              },
+                              onDragEnd: () => {
+                                dragIndexRef.current = null;
+                                setDragIndex(null);
+                                setDragOverIndex(null);
+                                removeDragGhost();
+                              },
+                            },
+                            h(Icon, { name: 'grip', size: 15 }),
+                          ),
+                          h(IconButton, { icon: 'arrow-up', label: t('templates.moveUp'), onClick: () => moveStage(entry.id, -1), disabled: index === 0 }),
+                          h(IconButton, { icon: 'arrow-down', label: t('templates.moveDown'), onClick: () => moveStage(entry.id, 1), disabled: index === draft.stages.length - 1 }),
+                          h(IconButton, { icon: 'trash', label: t('templates.removeStage'), onClick: () => removeStage(entry.id), className: 'th-danger-hover' }),
+                        ),
                       ),
-                      referenceable.length === 0
-                        ? h('span', { className: 'th-input-source-empty' }, t('templates.noOutputsToReference'))
-                        : null,
-                      (stage.inputRefs || []).length === 0
-                        ? referenceable.length > 0
-                          ? h('span', { className: 'th-input-source-empty' }, t('templates.noInputRefs'))
-                          : null
-                        : h(
-                            'div',
-                            { className: 'th-inputref-list' },
-                            h(
+                      h(
+                        'div',
+                        { className: 'th-stage-io' },
+                        h(
+                          'div',
+                          { className: 'th-stage-io-head' },
+                          h(Icon, { name: 'folder', size: 13 }),
+                          h('strong', null, t('stages.outputs')),
+                        ),
+                        outputs.length === 0
+                          ? h('span', { className: 'th-input-source-empty' }, t('stages.noOutputs'))
+                          : h(
                               'div',
-                              { className: 'th-inputref-labels' },
-                              h('span', null, t('templates.inputKey')),
-                              h('span', null, t('templates.inputStage')),
-                              h('span', null, t('templates.inputOutput')),
-                              h('span', null, ''),
-                            ),
-                            (stage.inputRefs || []).map((reference) => {
-                              const upstream = priorStages.find((entry) => entry.previous.id === reference.stageId);
-                              const outputs = upstream?.outputs || [];
-                              return h(
-                                'div',
-                                { key: reference.id, className: 'th-inputref-row' },
-                                h('input', {
-                                  className: 'th-input th-mono',
-                                  value: reference.key,
-                                  placeholder: t('templates.inputKeyPlaceholder'),
-                                  'aria-label': t('templates.inputKey'),
-                                  onChange: (event) =>
-                                    updateInputReference(stage.id, reference.id, { key: event.target.value }),
-                                }),
+                              { className: 'th-stage-output-chips' },
+                              outputs.map((output) =>
                                 h(
-                                  'select',
+                                  'span',
+                                  { key: output.id || output.name, className: 'th-stage-output-chip' },
+                                  `${output.name} · ${output.file}`,
+                                ),
+                              ),
+                            ),
+                      ),
+                      h(
+                        'div',
+                        { className: 'th-stage-io' },
+                        h(
+                          'div',
+                          { className: 'th-stage-io-head' },
+                          h(Icon, { name: 'external', size: 13 }),
+                          h('strong', null, t('templates.bindings')),
+                          h('span', null, t('templates.bindingsHint')),
+                        ),
+                        (stage?.inputs || []).length === 0 && (stage?.parameters || []).length === 0
+                          ? h(
+                              'span',
+                              { className: 'th-input-source-empty' },
+                              `${t('templates.bindingNoInputs')} · ${t('templates.bindingNoParameters')}`,
+                            )
+                          : null,
+                        (stage?.inputs || []).length > 0
+                          ? h(
+                              'div',
+                              { className: 'th-binding-list' },
+                              h(
+                                'div',
+                                { className: 'th-binding-labels' },
+                                h('span', null, t('templates.bindingInput')),
+                                h('span', null, t('templates.bindingSource')),
+                                h('span', null, ''),
+                              ),
+                              (stage.inputs || []).map((declaration) => {
+                                const binding = (entry.inputs || []).find((candidate) => candidate.name === declaration.name);
+                                const targetType = declaration.type || 'string';
+                                const groups = sourceGroups(priorEntries, draft.parameters, targetType);
+                                const hasOptions = groups.some((group) => group.options.length > 0);
+                                const actualType = sourceType(binding?.source);
+                                const mismatch = binding?.source && actualType
+                                  ? !portTypesCompatible(actualType, targetType)
+                                  : false;
+                                const required = declaration.required !== false;
+                                return h(
+                                  'div',
                                   {
-                                    className: 'th-select',
-                                    value: reference.stageId,
-                                    'aria-label': t('templates.inputStage'),
-                                    onChange: (event) =>
-                                      updateInputReference(stage.id, reference.id, { stageId: event.target.value }),
+                                    key: declaration.name,
+                                    className: cx('th-binding-row', (required && !binding?.source) || mismatch ? 'is-invalid' : null),
                                   },
-                                  h('option', { value: '' }, '—'),
-                                  referenceable.map((entry) =>
+                                  h(
+                                    'span',
+                                    { className: 'th-binding-name' },
+                                    h('code', null, declaration.name),
+                                    h('em', { className: 'th-port-type-badge' }, portTypeLabel(t, targetType)),
+                                    required ? null : h('em', { className: 'th-port-optional', title: t('templates.bindingOptionalHint') }, t('stages.optional')),
+                                  ),
+                                  h(
+                                    'select',
+                                    {
+                                      className: 'th-select',
+                                      value: encodeSource(binding?.source),
+                                      'aria-label': `${declaration.name} · ${t('templates.bindingSource')}`,
+                                      onChange: (event) =>
+                                        updateBinding(entry.id, 'inputs', declaration.name, decodeSource(event.target.value)),
+                                    },
                                     h(
                                       'option',
-                                      { key: entry.previous.id, value: entry.previous.id },
-                                      entry.previous.name || t('templates.stageN', { n: index }),
+                                      { value: '' },
+                                      hasOptions ? t('templates.bindingUnbound') : t('templates.bindingNoSources'),
+                                    ),
+                                    groups.map((group) =>
+                                      group.options.length === 0
+                                        ? null
+                                        : h(
+                                            'optgroup',
+                                            { key: group.id, label: group.label },
+                                            group.options.map((option) =>
+                                              h('option', { key: option.value, value: option.value }, option.label),
+                                            ),
+                                          ),
                                     ),
                                   ),
-                                ),
-                                h(
-                                  'select',
-                                  {
-                                    className: 'th-select',
-                                    value: reference.outputName,
-                                    'aria-label': t('templates.inputOutput'),
-                                    onChange: (event) =>
-                                      updateInputReference(stage.id, reference.id, { outputName: event.target.value }),
-                                  },
-                                  h('option', { value: '' }, '—'),
-                                  outputs.map((output) =>
-                                    h('option', { key: output.id, value: output.name }, `${output.name} · ${output.file}`),
+                                  h(
+                                    'span',
+                                    { className: cx('th-binding-default', mismatch && 'is-error') },
+                                    mismatch
+                                      ? t('templates.bindingTypeMismatch', {
+                                          name: declaration.name,
+                                          expected: portTypeLabel(t, targetType),
+                                          actual: portTypeLabel(t, actualType),
+                                        })
+                                      : declaration.description || '',
                                   ),
-                                ),
-                                h(IconButton, {
-                                  icon: 'trash',
-                                  label: t('common.delete'),
-                                  onClick: () => removeInputReference(stage.id, reference.id),
-                                  className: 'th-danger-hover',
-                                }),
-                              );
-                            }),
-                          ),
-                    );
-                  })(),
-                ),
+                                );
+                              }),
+                            )
+                          : null,
+                        (stage?.parameters || []).length > 0
+                          ? h(
+                              'div',
+                              { className: 'th-binding-list' },
+                              h(
+                                'div',
+                                { className: 'th-binding-labels' },
+                                h('span', null, t('templates.bindingParameter')),
+                                h('span', null, t('templates.bindingSource')),
+                                h('span', null, ''),
+                              ),
+                              (stage.parameters || []).map((declaration) => {
+                                const binding = (entry.parameters || []).find((candidate) => candidate.name === declaration.name);
+                                const targetType = declaration.type || 'string';
+                                const groups = sourceGroups(priorEntries, draft.parameters, targetType);
+                                const actualType = sourceType(binding?.source);
+                                const mismatch = binding?.source && actualType
+                                  ? !portTypesCompatible(actualType, targetType)
+                                  : false;
+                                return h(
+                                  'div',
+                                  {
+                                    key: declaration.name,
+                                    className: cx(
+                                      'th-binding-row',
+                                      (binding?.source && !sourceIsValid(draft.stages, index, binding.source)) || mismatch ? 'is-invalid' : null,
+                                    ),
+                                  },
+                                  h(
+                                    'span',
+                                    { className: 'th-binding-name' },
+                                    h('code', null, declaration.name),
+                                    h('em', { className: 'th-port-type-badge' }, portTypeLabel(t, targetType)),
+                                  ),
+                                  h(
+                                    'select',
+                                    {
+                                      className: 'th-select',
+                                      value: encodeSource(binding?.source),
+                                      'aria-label': `${declaration.name} · ${t('templates.bindingSource')}`,
+                                      onChange: (event) =>
+                                        updateBinding(entry.id, 'parameters', declaration.name, decodeSource(event.target.value)),
+                                    },
+                                    h(
+                                      'option',
+                                      { value: '' },
+                                      t('templates.bindingUseDefault', { value: declaration.defaultValue || '""' }),
+                                    ),
+                                    groups.map((group) =>
+                                      group.options.length === 0
+                                        ? null
+                                        : h(
+                                            'optgroup',
+                                            { key: group.id, label: group.label },
+                                            group.options.map((option) =>
+                                              h('option', { key: option.value, value: option.value }, option.label),
+                                            ),
+                                          ),
+                                    ),
+                                  ),
+                                  h(
+                                    'span',
+                                    { className: cx('th-binding-default', mismatch && 'is-error') },
+                                    mismatch
+                                      ? t('templates.bindingTypeMismatch', {
+                                          name: declaration.name,
+                                          expected: portTypeLabel(t, targetType),
+                                          actual: portTypeLabel(t, actualType),
+                                        })
+                                      : declaration.description || '',
+                                  ),
+                                );
+                              }),
+                            )
+                          : null,
+                      ),
+                    ),
+                  );
+                }),
               ),
-            ),
-          ),
           h(
-            'button',
-            { type: 'button', className: 'th-add-group', onClick: addStage },
-            h(Icon, { name: 'plus', size: 18 }),
-            h('span', null, t('templates.addStage')),
+            'div',
+            { className: 'th-pipeline-add' },
+            h(
+              Button,
+              {
+                variant: 'secondary',
+                icon: 'plus',
+                disabled: addableStages.length === 0,
+                onClick: () => setStageMenuOpen((open) => !open),
+                'aria-expanded': stageMenuOpen,
+              },
+              t('templates.addStage'),
+            ),
+            stageMenuOpen
+              ? h(
+                  'div',
+                  { className: 'th-stage-menu', role: 'menu' },
+                  addableStages.length === 0
+                    ? h(
+                        'div',
+                        { className: 'th-stage-menu-empty' },
+                        library.length === 0 ? t('templates.stageLibraryEmpty') : t('templates.noMoreStages'),
+                      )
+                    : addableStages.map((stage) =>
+                        h(
+                          'button',
+                          {
+                            key: stage.id,
+                            type: 'button',
+                            role: 'menuitem',
+                            className: 'th-stage-menu-item',
+                            onClick: () => addStage(stage.id),
+                          },
+                          h('strong', null, stage.name),
+                          h('span', null, stage.command),
+                        ),
+                      ),
+                )
+              : null,
           ),
         ),
       );
     }
 
-    function TemplatePreview({ template, usageCount, t, onClose, onEdit }) {
+    function TemplatePreview({ template, stages, datasets, usageCount, t, onClose, onEdit, onOpenFolder }) {
+      const dataset = (datasets || []).find((item) => item.id === template.datasetId) ?? null;
       return h(
         Modal,
         {
@@ -2901,6 +4431,7 @@ window.__ModuleLoader__.load({
           width: 'min(880px, calc(100vw - 24px))',
           footer: [
             h(Button, { key: 'close', variant: 'ghost', onClick: onClose }, t('common.close')),
+            h(Button, { key: 'folder', variant: 'secondary', icon: 'folder', onClick: () => onOpenFolder(template.id) }, t('templates.openFolder')),
             h(Button, { key: 'edit', variant: 'primary', icon: 'edit', onClick: onEdit }, t('common.edit')),
           ],
         },
@@ -2911,6 +4442,7 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'th-preview-stats' },
             h('span', { className: 'th-format-pill' }, t('templates.stageCount', { n: template.stages.length })),
+            h('span', null, `${t('templates.dataset')} · ${dataset ? dataset.name : (template.datasetId ? t('templates.datasetMissing') : t('templates.noDataset'))}`),
             h('span', null, t('templates.previewUsage', { n: usageCount })),
             h('span', null, `${t('common.updated')} ${formatDate(template.updatedAt)}`),
           ),
@@ -2930,6 +4462,7 @@ window.__ModuleLoader__.load({
                     'div',
                     { className: 'th-param-labels' },
                     h('span', null, t('templates.parameterKey')),
+                    h('span', null, t('stages.type')),
                     h('span', null, t('templates.parameterDefault')),
                     h('span', null, t('templates.parameterDescription')),
                   ),
@@ -2938,6 +4471,7 @@ window.__ModuleLoader__.load({
                       'div',
                       { key: parameter.id || parameter.key, className: 'th-param-row' },
                       h('code', { className: 'th-param-key' }, `{{${parameter.key}}}`),
+                      h('em', { className: 'th-port-type-badge' }, portTypeLabel(t, parameter.type || 'string')),
                       h('code', { className: 'th-param-default' }, parameter.defaultValue || '—'),
                       h('span', { className: 'th-param-description' }, parameter.description || '—'),
                     ),
@@ -2955,10 +4489,11 @@ window.__ModuleLoader__.load({
             : h(
                 'ol',
                 { className: 'th-preview-stage-list' },
-                template.stages.map((stage, index) =>
-                  h(
+                template.stages.map((entry, index) => {
+                  const stage = (stages || []).find((candidate) => candidate.id === entry.stageId);
+                  return h(
                     'li',
-                    { key: stage.id, className: 'th-preview-stage' },
+                    { key: entry.id, className: 'th-preview-stage' },
                     h('span', { className: 'th-preview-stage-index' }, String(index + 1).padStart(2, '0')),
                     h(
                       'div',
@@ -2966,45 +4501,58 @@ window.__ModuleLoader__.load({
                       h(
                         'div',
                         { className: 'th-preview-stage-title' },
-                        h('strong', null, stage.name),
-                        stage.description ? h('span', null, stage.description) : null,
+                        h('strong', null, stage ? stage.name : t('templates.stageMissing')),
+                        stage?.description ? h('span', null, stage.description) : null,
                       ),
-                      h('div', { className: 'th-preview-command' }, h(Icon, { name: 'terminal', size: 13 }), h('code', null, stage.command || '—')),
-                      h(
-                        'div',
-                        { className: 'th-preview-args' },
-                        h('span', null, t('templates.defaultArgs')),
-                        stage.args ? h('code', null, stage.args) : h('em', null, t('templates.noDefaultArgs')),
-                      ),
-                      (stage.outputs || []).length > 0
+                      h('div', { className: 'th-preview-command' }, h(Icon, { name: 'terminal', size: 13 }), h('code', null, stage?.command || '—')),
+                      (stage?.outputs || []).length > 0
                         ? h(
                             'div',
                             { className: 'th-preview-args' },
                             h('span', null, t('templates.previewOutputs')),
                             (stage.outputs || []).map((output) =>
-                              h('code', { key: output.id || output.name }, `${stage.name}.${output.name} = ${output.file}`),
+                              h('code', { key: output.id || output.name }, `${output.name} = ${output.file}`),
                             ),
                           )
                         : null,
                       (() => {
-                        const references = (stage.inputRefs || [])
-                          .map((reference) => {
+                        const describeSource = (source) => {
+                          if (!source) return null;
+                          if (source.kind === 'global') return `${t('templates.bindingGlobals')} · ${source.name}`;
+                          const upstream = template.stages.find((candidate) => candidate.id === source.stageId);
+                          if (!upstream) return null;
+                          const upstreamStage = (stages || []).find((candidate) => candidate.id === upstream.stageId);
+                          const kindLabel = source.kind === 'output' ? t('templates.bindingOutputs') : t('templates.bindingParameters');
+                          return `${kindLabel} · ${upstreamStage?.name || t('templates.stageMissing')}.${source.name}`;
+                        };
+                        const lines = [
+                          ...(entry.inputs || []).map((binding) => {
+                            const described = describeSource(binding.source);
+                            return described ? `${binding.name} ← ${described}` : null;
+                          }),
+                          ...(entry.parameters || []).map((binding) => {
+                            const described = describeSource(binding.source);
+                            if (described) return `${binding.name} ← ${described}`;
+                            return `${binding.name} ← ${t('templates.bindingDefaultValue', { value: binding.defaultValue || '""' })}`;
+                          }),
+                          ...(entry.inputRefs || []).map((reference) => {
                             const upstream = template.stages.find((candidate) => candidate.id === reference.stageId);
                             if (!upstream) return null;
-                            return `${reference.key || '?'} = ${upstream.name}.${reference.outputName}`;
-                          })
-                          .filter(Boolean);
-                        if (references.length === 0) return null;
+                            const upstreamStage = (stages || []).find((candidate) => candidate.id === upstream.stageId);
+                            return `${reference.key || '?'} = ${upstreamStage?.name || t('templates.stageMissing')}.${reference.outputName}`;
+                          }),
+                        ].filter(Boolean);
+                        if (lines.length === 0) return null;
                         return h(
                           'div',
                           { className: 'th-preview-args' },
-                          h('span', null, t('templates.previewInputs')),
-                          references.map((reference) => h('code', { key: reference }, reference)),
+                          h('span', null, t('templates.bindings')),
+                          lines.map((line) => h('code', { key: line }, line)),
                         );
                       })(),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ),
         ),
       );
@@ -3266,11 +4814,11 @@ window.__ModuleLoader__.load({
             const status = run ? run.status : 'idle';
             if (filter !== 'all' && filter !== status) return false;
             if (needle === '') return true;
-            const dataset = datasets.find((item) => item.id === task.datasetId);
+            const datasetNames = taskDatasetNames(task, templates, datasets);
             return (
               task.name.toLowerCase().includes(needle) ||
               task.description.toLowerCase().includes(needle) ||
-              (dataset && dataset.name.toLowerCase().includes(needle)) ||
+              datasetNames.some((name) => name.toLowerCase().includes(needle)) ||
               task.groups.some((group) => group.name.toLowerCase().includes(needle))
             );
           })
@@ -3376,7 +4924,7 @@ window.__ModuleLoader__.load({
                 const run = latestRunOf(task.id, runs);
                 const status = run ? run.status : 'idle';
                 const activeRun = runs.find((candidate) => candidate.taskId === task.id && candidate.status === 'running') ?? null;
-                const dataset = datasets.find((item) => item.id === task.datasetId);
+                const datasetNames = taskDatasetNames(task, templates, datasets);
                 const stageCount = task.groups.reduce((total, group) => total + group.stageConfigs.length, 0);
                 const parameterGroups = task.groups
                   .map((group) => ({ group, parameters: parameterRowsForGroup(group, templates) }))
@@ -3415,7 +4963,7 @@ window.__ModuleLoader__.load({
                   h(
                     'div',
                     { className: 'th-taskcard-meta' },
-                    h('span', null, h(Icon, { name: 'database', size: 14 }), dataset ? dataset.name : t('tasks.noDataset')),
+                    h('span', null, h(Icon, { name: 'database', size: 14 }), datasetNames.length > 0 ? datasetNames.join(' / ') : t('tasks.noDataset')),
                     h('span', null, h(Icon, { name: 'layers', size: 14 }), t('tasks.groups', { n: task.groups.length })),
                     h('span', null, h(Icon, { name: 'terminal', size: 14 }), t('tasks.stages', { n: stageCount })),
                     h('span', null, h(Icon, { name: 'clock', size: 14 }), formatDate(task.updatedAt)),
@@ -3522,19 +5070,21 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function TemplatesPage({ data, t, query, setQuery, onNew, onPreview, onEdit, onDelete, usage }) {
+    function TemplatesPage({ data, t, query, setQuery, onNew, onPreview, onEdit, onDelete, onOpenFolder, usage }) {
+      const stageById = useMemo(() => new Map((data.stages || []).map((stage) => [stage.id, stage])), [data.stages]);
       const rows = useMemo(() => {
         const needle = query.trim().toLowerCase();
         return data.templates
-          .filter(
-            (template) =>
-              needle === '' ||
-              template.name.toLowerCase().includes(needle) ||
-              template.description.toLowerCase().includes(needle) ||
-              template.stages.some((stage) => stage.name.toLowerCase().includes(needle) || stage.command.toLowerCase().includes(needle)),
-          )
+          .filter((template) => {
+            if (needle === '') return true;
+            if (template.name.toLowerCase().includes(needle) || template.description.toLowerCase().includes(needle)) return true;
+            return template.stages.some((entry) => {
+              const stage = stageById.get(entry.stageId);
+              return Boolean(stage) && (stage.name.toLowerCase().includes(needle) || stage.command.toLowerCase().includes(needle));
+            });
+          })
           .sort((left, right) => right.updatedAt - left.updatedAt);
-      }, [data.templates, query]);
+      }, [data.templates, query, stageById]);
 
       return h(
         'div',
@@ -3601,6 +5151,7 @@ window.__ModuleLoader__.load({
                       'div',
                       { className: 'th-card-actions', onClick: (event) => event.stopPropagation() },
                       h(Button, { size: 'sm', variant: 'ghost', onClick: () => onPreview(template) }, t('common.preview')),
+                      h(IconButton, { icon: 'folder', label: t('templates.openFolder'), onClick: () => onOpenFolder(template.id) }),
                       h(IconButton, { icon: 'edit', label: t('common.edit'), onClick: () => onEdit(template) }),
                       h(IconButton, { icon: 'trash', label: t('common.delete'), onClick: () => onDelete(template), className: 'th-danger-hover' }),
                     ),
@@ -3614,6 +5165,14 @@ window.__ModuleLoader__.load({
                       `${t('templates.stageCount', { n: template.stages.length })}${
                         template.parameters?.length ? ` · ${t('templates.parameterCount', { n: template.parameters.length })}` : ''
                       }`,
+                    ),
+                    h(
+                      'span',
+                      { className: 'th-card-dataset' },
+                      h(Icon, { name: 'database', size: 12 }),
+                      ' ',
+                      (template.datasetId && (data.datasets || []).find((item) => item.id === template.datasetId)?.name)
+                        || (template.datasetId ? t('templates.datasetMissing') : t('templates.noDataset')),
                     ),
                     h('span', null, usage(template.id) > 0 ? t('templates.usedBy', { n: usage(template.id) }) : t('common.updated') + ' ' + formatDate(template.updatedAt)),
                   ),
@@ -3729,7 +5288,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function TaskDetail({ task, dataset, runs, t, onClose, onEdit, onDelete, onRun, onStop, onOpenFolder, busy, stopping, stoppingRunId }) {
+    function TaskDetail({ task, datasets, templates, runs, t, onClose, onEdit, onDelete, onRun, onStop, onOpenFolder, busy, stopping, stoppingRunId }) {
       const taskRuns = useMemo(() => runs.filter((run) => run.taskId === task.id), [runs, task.id]);
       const [selectedRunId, setSelectedRunId] = useState(taskRuns[0]?.id ?? null);
       const previousCount = useRef(taskRuns.length);
@@ -3745,6 +5304,7 @@ window.__ModuleLoader__.load({
       const activeRun = taskRuns.find((run) => run.status === 'running') ?? null;
       const selectedRunning = selectedRun?.status === 'running';
       const stageCount = task.groups.reduce((total, group) => total + group.stageConfigs.length, 0);
+      const datasetNames = taskDatasetNames(task, templates, datasets);
 
       return h(
         Modal,
@@ -3779,7 +5339,7 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'th-detail-stat' },
               h('span', null, t('tasks.dataset')),
-              h('strong', null, dataset ? dataset.name : t('tasks.noDataset')),
+              h('strong', null, datasetNames.length > 0 ? datasetNames.join(' / ') : t('tasks.noDataset')),
             ),
             h(
               'div',
@@ -3808,12 +5368,17 @@ window.__ModuleLoader__.load({
               const runGroup = selectedRun?.groups.find((candidate) => candidate.id === group.id);
               const progress = groupProgress(runGroup, group.stageConfigs);
               const status = runGroup?.status ?? 'idle';
+              const datasetId = groupDatasetId(group, task, templates);
+              const datasetName = datasetId
+                ? (datasets || []).find((item) => item.id === datasetId)?.name || t('templates.datasetMissing')
+                : t('tasks.noDataset');
               return h(
                 'div',
                 { key: group.id, className: cx('th-detail-group', `is-${group.role}`) },
                 h('span', { className: cx('th-role-badge', `is-${group.role}`) }, group.role === 'control' ? 'Control' : 'Treatment'),
                 h('strong', null, group.name),
                 h(StatusBadge, { status, t }),
+                h('span', { className: 'th-detail-dataset' }, h(Icon, { name: 'database', size: 12 }), ' ', datasetName),
                 h('span', { className: 'th-detail-progress-text' }, t('tasks.stagesProgress', { done: progress.done, total: progress.total })),
                 h(
                   'div',
@@ -4527,6 +6092,7 @@ window.__ModuleLoader__.load({
       });
       const [taskQuery, setTaskQuery] = useState('');
       const [templateQuery, setTemplateQuery] = useState('');
+      const [stageQuery, setStageQuery] = useState('');
       const [datasetQuery, setDatasetQuery] = useState('');
       const [taskFilter, setTaskFilter] = useState('all');
       const [saving, setSaving] = useState(false);
@@ -4534,6 +6100,7 @@ window.__ModuleLoader__.load({
       const [stoppingRunId, setStoppingRunId] = useState(null);
       const [taskEditor, setTaskEditor] = useState(null);
       const [templateEditor, setTemplateEditor] = useState(null);
+      const [stageEditor, setStageEditor] = useState(null);
       const [datasetEditor, setDatasetEditor] = useState(null);
       const [workspaceOpen, setWorkspaceOpen] = useState(false);
       const [themeOpen, setThemeOpen] = useState(false);
@@ -4542,6 +6109,7 @@ window.__ModuleLoader__.load({
       const [languageOverride, setLanguageOverride] = useState(null);
       const [languageSaving, setLanguageSaving] = useState(false);
       const [previewTemplateId, setPreviewTemplateId] = useState(null);
+      const [previewStageId, setPreviewStageId] = useState(null);
       const [previewDatasetId, setPreviewDatasetId] = useState(null);
       const [detailTaskId, setDetailTaskId] = useState(null);
       const [confirm, setConfirm] = useState(null);
@@ -4573,7 +6141,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(`${API_BASE}/state`, { cache: 'no-store', credentials: 'same-origin' });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const next = await response.json();
-          setData(next);
+          setData({ ...next, stages: Array.isArray(next.stages) ? next.stages : [] });
           setPhase('ready');
           setLoadError('');
         } catch (error) {
@@ -4630,6 +6198,7 @@ window.__ModuleLoader__.load({
           try {
             const body = {
               datasets: patch.datasets ?? base.datasets,
+              stages: patch.stages ?? base.stages ?? [],
               templates: patch.templates ?? base.templates,
               tasks: patch.tasks ?? base.tasks,
             };
@@ -4809,6 +6378,35 @@ window.__ModuleLoader__.load({
         [pushToast, t],
       );
 
+      const openLibraryFolder = useCallback(
+        async (payload, openedKey, failedKey) => {
+          try {
+            const response = await fetch(`${API_BASE}/open-folder`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(result?.error?.message || `HTTP ${response.status}`);
+            pushToast(t(openedKey), 'success');
+            return true;
+          } catch (error) {
+            pushToast(t(failedKey, { message: error instanceof Error ? error.message : String(error) }), 'error');
+            return false;
+          }
+        },
+        [pushToast, t],
+      );
+      const openStageFolder = useCallback(
+        (stageId) => openLibraryFolder({ libraryStageId: stageId }, 'stages.folderOpened', 'stages.folderOpenFailed'),
+        [openLibraryFolder],
+      );
+      const openTemplateFolder = useCallback(
+        (templateId) => openLibraryFolder({ templateId }, 'templates.folderOpened', 'templates.folderOpenFailed'),
+        [openLibraryFolder],
+      );
+
       const startTask = useCallback(
         async (task) => {
           setBusyTaskId(task.id);
@@ -4873,6 +6471,10 @@ window.__ModuleLoader__.load({
         setPreviewTemplateId(null);
         setTemplateEditor({ template: template ?? null });
       };
+      const openStageEditor = (stage) => {
+        setPreviewStageId(null);
+        setStageEditor({ stage: stage ?? null });
+      };
       const openDatasetEditor = (dataset) => {
         setPreviewDatasetId(null);
         setDatasetEditor({ dataset: dataset ?? null });
@@ -4908,16 +6510,57 @@ window.__ModuleLoader__.load({
       };
 
       const askDeleteDataset = (dataset) => {
+        const current = dataRef.current;
+        const usedBy = (current?.templates || []).filter((template) => template.datasetId === dataset.id);
         setConfirm({
           title: t('datasets.deleteTitle'),
-          body: t('datasets.deleteBody'),
+          body:
+            usedBy.length > 0
+              ? t('datasets.deleteUsedBody', { n: usedBy.length })
+              : t('datasets.deleteBody'),
           onConfirm: async () => {
-            const current = dataRef.current;
-            if (!current) return false;
+            const latest = dataRef.current;
+            if (!latest) return false;
             return saveModel(
-              { datasets: current.datasets.filter((item) => item.id !== dataset.id) },
+              {
+                datasets: latest.datasets.filter((item) => item.id !== dataset.id),
+                templates: latest.templates.map((template) =>
+                  template.datasetId === dataset.id ? { ...template, datasetId: '' } : template,
+                ),
+              },
               t('datasets.deleted'),
             );
+          },
+        });
+      };
+
+      const askDeleteStage = (stage) => {
+        const current = dataRef.current;
+        if (!current) return;
+        const usedBy = current.templates.filter((template) =>
+          (template.stages || []).some((entry) => entry.stageId === stage.id),
+        );
+        setConfirm({
+          title: t('stages.deleteTitle'),
+          body:
+            usedBy.length > 0
+              ? t('stages.deleteUsedBody', { n: usedBy.length })
+              : t('stages.deleteBody'),
+          onConfirm: async () => {
+            const latest = dataRef.current;
+            if (!latest) return false;
+            const ok = await saveModel(
+              {
+                stages: latest.stages.filter((item) => item.id !== stage.id),
+                templates: latest.templates.map((template) => ({
+                  ...template,
+                  stages: (template.stages || []).filter((entry) => entry.stageId !== stage.id),
+                })),
+              },
+              t('stages.deleted'),
+            );
+            if (ok) setPreviewStageId((id) => (id === stage.id ? null : id));
+            return ok;
           },
         });
       };
@@ -4948,17 +6591,20 @@ window.__ModuleLoader__.load({
       }
 
       const detailTask = data.tasks.find((task) => task.id === detailTaskId) ?? null;
-      const detailDataset = detailTask ? data.datasets.find((dataset) => dataset.id === detailTask.datasetId) ?? null : null;
       const previewTemplate = data.templates.find((template) => template.id === previewTemplateId) ?? null;
+      const previewStage = (data.stages || []).find((stage) => stage.id === previewStageId) ?? null;
       const previewDataset = data.datasets.find((dataset) => dataset.id === previewDatasetId) ?? null;
       const activeTheme = themeOverride || data.settings?.theme || 'default';
       const tabs = [
         ['tasks', t('tab.tasks'), data.tasks.length],
         ['templates', t('tab.templates'), data.templates.length],
+        ['stages', t('tab.stages'), (data.stages || []).length],
         ['datasets', t('tab.datasets'), data.datasets.length],
         ['docs', t('tab.docs'), null],
       ];
       const usage = (templateId) => data.tasks.filter((task) => task.groups.some((group) => group.templateId === templateId)).length;
+      const stageUsage = (stageId) =>
+        data.templates.filter((template) => (template.stages || []).some((entry) => entry.stageId === stageId)).length;
 
       return h(
         'div',
@@ -5046,6 +6692,7 @@ window.__ModuleLoader__.load({
                 onPreview: (template) => setPreviewTemplateId(template.id),
                 onEdit: openTemplateEditor,
                 onDelete: askDeleteTemplate,
+                onOpenFolder: openTemplateFolder,
                 usage,
               })
             : null,
@@ -5060,6 +6707,20 @@ window.__ModuleLoader__.load({
                 onEdit: openDatasetEditor,
                 onDelete: askDeleteDataset,
                 onOpenFolder: openDatasetFolder,
+              })
+            : null,
+          tab === 'stages'
+            ? h(StagesPage, {
+                data,
+                t,
+                query: stageQuery,
+                setQuery: setStageQuery,
+                onNew: () => openStageEditor(null),
+                onPreview: (stage) => setPreviewStageId(stage.id),
+                onEdit: openStageEditor,
+                onDelete: askDeleteStage,
+                onOpenFolder: openStageFolder,
+                usage: stageUsage,
               })
             : null,
           tab === 'docs' ? h(DocsPage, { t, pushToast }) : null,
@@ -5092,6 +6753,7 @@ window.__ModuleLoader__.load({
           ? h(TaskEditor, {
               initial: taskEditor.task,
               templates: data.templates,
+              stages: data.stages || [],
               datasets: data.datasets,
               t,
               saving,
@@ -5109,6 +6771,8 @@ window.__ModuleLoader__.load({
         templateEditor
           ? h(TemplateEditor, {
               initial: templateEditor.template,
+              stages: data.stages || [],
+              datasets: data.datasets || [],
               t,
               saving,
               onClose: () => setTemplateEditor(null),
@@ -5121,6 +6785,25 @@ window.__ModuleLoader__.load({
                   : [template, ...current.templates];
                 const ok = await saveModel({ templates }, t('templates.saved'));
                 if (ok) setTemplateEditor(null);
+              },
+            })
+          : null,
+        stageEditor
+          ? h(StageEditor, {
+              initial: stageEditor.stage,
+              stages: data.stages || [],
+              t,
+              saving,
+              onClose: () => setStageEditor(null),
+              onSave: async (stage) => {
+                const current = dataRef.current;
+                if (!current) return;
+                const exists = current.stages.some((item) => item.id === stage.id);
+                const stages = exists
+                  ? current.stages.map((item) => (item.id === stage.id ? stage : item))
+                  : [stage, ...current.stages];
+                const ok = await saveModel({ stages }, t('stages.saved'));
+                if (ok) setStageEditor(null);
               },
             })
           : null,
@@ -5142,16 +6825,31 @@ window.__ModuleLoader__.load({
               },
             })
           : null,
-        previewTemplate
+        // Only one dialog per object: an open editor always wins over its preview,
+        // so a stray re-open of the preview can never stack a second modal on top.
+        previewTemplate && !templateEditor
           ? h(TemplatePreview, {
               template: previewTemplate,
+              stages: data.stages || [],
+              datasets: data.datasets || [],
               usageCount: usage(previewTemplate.id),
               t,
               onClose: () => setPreviewTemplateId(null),
               onEdit: () => openTemplateEditor(previewTemplate),
+              onOpenFolder: openTemplateFolder,
             })
           : null,
-        previewDataset
+        previewStage && !stageEditor
+          ? h(StagePreview, {
+              stage: previewStage,
+              templates: data.templates,
+              t,
+              onClose: () => setPreviewStageId(null),
+              onEdit: () => openStageEditor(previewStage),
+              onOpenFolder: openStageFolder,
+            })
+          : null,
+        previewDataset && !datasetEditor
           ? h(DatasetPreview, {
               dataset: previewDataset,
               t,
@@ -5160,10 +6858,11 @@ window.__ModuleLoader__.load({
               onEdit: () => openDatasetEditor(previewDataset),
             })
           : null,
-        detailTask
+        detailTask && !taskEditor
           ? h(TaskDetail, {
               task: detailTask,
-              dataset: detailDataset,
+              datasets: data.datasets || [],
+              templates: data.templates || [],
               runs: data.runs,
               t,
               onClose: () => setDetailTaskId(null),
@@ -5429,18 +7128,23 @@ window.__ModuleLoader__.load({
 .th-lock-note { font-size: 10px; color: var(--dsw-alias-label-secondary); }
 .th-group-head .th-iconbtn { margin-left: auto; }
 .th-group-template { margin-top: 10px; max-width: 520px; }
+.th-group-dataset { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 10px; color: var(--dsw-alias-label-secondary); }
+.th-template-pick { display: flex; align-items: center; gap: 6px; }
+.th-template-pick .th-select { flex: 1 1 auto; min-width: 0; }
 .th-group-params { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .th-group-params-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .th-group-params-head strong { font-size: 11.5px; }
 .th-group-params-head span { color: var(--dsw-alias-label-secondary); font-size: 10px; }
-.th-task-params .th-param-labels, .th-task-params .th-param-row { grid-template-columns: minmax(90px, .55fr) minmax(130px, 1fr) minmax(150px, 1.25fr); }
-.th-preview-params .th-param-labels, .th-preview-params .th-param-row { grid-template-columns: minmax(100px, .6fr) minmax(130px, 1fr) minmax(150px, 1.2fr); }
+.th-task-params .th-param-labels, .th-task-params .th-param-row { grid-template-columns: minmax(110px, .65fr) minmax(130px, 1fr) minmax(150px, 1.25fr); }
+.th-param-keycell { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.th-param-row .th-select.th-port-type { padding: 6px 6px; font-size: 10px; }
+.th-preview-params .th-param-labels, .th-preview-params .th-param-row { grid-template-columns: minmax(100px, .6fr) 92px minmax(120px, .9fr) minmax(140px, 1.1fr); }
 .th-template-parameters { display: flex; flex-direction: column; gap: 8px; }
 .th-param-key { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; color: var(--dsw-alias-brand-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .th-param-default { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .th-param-description { font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .th-stagecfg-list { margin-top: 11px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-.th-stagecfg-labels, .th-stagecfg { display: grid; grid-template-columns: 28px minmax(92px, .85fr) minmax(150px, 1.25fr) minmax(110px, 1fr); align-items: center; gap: 8px; padding: 7px 9px; }
+.th-stagecfg-labels, .th-stagecfg { display: grid; grid-template-columns: 28px minmax(92px, .7fr) minmax(200px, 2fr); align-items: center; gap: 8px; padding: 7px 9px; }
 .th-stagecfg-labels { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 10px; font-weight: 650; }
 .th-stagecfg + .th-stagecfg { border-top: 1px solid var(--dsw-alias-border-l1); }
 .th-stagecfg-index { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; color: var(--dsw-alias-label-secondary); }
@@ -5450,9 +7154,19 @@ window.__ModuleLoader__.load({
 .th-group-hint { margin-top: 10px; padding: 12px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 8px; color: var(--dsw-alias-label-secondary); font-size: 11px; text-align: center; }
 .th-add-group { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 10px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 12px; transition: border-color .15s ease, color .15s ease, background .15s ease; }
 .th-add-group:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent); }
+.th-pipeline-add { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.th-pipeline-add .th-btn { width: 100%; justify-content: center; }
+.th-stage-menu { display: flex; flex-direction: column; max-height: 260px; overflow: auto; padding: 4px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-overlay); box-shadow: 0 12px 28px rgba(15, 23, 42, .18); }
+.th-stage-menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; text-align: left; }
+.th-stage-menu-item:hover { background: var(--dsw-alias-bg-layer-2); }
+.th-stage-menu-item strong { font-size: 11.5px; font-weight: 600; }
+.th-stage-menu-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary); }
+.th-stage-menu-empty { padding: 10px; font-size: 10.5px; color: var(--dsw-alias-label-secondary); text-align: center; }
+.th-commandarea { min-height: 88px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; }
+.th-stagecfg-command { min-height: 46px; padding: 6px 8px; font-size: 11px; }
 .th-param-empty { padding: 11px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 8px; color: var(--dsw-alias-label-secondary); font-size: 11px; text-align: center; }
 .th-param-list { border: 1px solid var(--dsw-alias-border-l1); border-radius: 9px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-.th-param-labels, .th-param-row { display: grid; grid-template-columns: minmax(110px, .65fr) minmax(130px, 1fr) minmax(150px, 1.3fr) 30px; align-items: center; gap: 8px; padding: 7px 9px; }
+.th-param-labels, .th-param-row { display: grid; grid-template-columns: minmax(96px, .55fr) 92px minmax(110px, .9fr) minmax(140px, 1.2fr) 30px; align-items: center; gap: 8px; padding: 7px 9px; }
 .th-param-labels { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 10px; font-weight: 650; }
 .th-param-row + .th-param-row { border-top: 1px solid var(--dsw-alias-border-l1); }
 .th-param-row .th-input { padding: 6px 8px; font-size: 11px; }
@@ -5477,6 +7191,46 @@ window.__ModuleLoader__.load({
 .th-stage-io-head span { font-size: 9.5px; line-height: 1.4; }
 .th-stage-io-head .th-btn { margin-left: auto; }
 .th-output-map-list { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+.th-port-list { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+.th-port-labels, .th-port-row { display: grid; grid-template-columns: minmax(110px, .9fr) minmax(150px, 1.3fr) 30px; gap: 8px; align-items: center; padding: 6px 8px; }
+.th-port-labels.is-input, .th-port-row.is-input { grid-template-columns: minmax(110px, .9fr) 96px 58px minmax(120px, 1.1fr) 30px; }
+.th-port-labels.is-parameter, .th-port-row.is-parameter { grid-template-columns: minmax(100px, .8fr) 96px minmax(96px, .85fr) minmax(110px, 1fr) 30px; }
+.th-port-labels { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 9.5px; font-weight: 650; }
+.th-port-row + .th-port-row { border-top: 1px solid var(--dsw-alias-border-l1); }
+.th-port-row .th-input { padding: 6px 8px; font-size: 10.5px; }
+.th-port-type { padding: 5px 6px; font-size: 10px; }
+.th-port-required { display: inline-flex; align-items: center; justify-content: center; }
+.th-port-required input { width: 13px; height: 13px; margin: 0; accent-color: var(--dsw-alias-brand-primary); }
+.th-output-map-labels.is-output, .th-output-map-row.is-output { grid-template-columns: minmax(130px, 1.1fr) minmax(100px, .8fr) 96px 30px; }
+.th-command-head { display: flex; align-items: flex-end; gap: 10px; }
+.th-command-title { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.th-command-title strong { color: var(--dsw-alias-label-primary); font-size: 10.5px; }
+.th-command-timeout { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.th-command-timeout .th-input { width: 82px; padding: 5px 8px; font-size: 11px; }
+.th-builtin-hint { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; font-size: 9.5px; color: var(--dsw-alias-label-secondary); }
+.th-builtin-hint > div:first-child { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.th-builtin-hint strong { color: var(--dsw-alias-label-primary); font-size: 10px; }
+.th-builtin-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.th-builtin-chip { padding: 0 5px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 5px; background: var(--dsw-alias-bg-layer-2); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; color: var(--dsw-alias-label-secondary); }
+.th-port-type-badge { font-style: normal; padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); color: var(--dsw-alias-brand-primary); font-size: 9px; font-weight: 600; }
+.th-port-optional { font-style: normal; font-size: 9px; color: var(--dsw-alias-label-secondary); }
+.th-binding-default.is-error { color: var(--dsw-alias-state-error-primary); }
+.th-asset-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); }
+.th-asset-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
+.th-asset-meta > span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.th-asset-name { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10.5px; color: var(--dsw-alias-label-primary); }
+.th-asset-kind { font-style: normal; padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); color: var(--dsw-alias-state-success-primary); font-size: 9px; font-weight: 600; }
+.th-asset-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.th-asset-empty { font-size: 10px; color: var(--dsw-alias-label-secondary); }
+.th-binding-list { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+.th-binding-labels, .th-binding-row { display: grid; grid-template-columns: minmax(110px, .8fr) minmax(170px, 1.3fr) auto; gap: 8px; align-items: center; padding: 6px 8px; }
+.th-binding-labels { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 9.5px; font-weight: 650; }
+.th-binding-row + .th-binding-row { border-top: 1px solid var(--dsw-alias-border-l1); }
+.th-binding-row .th-select { padding: 6px 8px; font-size: 10.5px; min-width: 0; }
+.th-binding-name { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10.5px; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-binding-default { font-size: 9.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-binding-row.is-invalid .th-select { border-color: var(--dsw-alias-state-error-primary); }
+.th-binding-empty { padding: 8px; font-size: 10px; color: var(--dsw-alias-label-secondary); }
 .th-output-map-labels, .th-output-map-row { display: grid; grid-template-columns: minmax(150px, 1.25fr) minmax(120px, .8fr) 30px; gap: 8px; align-items: center; padding: 6px 8px; }
 .th-output-map-labels { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 9.5px; font-weight: 650; }
 .th-output-map-row + .th-output-map-row { border-top: 1px solid var(--dsw-alias-border-l1); }
@@ -5524,10 +7278,20 @@ window.__ModuleLoader__.load({
 .th-card-glyph { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto; }
 .th-card-glyph.is-template { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); }
 .th-card-glyph.is-dataset { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
+.th-card-glyph.is-stage { color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-primary) 9%, transparent); }
+.th-stage-picker { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.th-stage-picker .th-select { flex: 1 1 220px; min-width: 0; }
+.th-stage-ref { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.th-stage-ref-name { font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-stage-ref-desc { font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-stage-ref-command { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-stage-output-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.th-stage-output-chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); }
+.th-stage-no-output { font-size: 9.5px; color: var(--dsw-alias-label-secondary); font-style: italic; }
 .th-card-title h3 { margin: 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
 .th-card-title p { margin: 3px 0 0; font-size: 11px; color: var(--dsw-alias-label-secondary); line-height: 1.45; overflow-wrap: anywhere; }
 .th-card-actions { margin-left: auto; display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
-.th-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
+.th-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
 .th-template-preview { display: flex; flex-direction: column; gap: 14px; }
 .th-preview-stage-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
 .th-preview-stage { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); }
@@ -5618,6 +7382,7 @@ window.__ModuleLoader__.load({
 .th-detail-group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); border-left-width: 3px; border-radius: 8px; background: var(--dsw-alias-bg-layer-1); min-width: 0; }
 .th-detail-group.is-control { border-left-color: var(--dsw-alias-brand-primary); }
 .th-detail-group.is-treatment { border-left-color: var(--dsw-alias-state-success-primary); }
+.th-detail-dataset { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--dsw-alias-label-secondary); }
 .th-detail-group > strong { font-size: 12px; white-space: nowrap; }
 .th-detail-group > span:not(.th-role-badge):not(.th-badge):not(.th-progressbar) { font-size: 10px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .th-detail-progress-text { font-size: 10px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
