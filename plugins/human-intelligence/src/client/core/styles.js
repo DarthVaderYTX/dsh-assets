@@ -91,7 +91,15 @@ const BASE_CSS = `
 .hi-tool-card { display: flex; flex-direction: column; gap: 10px; padding: 13px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--hi-radius); background: var(--dsw-alias-bg-layer-1); transition: border-color .15s ease, background .15s ease; }
 .hi-tool-card:hover { border-color: var(--dsw-alias-border-l2); }
 .hi-tool-head { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
-.hi-tool-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 auto; border-radius: 9px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); color: var(--dsw-alias-brand-primary); }
+.hi-tool-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 auto; border-radius: 9px; background: color-mix(in srgb, var(--hi-tool-color, var(--dsw-alias-brand-primary)) 11%, transparent); color: var(--hi-tool-color, var(--dsw-alias-brand-primary)); }
+.hi-tool-icon.is-text-classification { --hi-tool-color: #2563eb; }
+.hi-tool-icon.is-text-entity { --hi-tool-color: #7c3aed; }
+.hi-tool-icon.is-text-rating { --hi-tool-color: #d97706; }
+.hi-tool-icon.is-text-ranking { --hi-tool-color: #0d9488; }
+.hi-tool-icon.is-image-classification { --hi-tool-color: #db2777; }
+.hi-tool-icon.is-image-bbox { --hi-tool-color: #ea580c; }
+.hi-tool-icon.is-video-classification { --hi-tool-color: #0891b2; }
+.hi-tool-icon.is-video-segment { --hi-tool-color: #4f46e5; }
 .hi-tool-copy { min-width: 0; flex: 1 1 auto; }
 .hi-tool-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .hi-tool-title strong { font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }

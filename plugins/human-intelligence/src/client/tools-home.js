@@ -79,7 +79,7 @@ function ToolCard(props) {
       { className: 'hi-tool-head' },
       h(
         'span',
-        { className: 'hi-tool-icon' },
+        { className: cx('hi-tool-icon', task ? `is-${task.id}` : '') },
         h(ui.Icon, { name: task && task.icon ? task.icon : modality && modality.icon ? modality.icon : 'grid', size: 16 }),
       ),
       h(
@@ -364,7 +364,7 @@ function ToolPickerDialog(props) {
       },
       h(
         'span',
-        { className: 'hi-tool-icon' },
+        { className: cx('hi-tool-icon', task ? `is-${task.id}` : '') },
         h(ui.Icon, { name: task && task.icon ? task.icon : modality && modality.icon ? modality.icon : 'grid', size: 16 }),
       ),
       h(
