@@ -145,7 +145,7 @@ function TasksHome(props) {
         { className: 'hi-stats' },
         h(
           'div',
-          { className: 'hi-stat' },
+          { className: 'hi-stat is-projects' },
           h('span', { className: 'hi-stat-icon' }, h(ui.Icon, { name: 'folder', size: 16 })),
           h('div', null, h('strong', null, totals.projects), h('span', null, t('stats.projects'))),
         ),
