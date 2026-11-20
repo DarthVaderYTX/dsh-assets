@@ -1440,7 +1440,7 @@ const BASE_CSS = `
 .hi-stat-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); color: var(--dsw-alias-brand-primary); flex: 0 0 auto; }
 .hi-stat.is-complete .hi-stat-icon { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 11%, transparent); color: var(--dsw-alias-state-success-primary); }
 .hi-stat.is-rate .hi-stat-icon { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); color: var(--dsw-alias-state-warn-primary); }
-.hi-stat.is-projects .hi-stat-icon { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 11%, transparent); color: var(--dsw-alias-brand-primary); }
+.hi-stat.is-projects .hi-stat-icon { background: color-mix(in srgb, #7c3aed 12%, transparent); color: #7c3aed; }
 .hi-stat.is-items .hi-stat-icon { background: color-mix(in srgb, #0284c7 12%, transparent); color: #0284c7; }
 .hi-stat div { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .hi-stat strong { font-size: 19px; line-height: 1.15; font-variant-numeric: tabular-nums; }
