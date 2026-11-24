@@ -1,0 +1,19 @@
+# 从 CSV 读数据：csv 路径相对配置文件所在目录
+# x 指定分类列，series 指定要画的数值列，names 可把列名换成展示名
+title: 分区域收入趋势
+subtitle: 单位：百万元
+source: 数据来源：财务系统导出 revenue.csv
+x:
+  title: 季度
+y:
+  title: 收入
+  unit: 百万元
+type: line
+data:
+  csv: data/revenue.csv
+  x: quarter
+  series: [north, south, east]
+  names:
+    north: 华北
+    south: 华南
+    east: 华东

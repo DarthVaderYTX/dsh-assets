@@ -1,0 +1,17 @@
+{
+  "name": "render-charts",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Document charts and interactive tables rendered with Apache ECharts",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "render-charts": "./bin/render-charts.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/",
+    "gallery": "node bin/render-charts.mjs --gallery templates -o gallery.html"
+  }
+}

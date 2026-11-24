@@ -1,0 +1,32 @@
+# 折线图：多系列趋势 + 目标线
+# 运行：python scripts/render_charts.py templates/line.yaml -o line.html
+title: 检索接口 P95 延迟
+subtitle: 按周统计 · 2026 年 6–9 月
+source: 数据来源：网关访问日志，每周约 42 万次请求
+note: 8 月起切换新路由，W35 起为大促流量
+width: 760
+height: 400
+x:
+  title: 周
+  labels: [W23, W24, W25, W26, W27, W28, W29, W30, W31, W32, W33, W34, W35, W36]
+y:
+  title: P95 延迟
+  unit: 毫秒
+series:
+  - name: 华东
+    type: line
+    smooth: true
+    data: [118, 121, 116, 124, 132, 128, 119, 122, 126, 131, 138, 142, 151, 147]
+  - name: 华北
+    type: line
+    smooth: true
+    data: [104, 108, 112, 109, 117, 121, 118, 115, 119, 124, 128, 133, 139, 135]
+  - name: 华南
+    type: line
+    smooth: true
+    data: [96, 99, 101, 98, 104, 108, 111, 107, 110, 113, 118, 121, 127, 124]
+annotations:
+  - type: rule
+    y: 150
+    label: SLO 150ms
+legend: true

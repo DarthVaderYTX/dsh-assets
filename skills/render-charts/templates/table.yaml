@@ -1,0 +1,30 @@
+# 交互表格：排序、搜索、分页、条件格式、数据条与合计
+# 纯 HTML 渲染，可复制 / 导出 CSV；数值列右对齐，文本列左对齐
+type: table
+title: 区域经营明细
+subtitle: 2026 年 8 月 · 按城市
+source: 数据来源：经营看板；收入为确认收入，同比为可比口径
+columns:
+  - {key: city, label: 城市, align: left}
+  - {key: revenue, label: 收入, unit: 万元, align: right}
+  - {key: growth, label: 同比, format: percent, align: right}
+  - {key: orders, label: 订单量, align: right}
+  - {key: aov, label: 客单价, format: {style: currency, decimals: 0}, align: right}
+rows:
+  - {city: 上海, revenue: 1680, growth: 0.083, orders: 42600, aov: 394}
+  - {city: 北京, revenue: 1520, growth: 0.061, orders: 38100, aov: 399}
+  - {city: 深圳, revenue: 1260, growth: 0.114, orders: 31400, aov: 401}
+  - {city: 广州, revenue: 1105, growth: -0.023, orders: 27800, aov: 397}
+  - {city: 杭州, revenue: 980, growth: 0.152, orders: 24200, aov: 405}
+  - {city: 成都, revenue: 870, growth: 0.047, orders: 21900, aov: 397}
+  - {city: 南京, revenue: 742, growth: 0.032, orders: 18600, aov: 399}
+  - {city: 武汉, revenue: 655, growth: -0.041, orders: 16300, aov: 402}
+  - {city: 西安, revenue: 512, growth: 0.088, orders: 12800, aov: 400}
+  - {city: 苏州, revenue: 460, growth: 0.019, orders: 11500, aov: 400}
+table:
+  sort: true
+  search: true
+  page_size: 8
+  totals: [revenue, orders]
+  color_scale: growth
+  bar: revenue

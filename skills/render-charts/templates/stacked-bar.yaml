@@ -1,0 +1,24 @@
+# 堆叠柱状图：stack 相同的系列叠在一起，用于看构成
+title: 收入构成
+subtitle: 按渠道拆分 · 单位：百万元
+source: 数据来源：财务系统，口径为确认收入
+x:
+  labels: [2025 Q3, 2025 Q4, 2026 Q1, 2026 Q2]
+  title: 季度
+y:
+  title: 收入
+  unit: 百万元
+series:
+  - name: 直销
+    type: bar
+    stack: channel
+    data: [182, 196, 204, 221]
+  - name: 渠道
+    type: bar
+    stack: channel
+    data: [96, 108, 112, 126]
+  - name: 线上
+    type: bar
+    stack: channel
+    data: [58, 74, 83, 97]
+

@@ -1,0 +1,292 @@
+/* render-charts — page, card, table and print styles.
+   Colors come from the token block injected at render time (html.mjs), so this
+   file only references custom properties. */
+
+.rc-page {
+  margin: 0;
+  padding: 32px 20px 48px;
+  background: var(--rc-bg);
+  color: var(--rc-ink);
+  font-family: var(--rc-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.rc-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  display: grid;
+  gap: 28px;
+}
+
+.rc-figure {
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--rc-pad);
+  background: var(--rc-card);
+  color: var(--rc-ink);
+  border: 1px solid var(--rc-grid);
+  border-radius: var(--rc-radius);
+  font-family: var(--rc-font);
+  line-height: 1.5;
+}
+
+.rc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.rc-heading { min-width: 0; }
+
+.rc-title {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rc-ink);
+}
+
+.rc-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--rc-muted);
+}
+
+.rc-tools {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rc-figure:hover .rc-tools,
+.rc-figure:focus-within .rc-tools { opacity: 1; }
+
+.rc-tool {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--rc-faint);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rc-tool:hover { background: var(--rc-chip); color: var(--rc-chip-ink); }
+.rc-tool:disabled { opacity: 0.4; cursor: default; }
+.rc-tool[aria-pressed="true"] { background: var(--rc-chip); color: var(--rc-chip-ink); }
+.rc-tool:focus-visible { outline: 2px solid var(--rc-focus); outline-offset: 1px; }
+
+.rc-plot {
+  position: relative;
+  width: 100%;
+}
+
+.rc-canvas { width: 100%; }
+
+.rc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--rc-faint);
+}
+
+.rc-source { max-width: 68%; }
+.rc-note { color: var(--rc-muted); }
+
+.rc-table-panel { margin-top: 12px; }
+
+/* ------------------------------------------------------------- gallery page */
+
+.rc-gallery-head { margin: 8px 0 6px; }
+
+.rc-eyebrow {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rc-faint);
+}
+
+.rc-gallery-title {
+  margin: 12px 0 12px;
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+  color: var(--rc-ink);
+}
+
+.rc-gallery-lede {
+  margin: 0;
+  max-width: 640px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--rc-muted);
+}
+
+/* -------------------------------------------------------------------- table */
+
+.rc-table-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rc-search {
+  flex: 1;
+  min-width: 120px;
+  max-width: 260px;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: var(--rc-ink);
+  background: var(--rc-bg);
+  border: 1px solid var(--rc-grid);
+  border-radius: 8px;
+}
+
+.rc-search::placeholder { color: var(--rc-faint); }
+.rc-search:focus { outline: 2px solid var(--rc-focus); outline-offset: -1px; }
+
+.rc-count { font-size: 11.5px; color: var(--rc-faint); margin-right: auto; }
+
+.rc-table-scroll {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--rc-grid);
+  border-radius: 10px;
+}
+
+.rc-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-th,
+.rc-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rc-grid);
+  white-space: nowrap;
+}
+
+.rc-th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--rc-card);
+  text-align: left;
+  font-weight: 500;
+  color: var(--rc-muted);
+}
+
+.rc-sort {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.rc-sort:hover { color: var(--rc-ink); }
+.rc-sort-mark { font-size: 9px; color: var(--rc-focus); }
+
+.rc-td { color: var(--rc-ink); }
+.rc-num { text-align: right; }
+.rc-left { text-align: left; }
+.rc-center { text-align: center; }
+.rc-idx { color: var(--rc-faint); text-align: right; width: 40px; }
+.rc-empty { color: var(--rc-faint); text-align: center; padding: 24px; }
+
+.rc-table-scroll tbody tr:hover td { background: var(--rc-chip); }
+
+.rc-tone-1, .rc-tone-2, .rc-tone-3, .rc-tone-4, .rc-tone-5, .rc-tone-6, .rc-tone-7 {
+  background-clip: padding-box;
+}
+.rc-tone-1 { background-color: color-mix(in srgb, var(--rc-d1) 20%, transparent); }
+.rc-tone-2 { background-color: color-mix(in srgb, var(--rc-d2) 20%, transparent); }
+.rc-tone-3 { background-color: color-mix(in srgb, var(--rc-d3) 22%, transparent); }
+.rc-tone-4 { background-color: color-mix(in srgb, var(--rc-d4) 26%, transparent); }
+.rc-tone-5 { background-color: color-mix(in srgb, var(--rc-d5) 22%, transparent); }
+.rc-tone-6 { background-color: color-mix(in srgb, var(--rc-d6) 20%, transparent); }
+.rc-tone-7 { background-color: color-mix(in srgb, var(--rc-d7) 20%, transparent); }
+
+.rc-cellbar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 62%;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--rc-s1) 16%, transparent);
+}
+
+td:has(> .rc-cellbar) {
+  position: relative;
+  isolation: isolate;
+}
+
+.rc-cellbar-label {
+  position: relative;
+  z-index: 1;
+}
+
+.rc-table-scroll tfoot td {
+  border-top: 1px solid var(--rc-grid);
+  border-bottom: 0;
+  font-weight: 600;
+  background: var(--rc-card);
+}
+
+.rc-dense .rc-th,
+.rc-dense .rc-td { padding: 5px 10px; }
+
+.rc-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--rc-faint);
+}
+
+.rc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-tools { transition: none; }
+}
+
+@media print {
+  .rc-page { background: #fff; padding: 0; }
+  .rc-wrap { max-width: none; display: block; }
+  .rc-figure { break-inside: avoid; border-color: #ddd; }
+  .rc-tools { display: none; }
+  .rc-table-scroll { max-height: none; }
+}

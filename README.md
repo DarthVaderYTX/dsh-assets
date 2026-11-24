@@ -45,7 +45,7 @@ description: 一句话说明能力与适用场景，写清"什么时候该用"�
 
 可选字段：`whenToUse`（驼峰，只给 UI 菜单）、`disable-model-invocation`、`user-invocable`、`metadata`。这几个键只认原文写法：写成旧版的 `disableModelInvocation`、`modelInvocable`、`userInvocable` 会**直接报错并丢弃整个 skill**。
 
-skill 附带的脚本、模板、参考资料放在同一目录下按用途分（`scripts/`、`templates/`、`types/`、`references/`），并在 `SKILL.md` 里写明调用方式。
+skill 附带的脚本、模板、参考资料放在同一目录下按用途分（`scripts/`、`templates/`、`types/`、`references/`；需要随图分发的 CSS/JS 等静态资源放 `assets/`），并在 `SKILL.md` 里写明调用方式。
 
 ## 安装与卸载
 
@@ -105,6 +105,7 @@ skill 附带的脚本、模板、参考资料放在同一目录下按用途分�
 | --- | --- | --- | --- |
 | `how-to-write-document` | skill | [skills/how-to-write-document](skills/how-to-write-document) | 六类文档写作规范与模板：paper / prd / one-pager / experiment-report / research-report / technical-design |
 | `prompt-optimizer` | skill | [skills/prompt-optimizer](skills/prompt-optimizer) | 带 rubric 的 JSONL 数据集上的 YAML messages prompt 自动优化：inspect 校验数据与模型配置 → 基线评测 → 失败分析与候选生成 → search 集实测择优（可留 holdout 验证）→ 全量重算并出报告；支持多个可单独配置的目标模型（endpoint / key / temperature / weight）按权重汇总，LLM 判分 + 确定性 check、OpenAI 兼容接口或自定义命令、调用预算、缓存与逐模型/逐准则/逐行对比 |
+| `render-charts` | skill | [skills/render-charts](skills/render-charts) | 文档图表与交互表格：一份 YAML/JSON 配置（或直接吃 CSV）用 Node.js + Apache ECharts 6 生成可交互 HTML、可嵌 Markdown/HTML 的片段、或进 Word/PPT/PDF 的静态 SVG/PNG；支持折线/面积/柱/分组/堆叠/排名/散点/气泡/环形/饼图/热力/瀑布/双轴/时间轴，以及可排序、搜索、分页、看合计、条件着色、数据条与 CSV 导出的表格（图表也可用 `data_table: true` 把底层数据表直接展开在卡片里）；内置三套分类色板（frost / editorial / vivid，默认 frost）与文档排版、深浅色切换、数据表与图片导出，并做标题、单位、口径、来源、柱状基线截断等文档级检查；ECharts 随 skill 分发（Apache-2.0），无需 npm install，静态 SVG 走 ECharts SSR、PNG 用本机无头浏览器 |
 | `dsh-perf-profiler` | plugin | [plugins/dsh-perf-profiler](plugins/dsh-perf-profiler) | 把 hook 监听器与工具执行体的耗时可归因到插件/hook 点/工具/单次调用；支持实时报告与离线 JSONL 分析 |
 | `work-clock` | plugin | [plugins/work-clock](plugins/work-clock) | 浮窗工作时钟：打卡工时（下班 = 打卡 + 9 小时）、天气、今日飞书日程，临近日程 10/5/1 分钟与午餐/晚餐/会议开始时提醒 |
 | `dsh-autoeval` | plugin | [plugins/dsh-autoeval](plugins/dsh-autoeval) | 左侧栏 AutoEval 面板：四阶段评测流水线（Scraping 抓取 → Annotation 标注 → Metrics 指标 → Reporting 报告），模板只排阶段（四个预置阶段相对顺序固定、可插自定义阶段、拖拽排序），各阶段用哪个执行模块、参数多少在提交任务时为每个组单独决定；提交任务时配 Control + 多个 Treatment 组，每组独立设定各阶段的实现与参数、可折叠查看，报告出组间对比；三个页签分别是「评测任务」（按模板提交——模板用带关键词过滤的下拉选、筛选、重跑、删除，点进去看指标、可折叠的分阶段进度、逐条结果与报告）、「Queryset」（JSONL / CSV / XLSX / 飞书表格 / 飞书智能表格导入，可增删改；依赖本机 lark-cli 读飞书）与「任务模板」（模板即 `templates/<id>.yaml`，点进去默认只读、点「编辑」才改，内置只能复制；提交任务与保存模板都会先二次确认）；插件有独立工作区（`storages/autoeval`：config.yaml + templates/ + querysets/ + runs/），面板顶部显示路径并可复制/打开/改配置；内置 WebSearchTool 检索覆盖模板，报告与逐条结果落盘 |

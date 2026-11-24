@@ -1,0 +1,16 @@
+# 图 + 数据表：data_table 让底层数据直接展开在 HTML 卡片里
+# 表格默认可见，点「数据」可折叠；仍可排序、看合计、导出 CSV
+title: 各区域季度收入
+subtitle: 单位：百万元 · 未税
+source: 数据来源：财务系统 2026 年结账数据
+type: bar
+labels: [Q1, Q2, Q3, Q4]
+x: {title: 季度}
+y: {title: 收入, unit: 百万元}
+data:
+  华东: [128, 142, 151, 168]
+  华北: [96, 103, 99, 118]
+  华南: [74, 81, 88, 95]
+data_table:
+  show: true
+  sort: true
