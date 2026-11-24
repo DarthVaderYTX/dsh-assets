@@ -26,6 +26,12 @@ types/
 ├── research-report/
 │   ├── README.md
 │   └── templates/research-report.md
+├── technical-selection/
+│   ├── README.md
+│   └── templates/technical-selection.md
+├── data-generalization/
+│   ├── README.md
+│   └── templates/data-generalization-rules.md
 └── paper/
     ├── README.md
     └── templates/
@@ -44,6 +50,8 @@ types/
 | One Pager（一页纸） | [one-pager/README.md](one-pager/README.md) | [templates/one-pager.md](one-pager/templates/one-pager.md) | 该批准什么投入、为什么值得、如何控制风险 |
 | 实验报告 | [experiment-report/README.md](experiment-report/README.md) | [templates/experiment-report.md](experiment-report/templates/experiment-report.md) | 改动是否有效、数据是否可信、结论适用于哪里 |
 | 调研报告 | [research-report/README.md](research-report/README.md) | [templates/research-report.md](research-report/templates/research-report.md) | 研究问题的答案是什么、证据如何支持判断、该如何行动 |
+| 技术选型 | [technical-selection/README.md](technical-selection/README.md) | [templates/technical-selection.md](technical-selection/templates/technical-selection.md) | 在给定约束下选哪个、指标如何定义与计算、实验如何支持结论 |
+| 数据泛化规则 | [data-generalization/README.md](data-generalization/README.md) | [templates/data-generalization-rules.md](data-generalization/templates/data-generalization-rules.md) | 数据为什么泛化、字段如何表述、规则如何执行与验证 |
 | 论文 | [paper/README.md](paper/README.md) | [本科毕业论文](paper/templates/undergraduate-thesis.md)、[中文研究](paper/templates/chinese-research.md)、[国际实证 IMRaD](paper/templates/international-imrad.md)、[综述](paper/templates/review.md) | 学术问题、原创贡献、研究证据与适用边界；学位论文另受学校模板与流程约束 |
 
 ## 每个类型的阅读顺序
@@ -61,7 +69,7 @@ types/
 - 按主问题只加载需要的类型目录，不一次读全部类型。确实需要多种交付物时，分开成文并相互引用。
 - 结构是默认顺序；用户已有固定模板时可映射章节，但不得遗漏关键内容，也不得把风险移到不可见位置。
 - “必须”“建议”“条件适用”强度不同；未满足关键条件时说明缺口，不能靠标“不适用”绕过要求。
-- 实验报告的离线评测是同一报告的一种数据方式；调研报告覆盖访谈、竞品、市场与选型，都不新增类型目录。
+- 实验报告的离线评测是同一报告的一种数据方式；调研报告覆盖访谈、竞品与市场；技术选型按独立类型处理，通用证据与来源规则可复用调研报告；数据泛化规则只描述转换规则与验证，不替代安全设计与数据字典。
 - 结论要短而明确，数据要真实可核查。实验报告与调研报告必须给出支持重要结论的典型例子；未发现反例时说明检查范围，不伪造例子。
 - 模板中的占位符与示例值在实际交付前替换为真实材料或明确的待确认项；示例数据不得当成实测结果引用。
 - 真实示例只登记可核查链接；没有实例就写“暂无”，不编造链接、客户名或内部编号。
