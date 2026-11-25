@@ -1,0 +1,4 @@
+- insert:
+    - id: market-monitor
+      name: 'market-monitor'
+      config: {}

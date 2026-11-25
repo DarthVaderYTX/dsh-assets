@@ -1,0 +1,114 @@
+{
+  "sources": [
+    {
+      "source_id": "cnbc-rss",
+      "name": "CNBC Top News",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.cnbc.com/",
+      "feed_url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "bbc-business-rss",
+      "name": "BBC Business",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "GB",
+      "homepage": "https://www.bbc.com/news/business",
+      "feed_url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "guardian-business-rss",
+      "name": "The Guardian Business",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "GB",
+      "homepage": "https://www.theguardian.com/uk/business",
+      "feed_url": "https://www.theguardian.com/uk/business/rss",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "marketwatch-rss",
+      "name": "MarketWatch Top Stories",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.marketwatch.com/",
+      "feed_url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "wsj-markets-rss",
+      "name": "WSJ Markets",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.wsj.com/news/markets",
+      "feed_url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "ft-rss",
+      "name": "Financial Times",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "GB",
+      "homepage": "https://www.ft.com/",
+      "feed_url": "https://www.ft.com/rss/home",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "nasdaq-rss",
+      "name": "Nasdaq Markets",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.nasdaq.com/market-activity",
+      "feed_url": "https://www.nasdaq.com/feed/rssoutbound?category=Markets",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "investing-rss",
+      "name": "Investing.com News",
+      "kind": "news-rss",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.investing.com/news/",
+      "feed_url": "https://www.investing.com/rss/news.rss",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "sec-press-rss",
+      "name": "SEC Press Releases",
+      "kind": "official-release",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.sec.gov/news/pressreleases",
+      "feed_url": "https://www.sec.gov/news/pressreleases.rss",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    },
+    {
+      "source_id": "fed-press-rss",
+      "name": "Federal Reserve Press",
+      "kind": "official-release",
+      "language": "en",
+      "country": "US",
+      "homepage": "https://www.federalreserve.gov/newsevents/pressreleases.htm",
+      "feed_url": "https://www.federalreserve.gov/feeds/press_all.xml",
+      "license_note": "Public feed; headline, summary and linked article content for internal analysis, attributed to and linked back to the publisher.",
+      "enabled": true
+    }
+  ]
+}

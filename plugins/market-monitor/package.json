@@ -1,0 +1,37 @@
+{
+  "name": "market-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Market Monitor — collect, monitor, and analyze financial market data from a left-sidebar workspace, with multi-source market data, updatable global/China indexes and a Python SDK/API engine.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "docs",
+    "README.md",
+    "src/host/**/*.js",
+    "python/**/*",
+    "test/**/*.mjs"
+  ],
+  "engines": {
+    "dsh": "^0.2.3-alpha.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

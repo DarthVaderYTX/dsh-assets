@@ -1,0 +1,23 @@
+{
+  "roots": [
+    {"venue": "XCEC", "root": "GC", "name": "Gold futures", "category": "metals", "unit": "troy ounce", "currency": "USD", "provider_symbol": "GC=F", "months_ahead": 12},
+    {"venue": "XCEC", "root": "SI", "name": "Silver futures", "category": "metals", "unit": "troy ounce", "currency": "USD", "provider_symbol": "SI=F", "months_ahead": 12},
+    {"venue": "XCEC", "root": "PL", "name": "Platinum futures", "category": "metals", "unit": "troy ounce", "currency": "USD", "provider_symbol": "PL=F", "months_ahead": 12},
+    {"venue": "XCEC", "root": "PA", "name": "Palladium futures", "category": "metals", "unit": "troy ounce", "currency": "USD", "provider_symbol": "PA=F", "months_ahead": 12},
+    {"venue": "XCEC", "root": "HG", "name": "Copper futures", "category": "metals", "unit": "pound", "currency": "USD", "provider_symbol": "HG=F", "months_ahead": 12},
+    {"venue": "XNYM", "root": "CL", "name": "WTI crude oil futures", "category": "energy", "unit": "barrel", "currency": "USD", "provider_symbol": "CL=F", "months_ahead": 12},
+    {"venue": "XNYM", "root": "NG", "name": "Henry Hub natural gas futures", "category": "energy", "unit": "MMBtu", "currency": "USD", "provider_symbol": "NG=F", "months_ahead": 12},
+    {"venue": "XNYM", "root": "HO", "name": "NY Harbor ULSD heating oil futures", "category": "energy", "unit": "gallon", "currency": "USD", "provider_symbol": "HO=F", "months_ahead": 12},
+    {"venue": "XNYM", "root": "RB", "name": "RBOB gasoline futures", "category": "energy", "unit": "gallon", "currency": "USD", "provider_symbol": "RB=F", "months_ahead": 12},
+    {"venue": "IFEU", "root": "BZ", "name": "Brent crude oil futures", "category": "energy", "unit": "barrel", "currency": "USD", "provider_symbol": "BZ=F", "months_ahead": 12},
+    {"venue": "XCME", "root": "ZC", "name": "Corn futures", "category": "agriculture", "unit": "bushel", "currency": "USD", "provider_symbol": "ZC=F", "months_ahead": 12},
+    {"venue": "XCME", "root": "ZS", "name": "Soybean futures", "category": "agriculture", "unit": "bushel", "currency": "USD", "provider_symbol": "ZS=F", "months_ahead": 12},
+    {"venue": "XCME", "root": "ZW", "name": "Chicago SRW wheat futures", "category": "agriculture", "unit": "bushel", "currency": "USD", "provider_symbol": "ZW=F", "months_ahead": 12},
+    {"venue": "IFUS", "root": "KC", "name": "Arabica coffee futures", "category": "agriculture", "unit": "pound", "currency": "USD", "provider_symbol": "KC=F", "months_ahead": 12},
+    {"venue": "IFUS", "root": "SB", "name": "Raw sugar futures", "category": "agriculture", "unit": "pound", "currency": "USD", "provider_symbol": "SB=F", "months_ahead": 12},
+    {"venue": "IFUS", "root": "CT", "name": "Cotton futures", "category": "agriculture", "unit": "pound", "currency": "USD", "provider_symbol": "CT=F", "months_ahead": 12},
+    {"venue": "IFUS", "root": "CC", "name": "Cocoa futures", "category": "agriculture", "unit": "metric ton", "currency": "USD", "provider_symbol": "CC=F", "months_ahead": 12},
+    {"venue": "XCME", "root": "LE", "name": "Live cattle futures", "category": "agriculture", "unit": "pound", "currency": "USD", "provider_symbol": "LE=F", "months_ahead": 12},
+    {"venue": "XCME", "root": "HE", "name": "Feeder cattle futures", "category": "agriculture", "unit": "pound", "currency": "USD", "provider_symbol": "HE=F", "months_ahead": 12}
+  ]
+}

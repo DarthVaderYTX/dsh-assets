@@ -1,0 +1,292 @@
+[
+  {
+    "code": "GSPC",
+    "name": "S&P 500",
+    "region": "US",
+    "currency": "USD",
+    "type": "broad",
+    "venue": "XNYS",
+    "provider_symbol": "^GSPC",
+    "constituents_count": 503
+  },
+  {
+    "code": "IXIC",
+    "name": "Nasdaq Composite",
+    "region": "US",
+    "currency": "USD",
+    "type": "broad",
+    "venue": "XNAS",
+    "provider_symbol": "^IXIC",
+    "constituents_count": 3300
+  },
+  {
+    "code": "DJI",
+    "name": "Dow Jones Industrial Average",
+    "region": "US",
+    "currency": "USD",
+    "type": "blue-chip",
+    "venue": "XNYS",
+    "provider_symbol": "^DJI",
+    "constituents_count": 30
+  },
+  {
+    "code": "RUT",
+    "name": "Russell 2000",
+    "region": "US",
+    "currency": "USD",
+    "type": "broad",
+    "venue": "XNAS",
+    "provider_symbol": "^RUT",
+    "constituents_count": 2000
+  },
+  {
+    "code": "NDX",
+    "name": "Nasdaq-100",
+    "region": "US",
+    "currency": "USD",
+    "type": "blue-chip",
+    "venue": "XNAS",
+    "provider_symbol": "^NDX",
+    "constituents_count": 101
+  },
+  {
+    "code": "VIX",
+    "name": "Cboe Volatility Index",
+    "region": "US",
+    "currency": "USD",
+    "type": "volatility",
+    "venue": "XCBO",
+    "provider_symbol": "^VIX",
+    "constituents_count": 0
+  },
+  {
+    "code": "TNX",
+    "name": "Cboe 10-Year Treasury Note Yield",
+    "region": "US",
+    "currency": "USD",
+    "type": "sector",
+    "venue": "XCBO",
+    "provider_symbol": "^TNX",
+    "constituents_count": 0
+  },
+  {
+    "code": "FTSE",
+    "name": "FTSE 100",
+    "region": "GB",
+    "currency": "GBP",
+    "type": "broad",
+    "venue": "XLON",
+    "provider_symbol": "^FTSE",
+    "constituents_count": 100
+  },
+  {
+    "code": "GDAXI",
+    "name": "DAX",
+    "region": "DE",
+    "currency": "EUR",
+    "type": "broad",
+    "venue": "XETR",
+    "provider_symbol": "^GDAXI",
+    "constituents_count": 40
+  },
+  {
+    "code": "FCHI",
+    "name": "CAC 40",
+    "region": "FR",
+    "currency": "EUR",
+    "type": "blue-chip",
+    "venue": "XPAR",
+    "provider_symbol": "^FCHI",
+    "constituents_count": 40
+  },
+  {
+    "code": "STOXX50E",
+    "name": "EURO STOXX 50",
+    "region": "EU",
+    "currency": "EUR",
+    "type": "blue-chip",
+    "venue": "XETR",
+    "provider_symbol": "^STOXX50E",
+    "constituents_count": 50
+  },
+  {
+    "code": "SSMI",
+    "name": "Swiss Market Index",
+    "region": "CH",
+    "currency": "CHF",
+    "type": "broad",
+    "venue": "XSWX",
+    "provider_symbol": "^SSMI",
+    "constituents_count": 20
+  },
+  {
+    "code": "N225",
+    "name": "Nikkei 225",
+    "region": "JP",
+    "currency": "JPY",
+    "type": "blue-chip",
+    "venue": "XTKS",
+    "provider_symbol": "^N225",
+    "constituents_count": 225
+  },
+  {
+    "code": "HSI",
+    "name": "Hang Seng Index",
+    "region": "HK",
+    "currency": "HKD",
+    "type": "broad",
+    "venue": "XHKG",
+    "provider_symbol": "^HSI",
+    "constituents_count": 82
+  },
+  {
+    "code": "HSCE",
+    "name": "Hang Seng China Enterprises Index",
+    "region": "HK",
+    "currency": "HKD",
+    "type": "blue-chip",
+    "venue": "XHKG",
+    "provider_symbol": "^HSCE",
+    "constituents_count": 50
+  },
+  {
+    "code": "KS11",
+    "name": "KOSPI Composite Index",
+    "region": "KR",
+    "currency": "KRW",
+    "type": "broad",
+    "venue": "XKRX",
+    "provider_symbol": "^KS11",
+    "constituents_count": 800
+  },
+  {
+    "code": "KQ11",
+    "name": "KOSDAQ Composite Index",
+    "region": "KR",
+    "currency": "KRW",
+    "type": "broad",
+    "venue": "XKRX",
+    "provider_symbol": "^KQ11",
+    "constituents_count": 1600
+  },
+  {
+    "code": "NSEI",
+    "name": "Nifty 50",
+    "region": "IN",
+    "currency": "INR",
+    "type": "broad",
+    "venue": "XNSE",
+    "provider_symbol": "^NSEI",
+    "constituents_count": 50
+  },
+  {
+    "code": "BSESN",
+    "name": "BSE SENSEX",
+    "region": "IN",
+    "currency": "INR",
+    "type": "blue-chip",
+    "venue": "XNSE",
+    "provider_symbol": "^BSESN",
+    "constituents_count": 30
+  },
+  {
+    "code": "SSE",
+    "name": "SSE Composite Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHG",
+    "provider_symbol": "000001.SS",
+    "constituents_count": 2200
+  },
+  {
+    "code": "CSI300",
+    "name": "CSI 300 Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "blue-chip",
+    "venue": "XSHG",
+    "provider_symbol": "000300.SS",
+    "constituents_count": 300
+  },
+  {
+    "code": "SZSE",
+    "name": "SZSE Component Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHE",
+    "provider_symbol": "399001.SZ",
+    "constituents_count": 500
+  },
+  {
+    "code": "CHINEXT",
+    "name": "ChiNext Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHE",
+    "provider_symbol": "399006.SZ",
+    "constituents_count": 1300
+  },
+  {
+    "code": "AXJO",
+    "name": "S&P/ASX 200",
+    "region": "AU",
+    "currency": "AUD",
+    "type": "broad",
+    "venue": "XASX",
+    "provider_symbol": "^AXJO",
+    "constituents_count": 200
+  },
+  {
+    "code": "BVSP",
+    "name": "Bovespa Index",
+    "region": "BR",
+    "currency": "BRL",
+    "type": "broad",
+    "venue": "BVMF",
+    "provider_symbol": "^BVSP",
+    "constituents_count": 85
+  },
+  {
+    "code": "GSPTSE",
+    "name": "S&P/TSX Composite Index",
+    "region": "CA",
+    "currency": "CAD",
+    "type": "broad",
+    "venue": "XTSE",
+    "provider_symbol": "^GSPTSE",
+    "constituents_count": 220
+  },
+  {
+    "code": "CSI500",
+    "name": "CSI 500 Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHG",
+    "provider_symbol": "000905.SS",
+    "constituents_count": 500
+  },
+  {
+    "code": "CSI1000",
+    "name": "CSI 1000 Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHG",
+    "provider_symbol": "000852.SS",
+    "constituents_count": 1000
+  },
+  {
+    "code": "STAR50",
+    "name": "SSE STAR 50 Index",
+    "region": "CN",
+    "currency": "CNY",
+    "type": "broad",
+    "venue": "XSHG",
+    "provider_symbol": "000688.SS",
+    "constituents_count": 50
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "MarketMonitor",
+    "description": "Collects, monitors, and analyzes market data in a left-sidebar workspace. The Market view has a live watchlist, interactive charts with indicators, one-year analysis, price and indicator alerts, a screener, portfolio P&L, and news linked to the selected symbol. The Data view shows a canonical collection warehouse: exchange and listing reference data, indices, commodity contracts, daily and intraday market series, and deduplicated news from approved public feeds, with per-source budgets, schedules, and health. All financial logic and collection run in a bundled Python engine that exposes an HTTP API and a Python SDK, and every outbound request passes a rate governor with hourly and daily budgets. Quotes come from Yahoo Finance when this machine has internet access and from the deterministic simulator otherwise. Disabling the plugin stops the Python sidecar.",
+    "detail": "docs/DETAIL.md"
+  }
+}
