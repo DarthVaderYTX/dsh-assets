@@ -2,6 +2,8 @@
 
 来源限定在 `learn.microsoft.com` 与 `github.com/microsoft`（官方仓库、wiki）。注意两点：**Microsoft REST API Guidelines 的现行细则以仓库内的 Azure 指南为准**，引用时以该文件为准；**TypeScript Coding Guidelines 明确说明它面向 TypeScript 代码库贡献者，不是面向社区的统一规范**，跨项目时只能作参考。
 
+本文引用的官方页面已全部下载到 [sources/INDEX.md](sources/INDEX.md)，断网也能查阅；条文以上线版本为准。
+
 ## 来源
 
 | 主题 | 链接 |
@@ -43,19 +45,19 @@ public sealed class OrderService
 {
     private readonly IOrderStore _store;
 
-    public OrderService(IOrderStore store)
+public OrderService(IOrderStore store)
     {
         _store = store;
     }
 
-    public async Task<Order?> FindAsync(string orderId, CancellationToken cancellationToken)
+public async Task<Order?> FindAsync(string orderId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(orderId))
         {
             return null;
         }
 
-        return await _store.GetAsync(orderId, cancellationToken);
+return await _store.GetAsync(orderId, cancellationToken);
     }
 }
 ```

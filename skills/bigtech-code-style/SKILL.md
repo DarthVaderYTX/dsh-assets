@@ -29,7 +29,7 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 1. **仓库既有配置与约定**：`.editorconfig`、`prettier`、`eslint`、`.clang-format`、`gofmt`、`dotnet format`、`ruff`/`pylint`、邻近文件的真实风格。
 2. **用户点名的公司**。
 3. **语言/技术栈映射**（见第三节）。
-4. **通用工程实践**（第六节与 `references/engineering-practices.md`）。
+4. **通用工程实践**（第六节与 `references/README.md`）。
 
 不混用两套风格：一套为主，另一套只在主规范未覆盖的部分补充，并在交付说明中写清补了哪一条、为什么。
 
@@ -105,9 +105,9 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 
 ## 九、参考
 
-- [Google 官方规范](references/google.md)：C++/Java/Python/Go/JS/TS/Shell 要点、工程实践、测试。
-- [Microsoft 官方规范](references/microsoft.md)：C#/.NET、REST API、TypeScript、F#、工程手册、测试。
-- [Meta 官方规范](references/meta.md)：React/React Native、Jest、Flow、Hack，以及「没有公司级通用规范」的边界。
-- [跨公司工程实践](references/engineering-practices.md)：变更、评审、测试、CI、文档、API、可观测性的取舍。
+- [Google 官方规范](references/google/README.md)：C++/Java/Python/Go/JS/TS/Shell 要点、工程实践、测试。
+- [Microsoft 官方规范](references/microsoft/README.md)：C#/.NET、REST API、TypeScript、F#、工程手册、测试。
+- [Meta 官方规范](references/meta/README.md)：React/React Native、Jest、Flow、Hack，以及「没有公司级通用规范」的边界。
+- [规范索引与跨公司实践](references/README.md)：变更、评审、测试、CI、文档、API、可观测性的取舍。
 
-所有链接均为官方域名（google.github.io、abseil.io、learn.microsoft.com、github.com/microsoft、github.com/facebook、github.com/jestjs、react.dev、reactnative.dev、jestjs.io、flow.org、docs.hhvm.com、prettier.io），检索日期 2026-11-28；规范会更新，引用具体条文前先打开链接核对版本。
+三家的官方原文（含本文件引用的每个链接）都已下载到 `references/<公司>/sources/`，每家公司 `sources/INDEX.md` 有清单，断网可查。所有链接均为官方域名（google.github.io、abseil.io、learn.microsoft.com、github.com/microsoft、github.com/facebook、github.com/jestjs、react.dev、reactnative.dev、jestjs.io、flow.org、docs.hhvm.com、prettier.io），检索日期 2026-11-28；规范会更新，引用具体条文前先打开链接核对版本。

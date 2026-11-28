@@ -2,6 +2,8 @@
 
 **先明确边界：Meta 没有公开的公司级通用编码规范，也没有公开的命名/架构手册。** 公开可核查的只有项目级官方规范：React、React Native、Jest、Flow、Hack，以及 Meta 开源项目的贡献流程。写代码时按项目选对应规范，不要把 React 的规则外推到后端或普通 Node 服务，也不要用社区文章冒充 Meta 规范。
 
+本文引用的官方页面已全部下载到 [sources/INDEX.md](sources/INDEX.md)，断网也能查阅；条文以上线版本为准。
+
 ## 来源
 
 | 主题 | 链接 | 性质 |
@@ -40,7 +42,7 @@
 export default function OrderList({orders}) {
   const [selected, setSelected] = useState(null);
 
-  return (
+return (
     <ul>
       {orders.map((order) => (
         <li key={order.id} onClick={() => setSelected(order.id)}>

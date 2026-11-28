@@ -2,6 +2,8 @@
 
 只引用 Google 自家域名：`google.github.io`（Style Guides、Engineering Practices、GoogleTest）与 `abseil.io`（Google 官方站点上的 *Software Engineering at Google*）。每条规则都能在对应链接里找到出处；规范更新频繁，引用前先核对当前版本。
 
+本文引用的官方页面已全部下载到 [sources/INDEX.md](sources/INDEX.md)，断网也能查阅；条文以上线版本为准。
+
 ## 来源
 
 | 主题 | 链接 |
@@ -41,7 +43,7 @@ class UrlTableTester {
   explicit UrlTableTester(const std::string& name) : name_(name) {}
   void AddUrl(const std::string& url);
 
- private:
+private:
   std::string name_;
 };
 constexpr int kMaxRetries = 3;
@@ -80,14 +82,14 @@ String displayName(String userId) { ... }
 def fetch_orders(user_id: str, limit: int = 50) -> list[Order]:
     """Fetches recent orders for a user.
 
-    Args:
+Args:
         user_id: Stable user identifier.
         limit: Maximum number of orders to return.
 
-    Returns:
+Returns:
         Orders sorted by creation time, newest first.
 
-    Raises:
+Raises:
         UserNotFoundError: If the user does not exist.
     """
 ```
