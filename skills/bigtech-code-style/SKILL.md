@@ -1,6 +1,6 @@
 ---
 name: bigtech-code-style
-description: 遇到编程需求时，按 Google、Microsoft、Meta 的官方公开规范选择并落地代码风格与工程实践：先看仓库既有配置，再按语言/框架选基准（C#/.NET、TypeScript → Microsoft；React/RN/Jest/Flow/Hack → Meta；Python/Java/C++/Go/Shell/JS → Google），套用命名、格式、导入、错误处理、测试、评审与 API 设计清单，并说明依据与偏离。
+description: 遇到编程需求时，按 Google、Microsoft、Meta、Amazon 的官方公开规范选择并落地代码风格与工程实践：先看仓库既有配置，再按语言/框架选基准（C#/.NET、TypeScript → Microsoft；React/RN/Jest/Flow/Hack → Meta；Python/Java/C++/Go/Shell/JS → Google；AWS SDK/CDK/Smithy 与云架构运维 → Amazon），套用命名、格式、导入、错误处理、测试、评审与 API 设计清单，并说明依据与偏离。
 whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代码或统一现有代码风格；或仓库没有既有规范、需要一套可核查的业界基线时。
 ---
 
@@ -41,6 +41,7 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 | F#、VB.NET | Microsoft | F# 风格指南、VB 编码约定 |
 | TypeScript（业务代码、库、Node 服务，非 React） | Microsoft | TypeScript Coding Guidelines |
 | React、React Native、Jest、Flow、Hack | Meta（项目级官方规范） | React 规则、React 仓库 Prettier/ESLint 配置、Jest、Flow、Hack 文档 |
+| AWS SDK（Java v2）、AWS CDK、Smithy、AWS 架构与运维 | Amazon（项目级约定 + 工程指南） | SDK v2 开发指南、CDK 贡献指南、Smithy 风格指南、Builders' Library、Well-Architected、DevOps Guidance |
 | Python、Java、C++、Go、Shell、HTML/CSS、JavaScript（非 React） | Google | Google Style Guides |
 | HTTP / REST API 设计 | Microsoft | Microsoft REST API Guidelines |
 | 代码评审、变更拆分与提交描述 | Google | Google Engineering Practices |
@@ -48,6 +49,7 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 说明：
 
 - **Meta 没有公开的公司级通用编码规范**，只有 React、React Native、Jest、Flow、Hack 等项目级官方规范；不要把社区文章当成 Meta 规范，也不要把 React 规则外推到后端代码。
+- **Amazon 同样没有公开全公司统一的编码规范**；AWS 相关代码按 SDK for Java v2、CDK、Smithy 的项目约定，架构与交付按 Builders' Library、Well-Architected 与 DevOps Guidance。
 - TypeScript 与 React 同时出现时：语言层用 Microsoft TS 约定（命名、类型、模块），React 层用 Meta 规则（Hooks、组件纯度、Prettier/ESLint）；两者冲突时以仓库配置为准。
 - Java 同时受 Google Java Style 与公司内部规范约束时，Google 只管格式与命名，业务约定另算。
 
@@ -86,7 +88,7 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 - **API**：资源用复数名词、路径用小写短横线或 camelCase、状态码语义正确、错误体稳定、版本与分页显式（Microsoft REST 指南）。
 - **可观测性**：日志、指标、追踪三件套；跨服务传递关联 ID（Microsoft 工程手册）。
 
-## 七、三家关键差异速查
+## 七、关键差异速查
 
 | 维度 | Google | Microsoft | Meta |
 | --- | --- | --- | --- |
@@ -96,6 +98,15 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 | 命名 | 类型/函数 PascalCase，C++ 变量 snake_case，Java 变量 camelCase | 公开成员 PascalCase，参数/局部变量 camelCase | 组件 PascalCase；变量/函数 camelCase |
 | 错误处理 | Go 错误字符串小写、Java 不忽略异常、Python 不裸 `except` | 捕获具体异常、异步方法 `Async` 后缀 | React 渲染必须纯；Jest 测试确定性 |
 | 测试 | `FooTest` / `testX_whenY_doesZ` | 单元测试 AAA、隔离、命名描述行为 | `*.test.js`、`describe`/`it`、快照入库 |
+
+**Amazon（AWS）速查**
+
+| 场景 | 规则 |
+| --- | --- |
+| AWS SDK for Java v2 | Javadoc、参数 ≤3、公开 API 不抛受检异常、POJO 三件套、测试命名 `method_when_behavior` |
+| AWS CDK | ESLint / pkglint / awslint、每个 PR 带测试、Codecov 覆盖率门禁 |
+| Smithy | 4 空格、UpperCamel shape、lowerCamel member、列表复数、操作 VerbNoun |
+| 交付与运维 | trunk-based、评审后自动流水线、waves 控爆炸半径、自动回滚、operations as code |
 
 ## 八、偏离与例外
 
@@ -108,6 +119,7 @@ whenToUse: 用户要求按 Google / Microsoft / Meta 风格写代码、评审代
 - [Google 官方规范](references/google/README.md)：C++/Java/Python/Go/JS/TS/Shell 要点、工程实践、测试。
 - [Microsoft 官方规范](references/microsoft/README.md)：C#/.NET、REST API、TypeScript、F#、工程手册、测试。
 - [Meta 官方规范](references/meta/README.md)：React/React Native、Jest、Flow、Hack，以及「没有公司级通用规范」的边界。
+- [Amazon（AWS）官方规范](references/amazon/README.md)：SDK for Java v2、CDK、Smithy 约定，以及 Builders' Library、运营卓越、DevOps Guidance。
 - [规范索引与跨公司实践](references/README.md)：变更、评审、测试、CI、文档、API、可观测性的取舍。
 
-三家的官方原文（含本文件引用的每个链接）都已下载到 `references/<公司>/sources/`，每家公司 `sources/INDEX.md` 有清单，断网可查。所有链接均为官方域名（google.github.io、abseil.io、learn.microsoft.com、github.com/microsoft、github.com/facebook、github.com/jestjs、react.dev、reactnative.dev、jestjs.io、flow.org、docs.hhvm.com、prettier.io），检索日期 2026-11-28；规范会更新，引用具体条文前先打开链接核对版本。
+四家的官方原文（含本文件引用的每个链接）都已下载到 `references/<公司>/sources/`，每家公司 `sources/INDEX.md` 有清单，断网可查。所有链接均为官方域名（google.github.io、abseil.io、learn.microsoft.com、github.com/microsoft、github.com/facebook、github.com/jestjs、react.dev、reactnative.dev、jestjs.io、flow.org、docs.hhvm.com、prettier.io、builder.aws.com、docs.aws.amazon.com、smithy.io、github.com/aws），检索日期 2026-11-28；规范会更新，引用具体条文前先打开链接核对版本。
